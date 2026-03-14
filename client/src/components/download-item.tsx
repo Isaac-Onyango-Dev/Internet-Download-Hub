@@ -1,10 +1,11 @@
 import { Download, UpdateDownloadRequest } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useUpdateDownload, useDeleteDownload } from "@/hooks/use-downloads";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DownloadItemProps {
   download: Download;
@@ -25,7 +26,7 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
   };
 
   const getStatusColor = (state: string) => {
-    switch(state) {
+    switch (state) {
       case "downloading": return "text-primary";
       case "completed": return "text-green-500";
       case "error": return "text-destructive";
@@ -42,13 +43,18 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const percent = download.totalBytes > 0 
-    ? Math.round((download.receivedBytes || 0) / download.totalBytes * 100) 
+  const totalBytes = download.totalBytes ?? 0;
+  const percent = totalBytes > 0
+    ? Math.round((download.receivedBytes || 0) / totalBytes * 100)
     : 0;
 
   const handlePauseResume = () => {
     const newState = download.state === "downloading" ? "paused" : "downloading";
     updateMutation.mutate({ id: download.id, state: newState });
+  };
+
+  const handleRetry = () => {
+    updateMutation.mutate({ id: download.id, state: "downloading" });
   };
 
   const handleDelete = () => {
@@ -77,9 +83,14 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
             )}
           </div>
           <div className="flex flex-col gap-1">
+            {download.state === 'error' && (
+              <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={handleRetry} title="Retry">
+                <RotateCcw className="w-3 h-3" />
+              </Button>
+            )}
             {(download.state === 'downloading' || download.state === 'paused') && (
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handlePauseResume}>
-                {download.state === 'downloading' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                {download.state === 'downloading' ? <Pause className="w-3" /> : <Play className="w-3" />}
               </Button>
             )}
             <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
@@ -96,16 +107,30 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
     <div className="bg-card rounded-xl p-4 md:p-6 border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 group relative overflow-hidden">
       {/* Background Progress Tint */}
       {download.state === 'downloading' && (
-        <div 
-          className="absolute bottom-0 left-0 h-1 bg-primary/20 transition-all duration-500 ease-out" 
+        <div
+          className="absolute bottom-0 left-0 h-1 bg-primary/20 transition-all duration-500 ease-out"
           style={{ width: `${percent}%` }}
         />
       )}
 
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         {/* Icon */}
-        <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 border border-border/50">
+        <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 border border-border/50 relative">
           {getFileIcon(download.mimeType, download.filename)}
+          {(download.state === 'downloading' || download.state === 'paused') && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="absolute -top-1 -right-1 bg-primary text-primary-foreground rounded-full p-0.5 shadow-sm border border-background animate-pulse">
+                    <ShieldCheck className="w-2.5 h-2.5" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-[10px]">Managed by Download Hub: Continues even if browser closes</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
 
         {/* Info */}
@@ -117,13 +142,13 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
             <span className={cn(
               "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
               download.state === 'completed' ? "bg-green-500/10 text-green-600 border-green-500/20" :
-              download.state === 'error' ? "bg-red-500/10 text-red-600 border-red-500/20" :
-              "bg-primary/10 text-primary border-primary/20"
+                download.state === 'error' ? "bg-red-500/10 text-red-600 border-red-500/20" :
+                  "bg-primary/10 text-primary border-primary/20"
             )}>
               {download.state}
             </span>
           </div>
-          
+
           <div className="flex items-center gap-4 text-xs text-muted-foreground font-mono">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50" />
@@ -139,6 +164,11 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
               </span>
             )}
           </div>
+          {download.error && (
+            <p className="text-[10px] text-destructive font-medium mt-1 truncate max-w-full">
+              Error: {download.error}
+            </p>
+          )}
         </div>
 
         {/* Controls & Progress */}
@@ -149,12 +179,12 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
               <span>{percent}%</span>
             </div>
             <div className="relative h-2 w-full bg-muted rounded-full overflow-hidden">
-              <div 
+              <div
                 className={cn(
                   "absolute top-0 left-0 h-full rounded-full transition-all duration-500",
                   download.state === 'completed' ? "bg-green-500" :
-                  download.state === 'error' ? "bg-destructive" :
-                  "bg-primary animate-stripe bg-[length:1rem_1rem] bg-gradient-to-r from-primary via-primary/80 to-primary"
+                    download.state === 'error' ? "bg-destructive" :
+                      "bg-primary animate-stripe bg-[length:1rem_1rem] bg-gradient-to-r from-primary via-primary/80 to-primary"
                 )}
                 style={{ width: `${percent}%` }}
               />
@@ -162,6 +192,18 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
           </div>
 
           <div className="flex items-center gap-1">
+            {download.state === 'error' && (
+              <Button
+                size="icon"
+                variant="outline"
+                className="rounded-full w-8 h-8 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+                onClick={handleRetry}
+                title="Retry Download"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+            )}
+
             {(download.state === 'downloading' || download.state === 'paused') && (
               <Button
                 size="icon"
@@ -172,7 +214,7 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
                 {download.state === 'downloading' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
               </Button>
             )}
-            
+
             <Button
               size="icon"
               variant="ghost"

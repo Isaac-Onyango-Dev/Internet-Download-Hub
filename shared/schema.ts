@@ -1,49 +1,59 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, bigint } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// === TABLE DEFINITIONS ===
+// === TYPE DEFINITIONS ===
 
-export const downloads = pgTable("downloads", {
-  id: serial("id").primaryKey(),
-  url: text("url").notNull(),
-  filename: text("filename").notNull(),
-  mimeType: text("mime_type"),
-  totalBytes: bigint("total_bytes", { mode: "number" }).default(0),
-  receivedBytes: bigint("received_bytes", { mode: "number" }).default(0),
-  state: text("state", { enum: ["queued", "downloading", "paused", "completed", "error", "interrupted"] }).default("queued").notNull(),
-  error: text("error"),
-  savePath: text("save_path"),
-  createdAt: timestamp("created_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
+export type DownloadState = "queued" | "downloading" | "paused" | "completed" | "error" | "interrupted";
+export type Theme = "light" | "dark" | "system";
+
+export interface Download {
+  id: number;
+  url: string;
+  filename: string;
+  mimeType: string | null;
+  totalBytes: number;
+  receivedBytes: number;
+  formatId: string | null;
+  state: DownloadState;
+  error: string | null;
+  savePath: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+export interface Settings {
+  id: number;
+  theme: Theme;
+  maxConcurrentDownloads: number;
+  autoCapture: boolean;
+  fileTypes: string[];
+  downloadPath: string;
+}
+
+// === ZOD SCHEMAS ===
+
+export const insertDownloadSchema = z.object({
+  url: z.string().url("Must be a valid URL"),
+  filename: z.string().min(1, "Filename is required"),
+  mimeType: z.string().nullable().optional(),
+  totalBytes: z.number().optional(),
+  receivedBytes: z.number().optional(),
+  formatId: z.string().nullable().optional(),
+  state: z.enum(["queued", "downloading", "paused", "completed", "error", "interrupted"]).optional(),
+  error: z.string().nullable().optional(),
+  savePath: z.string().nullable().optional(),
 });
 
-export const settings = pgTable("settings", {
-  id: serial("id").primaryKey(),
-  theme: text("theme", { enum: ["light", "dark", "system"] }).default("system"),
-  maxConcurrentDownloads: integer("max_concurrent_downloads").default(3),
-  autoCapture: boolean("auto_capture").default(true),
-  fileTypes: jsonb("file_types").$type<string[]>().default(["mp4", "mp3", "zip", "exe", "pdf", "jpg", "png"]),
-  downloadPath: text("download_path").default("Downloads/"),
+export const insertSettingsSchema = z.object({
+  theme: z.enum(["light", "dark", "system"]).optional(),
+  maxConcurrentDownloads: z.number().int().min(1).max(10).optional(),
+  autoCapture: z.boolean().optional(),
+  fileTypes: z.array(z.string()).optional(),
+  downloadPath: z.string().optional(),
 });
 
-// === SCHEMAS ===
+// === INFERRED TYPES ===
 
-export const insertDownloadSchema = createInsertSchema(downloads).omit({ 
-  id: true, 
-  createdAt: true, 
-  completedAt: true 
-});
-
-export const insertSettingsSchema = createInsertSchema(settings).omit({ 
-  id: true 
-});
-
-// === TYPES ===
-
-export type Download = typeof downloads.$inferSelect;
 export type InsertDownload = z.infer<typeof insertDownloadSchema>;
-export type Settings = typeof settings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
 // API Types

@@ -7,17 +7,8 @@ export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
+    // Removed Replit dev plugins to avoid injecting Replit branding/icons.
+    // If you want to enable Replit-specific tooling, re-add the imports here.
   ],
   resolve: {
     alias: {
@@ -32,6 +23,17 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5006',
+        changeOrigin: true,
+        ws: true
+      }
+    },
+    hmr: {
+      port: 5173
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],

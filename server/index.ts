@@ -2,15 +2,34 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { setupWebSockets } from "./ws";
+import cors from "cors";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Global Error Handlers for Stability
+process.on("uncaughtException", (err) => {
+  console.error("FATAL: Uncaught Exception:", err.stack || err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("FATAL: Unhandled Rejection at:", promise, "reason:", reason);
+});
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
+
+// 1. CORS Middleware (Development: Allow All)
+app.use(cors({
+  origin: true, // Allow all origins in dev
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+}));
 
 app.use(
   express.json({
@@ -38,6 +57,10 @@ app.use((req, res, next) => {
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
+  if (path.startsWith("/api")) {
+    log(`[INCOMING] ${req.method} ${path}`);
+  }
+
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
@@ -59,14 +82,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// 2. Health Check Endpoint
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 (async () => {
+  setupWebSockets(httpServer);
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    console.error("Internal Error Middleware Catch-all:", err);
 
     if (res.headersSent) {
       return next(err);
@@ -75,9 +104,6 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -85,19 +111,17 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = parseInt(process.env.PORT || "5005", 10);
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: "0.0.0.0", // Ensure reachable on all network interfaces
     },
     () => {
-      log(`serving on port ${port}`);
+      console.log("\n" + "=".repeat(40));
+      log(`SERVER RUNNING @ http://localhost:${port}`);
+      log(`HEALTH CHECK  @ http://localhost:${port}/api/health`);
+      console.log("=".repeat(40) + "\n");
     },
   );
 })();
