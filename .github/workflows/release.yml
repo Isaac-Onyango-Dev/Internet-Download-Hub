@@ -1,0 +1,53 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Download binaries
+        run: npm run setup:binaries
+
+      - name: Build Windows installer
+        run: npm run build:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/*.exe
+          generate_release_notes: true
+          body: |
+            ## Internet Download Hub ${{ github.ref_name }}
+
+            ### Download
+            Download the installer below and run it on your Windows 10 or Windows 11 PC.
+            No additional software required — everything is bundled inside.
+
+            ### Installation
+            1. Download the `.exe` file below
+            2. Double click to install
+            3. Open Internet Download Hub from your Start Menu
+
+            > **Note:** Windows may show a security warning. Click **More info → Run anyway** to proceed. This is normal for unsigned applications.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
