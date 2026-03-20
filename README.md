@@ -29,8 +29,8 @@ Internet Download Hub is a free Windows desktop application that lets you downlo
 - Download queue with pause, resume, and cancel
 - Download history
 - Customizable save location
-- Automatic yt-dlp updates for maximum site compatibility
-- No installation of Python, FFmpeg, or yt-dlp required — everything is bundled
+- No installation of Python or yt-dlp required — core binaries are bundled
+- On-demand high-quality merging — FFmpeg is automatically downloaded on first use to keep the initial installer small (< 150MB)
 
 ## Download
 

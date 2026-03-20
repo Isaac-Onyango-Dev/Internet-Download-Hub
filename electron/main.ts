@@ -38,6 +38,9 @@ let binariesPath: string;
 let ytDlpPath: string;
 let ffmpegPath: string;
 let ffprobePath: string;
+let streamlinkPath: string;
+let n_m3u8dlPath: string;
+let galleryDlPath: string;
 
 // ── Single Instance Lock ─────────────────────────────────────────────────────
 const gotTheLock = app.requestSingleInstanceLock();
@@ -57,23 +60,28 @@ function setupPaths() {
   isTest = process.env.NODE_ENV === 'test';
   
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
-  const userDataYtDlpPath = path.join(userDataBinariesPath, 'yt-dlp.exe');
-
   binariesPath = app.isPackaged
     ? path.join(process.resourcesPath, 'binaries')
     : path.join(process.cwd(), 'binaries');
 
-  // Priority: 1. Updated binary in AppData  2. Original packaged binary
-  if (fs.existsSync(userDataYtDlpPath)) {
-    ytDlpPath = userDataYtDlpPath;
-    log.info(`[Main] Using updated yt-dlp from userData: ${ytDlpPath}`);
-  } else {
-    ytDlpPath = path.join(binariesPath, 'yt-dlp.exe');
-    log.info(`[Main] Using packaged yt-dlp: ${ytDlpPath}`);
-  }
-  
-  ffmpegPath = path.join(binariesPath, 'ffmpeg.exe');
-  ffprobePath = path.join(binariesPath, 'ffprobe.exe');
+  // Binary resolution helper: check AppData first, then packaged resources
+  const getBinaryPath = (name: string) => {
+    const userPath = path.join(userDataBinariesPath, name);
+    if (fs.existsSync(userPath)) {
+      log.info(`[Main] Using ${name} from userData: ${userPath}`);
+      return userPath;
+    }
+    const pkgPath = path.join(binariesPath, name);
+    log.info(`[Main] Using ${name} from resources: ${pkgPath}`);
+    return pkgPath;
+  };
+
+  ytDlpPath = getBinaryPath('yt-dlp.exe');
+  ffmpegPath = getBinaryPath('ffmpeg.exe');
+  ffprobePath = getBinaryPath('ffprobe.exe');
+  streamlinkPath = getBinaryPath('streamlink.exe');
+  n_m3u8dlPath = getBinaryPath('N_m3u8DL-RE.exe');
+  galleryDlPath = getBinaryPath('gallery-dl.exe');
 }
 
 // Check binaries on startup
@@ -82,7 +90,10 @@ function checkBinaries() {
   const binaries = [
     { name: 'yt-dlp', path: ytDlpPath },
     { name: 'ffmpeg', path: ffmpegPath },
-    { name: 'ffprobe', path: ffprobePath }
+    { name: 'ffprobe', path: ffprobePath },
+    { name: 'streamlink', path: streamlinkPath },
+    { name: 'N_m3u8DL-RE', path: n_m3u8dlPath },
+    { name: 'gallery-dl', path: galleryDlPath }
   ];
 
   log.info('--- Binary Detection ---');
@@ -101,42 +112,15 @@ function checkBinaries() {
   log.info('------------------------');
 }
 
-// ── Friendly Error Messages ───────────────────────────────────────────────────
-function friendlyError(raw: string): string {
-  const msg = raw.toLowerCase();
-  if (msg.includes('private video')) {
-    return 'This video is private and cannot be downloaded.';
-  }
-  if (msg.includes('video unavailable') || msg.includes('has been removed')) {
-    return 'This video is no longer available.';
-  }
-  if (msg.includes('not a valid url') || msg.includes('unsupported url') || msg.includes('no video formats')) {
-    return 'That URL is not supported. Please check it and try again.';
-  }
-  if (msg.includes('copyright') || msg.includes('removed by')) {
-    return 'This video has been removed due to a copyright claim.';
-  }
-  if (msg.includes('network') || msg.includes('connection') || msg.includes('timed out')) {
-    return 'Network error — please check your internet connection and try again.';
-  }
-  if (msg.includes('age') || msg.includes('confirm your age') || msg.includes('sign in')) {
-    return 'YouTube is blocking this request. Try updating yt-dlp in Settings, or this video may genuinely require a YouTube login to access.';
-  }
-  if (msg.includes('404') || msg.includes('not found')) {
-    return 'That page could not be found. Double-check the URL.';
-  }
-  if (msg.includes('geo') || msg.includes('not available in your country')) {
-    return 'This content is not available in your region.';
-  }
-  if (msg.includes('drm') || msg.includes('drm protected')) {
-    return 'This video is DRM protected and cannot be downloaded.';
-  }
-  if (msg.includes('could not find any video stream')) {
-    return 'Could not find any video stream on this page. The site may require login or use DRM protection.';
-  }
-  // Fallback: strip yt-dlp exit code noise
-  const clean = raw.replace(/\[.*?\]/g, '').replace(/ERROR:/gi, '').trim();
-  return clean.length > 10 ? clean.slice(0, 200) : 'Download failed. Please try a different URL.';
+// ── Filename Cleaning ────────────────────────────────────────────────────────
+export function cleanFilename(filename: string): string {
+  return filename
+    .replace(/_{2,}/g, ' ')
+    .replace(/-{2,}/g, ' - ')
+    .replace(/__+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^\s+|\s+$/g, '')
+    .replace(/[<>:"/\\|?*]/g, '');
 }
 
 // ── Power Save Blocker ────────────────────────────────────────────────────────
@@ -820,7 +804,7 @@ function setupIpcHandlers() {
 
       if (playlistCheck.isPlaylist) {
         if (!detectPlaylistsEnabled) {
-          const playlist = await extractPlaylistInfo(rawUrl, ytDlpPath, ffmpegPath, { playlistItemLimit: 1 });
+          const playlist = await extractPlaylistInfo(rawUrl, { ytDlp: ytDlpPath, ffmpeg: ffmpegPath }, { playlistItemLimit: 1 });
           return {
             success: true,
             data: playlist.videos[0],
@@ -834,7 +818,7 @@ function setupIpcHandlers() {
           };
         }
 
-        const playlist = await extractPlaylistInfo(rawUrl, ytDlpPath, ffmpegPath);
+        const playlist = await extractPlaylistInfo(rawUrl, { ytDlp: ytDlpPath, ffmpeg: ffmpegPath });
         return {
           success: true,
           data: { isPlaylist: true, videos: playlist.videos },
@@ -850,7 +834,13 @@ function setupIpcHandlers() {
 
       // Treat as SINGLE video (even if the URL also contains a `list=` param).
       const urlToUse = cleanVideoUrl(rawUrl);
-      const info = await extractVideoInfo(urlToUse, ytDlpPath, ffmpegPath);
+      const info = await extractVideoInfo(urlToUse, {
+        ytDlp: ytDlpPath,
+        ffmpeg: ffmpegPath,
+        streamlink: streamlinkPath,
+        nm3u8dl: n_m3u8dlPath,
+        galleryDl: galleryDlPath
+      });
 
       return {
         success: true,
@@ -985,7 +975,7 @@ function setupIpcHandlers() {
         });
       }
     } else {
-      console.warn('[PAUSE] No active job found for:', numericId);
+      log.warn('[PAUSE] No active job found for:', numericId);
       updateDownloadInDb(numericId, { state: 'paused' });
     }
     updateTaskbarProgress();
@@ -1102,20 +1092,9 @@ function setupIpcHandlers() {
           shell.showItemInFolder(targetPath);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       log.error('Failed to open folder:', error);
-      if (fallback && fs.existsSync(fallback)) {
-        const result = await shell.openPath(fallback);
-        if (result) throw new Error(result);
-        return { success: true };
-      }
-
-      // Fallback 2: system Downloads folder
-      const result = await shell.openPath(app.getPath('downloads'));
-      if (result) throw new Error(result);
-      return { success: true };
-    } catch (err) {
-      log.warn('[IPC] open-folder failed; opening downloads folder instead:', err);
+      // Fallback: system Downloads folder
       await shell.openPath(app.getPath('downloads'));
       return { success: true };
     }
@@ -1185,7 +1164,18 @@ function setupIpcHandlers() {
       saveDatabase(db);
       return getQuery(db, 'SELECT * FROM settings WHERE id = 1');
     } catch (error: any) {
-      console.error(`[IPC Error] save-settings failed: ${error.message}`);
+      log.error(`[IPC Error] save-settings failed: ${error.message}`);
+      throw error;
+    }
+  });
+
+  // ── open-external ─────────────────────────────────────────────────────────
+  ipcMain.handle('open-external', async (_: any, url: string) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error: any) {
+      log.error(`[IPC Error] open-external failed: ${error.message}`);
       throw error;
     }
   });
@@ -1234,6 +1224,11 @@ function setupIpcHandlers() {
   // ── get-ytdlp-version ─────────────────────────────────────────────────────
   ipcMain.handle('get-ytdlp-version', async () => {
     return await getCurrentYtDlpVersion();
+  });
+
+  // ── check-ytdlp-version ─────────────────────────────────────────────────────
+  ipcMain.handle('check-ytdlp-version', async () => {
+    return await checkYtDlpVersion();
   });
 }
 

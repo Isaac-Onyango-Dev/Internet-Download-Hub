@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename)
 const SOURCE_IMAGE = path.join(__dirname, '../assets/logo-clear.svg')
 const OUTPUT_DIR = path.join(__dirname, '../assets/icons')
 
-const sizes = [16, 32, 48, 64, 128, 256, 512, 1024]
+const sizes = [16, 32, 48, 64, 96, 128, 256, 512, 1024]
 
 async function generateIcons() {
   if (!fs.existsSync(OUTPUT_DIR)) {

@@ -19,7 +19,7 @@
   "type": "module",
   "scripts": {
     "postinstall": "npx playwright install chromium",
-    "generate-icons": "tsx scripts/generate-icons.ts",
+    "generate:icons": "tsx scripts/generate-icons.ts",
     "dev:main": "npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:electron-updater --external:sql.js --external:playwright-core",
     "dev": "npx kill-port 5173 5005 && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron && concurrently --kill-others-on-fail \"vite\" \"npm run dev:main && wait-on http://localhost:5173 && node scripts/dev-electron.cjs\"",
     "build": "tsx scripts/build.ts && electron-builder build",
@@ -33,10 +33,16 @@
     "check": "tsc"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.60.5",
     "electron-log": "^5.4.3",
     "execa": "^5.1.1",
+    "framer-motion": "^11.18.2",
+    "lucide-react": "^0.453.0",
     "playwright-core": "^1.58.2",
-    "sql.js": "^1.14.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.1",
+    "wouter": "^3.3.5"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -90,32 +96,8 @@
     "electron-builder": "^26.8.1",
     "embla-carousel-react": "^8.6.0",
     "esbuild": "^0.25.0",
-    "framer-motion": "^11.18.2",
-    "input-otp": "^1.4.2",
-    "kill-port": "^2.0.1",
-    "lucide-react": "^0.453.0",
-    "next-themes": "^0.4.6",
-    "png2icons": "^2.0.1",
-    "postcss": "^8.4.47",
-    "react": "^18.3.1",
-    "react-day-picker": "^8.10.1",
-    "react-dom": "^18.3.1",
-    "react-hook-form": "^7.55.0",
-    "react-icons": "^5.4.0",
-    "react-resizable-panels": "^2.1.7",
-    "recharts": "^2.15.4",
-    "sharp": "^0.34.5",
-    "tailwind-merge": "^2.6.1",
-    "tailwindcss": "^3.4.17",
-    "tailwindcss-animate": "^1.0.7",
-    "to-ico": "^1.0.1",
-    "tsx": "^4.20.5",
-    "tw-animate-css": "^1.2.5",
-    "typescript": "5.6.3",
-    "vaul": "^1.1.2",
-    "vite": "^7.3.0",
+    "vitest": "^3.0.0",
     "wait-on": "^9.0.4",
-    "wouter": "^3.3.5",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
@@ -139,17 +121,29 @@
       "!node_modules/vite/**/*",
       "!node_modules/esbuild/**/*",
       "!node_modules/@types/**/*",
-      "!node_modules/electron-builder/**/*"
+      "!node_modules/electron-builder/**/*",
+      "!node_modules/tsx/**/*",
+      "!node_modules/postcss/**/*",
+      "!node_modules/autoprefixer/**/*",
+      "!node_modules/concurrently/**/*",
+      "!node_modules/kill-port/**/*",
+      "!node_modules/wait-on/**/*",
+      "!node_modules/cross-env/**/*",
+      "!node_modules/vitest/**/*",
+      "!node_modules/@playwright/test/**/*"
     ],
     "asarUnpack": [
-      "binaries/**/*",
+      "binaries/yt-dlp.exe",
+      "binaries/gallery-dl.exe",
+      "binaries/streamlink.exe",
+      "binaries/N_m3u8DL-RE.exe",
       "node_modules/sql.js/dist/sql-wasm.wasm",
-      "node_modules/playwright-core/**/*",
+      "node_modules/playwright-core/.local-browsers/**/*",
       "node_modules/playwright/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.ico"
     },
     "mac": {
       "target": "dmg",
@@ -164,14 +158,19 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "deleteAppDataOnUninstall": true
+      "deleteAppDataOnUninstall": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
     },
     "extraResources": [
       {
         "from": "binaries/",
         "to": "binaries/",
         "filter": [
-          "**/*"
+          "yt-dlp.exe",
+          "gallery-dl.exe",
+          "streamlink.exe",
+          "N_m3u8DL-RE.exe"
         ]
       },
       {

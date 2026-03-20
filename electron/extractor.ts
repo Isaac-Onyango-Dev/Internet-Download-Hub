@@ -1,6 +1,9 @@
 import fs from 'fs';
+import path from 'path';
 import execa from 'execa';
 import { chromium } from 'playwright-core';
+import { analyseUrl, Engine } from './url-analyser';
+import log from 'electron-log';
 
 export interface VideoInfo {
   // The URL that yt-dlp should download from (must be defined to persist to SQLite).
@@ -11,7 +14,7 @@ export interface VideoInfo {
   uploader: string
   formats: VideoFormat[]
   extractedUrl?: string
-  extractionMethod: 'ytdlp' | 'playwright'
+  extractionMethod: Engine;
 }
 
 export interface VideoFormat {
@@ -25,43 +28,139 @@ export interface VideoFormat {
 
 export async function extractVideoInfo(
   url: string,
-  ytDlpPath: string,
-  ffmpegPath: string
+  paths: {
+    ytDlp: string;
+    ffmpeg: string;
+    streamlink: string;
+    nm3u8dl: string;
+    galleryDl: string;
+  }
 ): Promise<VideoInfo | VideoInfo[]> {
+  const { engineOrder } = analyseUrl(url);
+  log.info(`[Extractor] Engine order for ${url}: ${engineOrder.join(', ')}`);
 
-  // Tier 1 — Try yt-dlp first (fast, reliable for supported sites)
-  try {
-    console.log('[Extractor] Trying yt-dlp...')
-    const origin = new URL(url).origin;
-    const result = await execa(ytDlpPath, [
-      '-J',
-      '--no-warnings',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      url
-    ], { timeout: 120000 })
+  let lastError: any = null;
 
-    const info = JSON.parse(result.stdout)
-    if (info._type === 'playlist' && Array.isArray(info.entries)) {
-      return info.entries.map((entry: any) =>
-        parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, url)
-      );
+  for (const engine of engineOrder) {
+    try {
+      log.info(`[Extractor] Trying engine: ${engine}...`);
+      let result: VideoInfo | VideoInfo[];
+
+      switch (engine) {
+        case 'yt-dlp':
+          result = await runYtDlp(url, paths.ytDlp);
+          break;
+        case 'streamlink':
+          result = await runStreamlink(url, paths.streamlink);
+          break;
+        case 'n-m3u8dl':
+          result = await runNm3u8dl(url, paths.nm3u8dl);
+          break;
+        case 'gallery-dl':
+          result = await runGalleryDl(url, paths.galleryDl);
+          break;
+        case 'playwright':
+          result = await extractWithPlaywright(url, paths.ytDlp);
+          break;
+        default:
+          continue;
+      }
+      
+      log.info(`[Extractor] Success with engine: ${engine}`);
+      return result;
+    } catch (err: any) {
+      log.warn(`[Extractor] Engine ${engine} failed: ${err.message}`);
+      lastError = err;
     }
-    return parseYtDlpInfo(info, url)
-
-  } catch (ytDlpError: any) {
-    console.log('[Extractor] yt-dlp failed:', ytDlpError.message)
-    console.log('[Extractor] Falling back to Playwright...')
   }
 
-  // Tier 2 — Playwright fallback for unsupported sites
-  return await extractWithPlaywright(url, ytDlpPath)
+  throw lastError || new Error('All extraction engines failed.');
+}
+
+async function runYtDlp(url: string, ytDlpPath: string): Promise<VideoInfo | VideoInfo[]> {
+  if (!fs.existsSync(ytDlpPath)) throw new Error('yt-dlp not found');
+  const result = await execa(ytDlpPath, [
+    '-J',
+    '--no-warnings',
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    '--add-header', 'Accept-Language:en-US,en;q=0.9',
+    url
+  ], { timeout: 120000 });
+
+  const info = JSON.parse(result.stdout);
+  if (info._type === 'playlist' && Array.isArray(info.entries)) {
+    return info.entries.map((entry: any) =>
+      parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, url)
+    );
+  }
+  return parseYtDlpInfo(info, url);
+}
+
+async function runStreamlink(url: string, streamlinkPath: string): Promise<VideoInfo> {
+  if (!fs.existsSync(streamlinkPath)) throw new Error('streamlink not found');
+  const result = await execa(streamlinkPath, [url, '--json'], { timeout: 30000 });
+  const info = JSON.parse(result.stdout);
+  
+  if (info.error) throw new Error(info.error);
+  
+  const streams = info.streams || {};
+  const bestStream = streams.best || Object.values(streams)[0] as any;
+  if (!bestStream) throw new Error('No streams found for this URL.');
+
+  return {
+    url,
+    title: info.metadata?.title || 'Live Stream',
+    thumbnail: info.metadata?.thumbnail || '',
+    duration: 0,
+    uploader: info.metadata?.author || new URL(url).hostname,
+    extractionMethod: 'streamlink',
+    formats: [{
+      formatId: 'best',
+      label: 'Live Stream (Best)',
+      quality: 'best',
+      ext: 'ts',
+      filesize: null,
+      height: null
+    }]
+  };
+}
+
+async function runNm3u8dl(url: string, nm3u8dlPath: string): Promise<VideoInfo> {
+  if (!fs.existsSync(nm3u8dlPath)) throw new Error('N_m3u8DL-RE not found');
+  // N_m3u8DL-RE is more of a downloader than an extractor, but we can use it to probe manifests
+  // For simplicity, we'll treat it as a fallback that playwright might feed manifest URLs to
+  throw new Error('N_m3u8DL-RE extraction not fully implemented — use as download engine only.');
+}
+
+async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoInfo> {
+  if (!fs.existsSync(galleryDlPath)) throw new Error('gallery-dl not found');
+  const result = await execa(galleryDlPath, ['-j', url], { timeout: 30000 });
+  const info = JSON.parse(result.stdout);
+  // gallery-dl output depends on the site, but usually it's an array of image data
+  return {
+    url,
+    title: 'Image Gallery',
+    thumbnail: Array.isArray(info) ? (info[0]?.url || '') : '',
+    duration: 0,
+    uploader: new URL(url).hostname,
+    extractionMethod: 'gallery-dl',
+    formats: [{
+      formatId: 'best',
+      label: 'Full Quality Gallery',
+      quality: 'best',
+      ext: 'zip',
+      filesize: null,
+      height: null
+    }]
+  };
 }
 
 export async function extractPlaylistInfo(
   url: string,
-  ytDlpPath: string,
-  ffmpegPath: string,
+  paths: {
+    ytDlp: string;
+    ffmpeg: string;
+  },
   opts?: { playlistItemLimit?: number }
 ): Promise<{
   title: string;
@@ -85,7 +184,7 @@ export async function extractPlaylistInfo(
 
   args.push(url);
 
-  const result = await execa(ytDlpPath, args, { timeout: 120000 });
+  const result = await execa(paths.ytDlp, args, { timeout: 120000 });
   const info = JSON.parse(result.stdout);
 
   if (info?._type !== 'playlist' || !Array.isArray(info.entries)) {
@@ -300,7 +399,7 @@ function parseYtDlpInfo(info: any, fallbackUrl: string): VideoInfo {
     thumbnail: info.thumbnail || '',
     duration: info.duration || 0,
     uploader: info.uploader || info.channel || '',
-    extractionMethod: 'ytdlp',
+    extractionMethod: 'yt-dlp',
     formats: [
       { formatId: 'bestvideo+bestaudio', label: 'Best Quality (Recommended)', quality: 'best', ext: 'mp4', filesize: null, height: null },
       ...uniqueFormats,
