@@ -1,67 +1,43 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type CreateDownloadRequest, type UpdateDownloadRequest } from "@shared/routes";
+
+const DOWNLOADS_KEY = ["/api/downloads"];
 
 // ============================================
 // DOWNLOADS HOOKS
 // ============================================
 
-export function useDownloads(state?: string) {
+export function useDownloads() {
   return useQuery({
-    queryKey: [api.downloads.list.path, state],
+    queryKey: DOWNLOADS_KEY,
     queryFn: async () => {
-      const url = state 
-        ? buildUrl(api.downloads.list.path) + `?state=${state}`
-        : api.downloads.list.path;
-      
-      const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error('Failed to fetch downloads');
-      return api.downloads.list.responses[200].parse(await res.json());
+      if (!window.electronAPI) return [];
+      const downloads = await window.electronAPI.getDownloadHistory();
+      return downloads.map((dl: any) => ({
+        ...dl,
+        mimeType: dl.mime_type,
+        duration: dl.duration,
+        uploader: dl.uploader,
+        totalBytes: dl.total_bytes,
+        receivedBytes: dl.received_bytes,
+        formatId: dl.format_id,
+        savePath: dl.save_path,
+        thumbnail: dl.thumbnail,
+        createdAt: new Date(dl.created_at),
+        completedAt: dl.completed_at ? new Date(dl.completed_at) : null,
+      }));
     },
-    // Poll more frequently for downloads to simulate real-time updates
-    refetchInterval: 1000, 
+    refetchInterval: 2000,
   });
 }
 
 export function useCreateDownload() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateDownloadRequest) => {
-      const validated = api.downloads.create.input.parse(data);
-      const res = await fetch(api.downloads.create.path, {
-        method: api.downloads.create.method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        if (res.status === 400) {
-          const error = api.downloads.create.responses[400].parse(await res.json());
-          throw new Error(error.message);
-        }
-        throw new Error('Failed to create download');
-      }
-      return api.downloads.create.responses[201].parse(await res.json());
+    mutationFn: async (data: { url: string; filename: string; formatId?: string; savePath?: string; thumbnail?: string }) => {
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.startDownload(data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.downloads.list.path] }),
-  });
-}
-
-export function useUpdateDownload() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: number } & UpdateDownloadRequest) => {
-      const validated = api.downloads.update.input.parse(updates);
-      const url = buildUrl(api.downloads.update.path, { id });
-      const res = await fetch(url, {
-        method: api.downloads.update.method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error('Failed to update download');
-      return api.downloads.update.responses[200].parse(await res.json());
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.downloads.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
   });
 }
 
@@ -69,11 +45,54 @@ export function useDeleteDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const url = buildUrl(api.downloads.delete.path, { id });
-      const res = await fetch(url, { method: api.downloads.delete.method, credentials: "include" });
-      if (!res.ok) throw new Error('Failed to delete download');
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.deleteDownload(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.downloads.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
+  });
+}
+
+export function useCancelDownload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.cancelDownload(id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
+  });
+}
+
+export function useRestartDownload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.restartDownload(id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
+  });
+}
+
+export function usePauseDownload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.pauseDownload(id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
+  });
+}
+
+export function useResumeDownload() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      if (!window.electronAPI) throw new Error("Electron API not available");
+      return await window.electronAPI.resumeDownload(id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
   });
 }
 
@@ -81,12 +100,9 @@ export function useClearCompletedDownloads() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch(api.downloads.clearCompleted.path, {
-        method: api.downloads.clearCompleted.method,
-        credentials: "include"
-      });
-      if (!res.ok) throw new Error('Failed to clear downloads');
+      if (!window.electronAPI) return;
+      await window.electronAPI.clearHistory();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.downloads.list.path] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
   });
 }

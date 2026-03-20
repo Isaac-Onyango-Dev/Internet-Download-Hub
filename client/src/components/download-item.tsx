@@ -1,11 +1,22 @@
-import { Download, UpdateDownloadRequest } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle, RotateCcw, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import { useUpdateDownload, useDeleteDownload } from "@/hooks/use-downloads";
+import { useDeleteDownload, useRestartDownload, useCancelDownload } from "@/hooks/use-downloads";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+interface Download {
+  id: number;
+  filename: string;
+  mimeType: string | null;
+  totalBytes: number;
+  receivedBytes: number;
+  state: string;
+  error: string | null;
+  savePath: string | null;
+  createdAt: Date;
+}
 
 interface DownloadItemProps {
   download: Download;
@@ -13,7 +24,8 @@ interface DownloadItemProps {
 }
 
 export function DownloadItem({ download, compact = false }: DownloadItemProps) {
-  const updateMutation = useUpdateDownload();
+  const restartMutation = useRestartDownload();
+  const cancelMutation = useCancelDownload();
   const deleteMutation = useDeleteDownload();
 
   const getFileIcon = (mimeType: string | null, filename: string) => {
@@ -49,12 +61,15 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
     : 0;
 
   const handlePauseResume = () => {
-    const newState = download.state === "downloading" ? "paused" : "downloading";
-    updateMutation.mutate({ id: download.id, state: newState });
+    if (download.state === 'downloading') {
+      cancelMutation.mutate(download.id);
+    } else {
+      restartMutation.mutate(download.id);
+    }
   };
 
   const handleRetry = () => {
-    updateMutation.mutate({ id: download.id, state: "downloading" });
+    restartMutation.mutate(download.id);
   };
 
   const handleDelete = () => {
@@ -126,7 +141,7 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p className="text-[10px]">Managed by Download Hub: Continues even if browser closes</p>
+                  <p className="text-[10px]">Managed by Internet Download Hub: Continues even if browser closes</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

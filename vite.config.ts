@@ -1,14 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
+  base: './',
+  // Serve the repo's generated app assets as Vite "public" files.
+  // This makes `/icons/*` and `/icon.png` work consistently in dev and in the packaged build output.
+  publicDir: path.resolve(import.meta.dirname, "assets"),
   plugins: [
     react(),
-    runtimeErrorOverlay(),
-    // Removed Replit dev plugins to avoid injecting Replit branding/icons.
-    // If you want to enable Replit-specific tooling, re-add the imports here.
   ],
   resolve: {
     alias: {
@@ -24,13 +24,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5006',
-        changeOrigin: true,
-        ws: true
-      }
-    },
+    strictPort: true,
     hmr: {
       port: 5173
     },

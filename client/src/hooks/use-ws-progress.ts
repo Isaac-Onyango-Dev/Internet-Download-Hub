@@ -2,60 +2,52 @@ import { useEffect, useState } from "react";
 
 export interface ProgressData {
   downloadId: number;
+  jobId?: number;
   totalBytes: number;
   receivedBytes: number;
   percent: number;
   speed?: string;
   eta?: string;
   state?: string;
+  phase?: string;
+  status?: string;
+  totalSize?: string;
 }
 
 export function useDownloadProgress() {
   const [progressMap, setProgressMap] = useState<Record<number, ProgressData>>({});
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // Vite proxy handles the routing from 5173 to 5005 automatically
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: any = null;
+    if (!window.electronAPI) return;
 
-    function connect() {
-      socket = new WebSocket(wsUrl);
-
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === "download_progress") {
-            setProgressMap((prev) => ({
-              ...prev,
-              [data.downloadId]: data
-            }));
-          }
-        } catch (err) {
-          console.error("Failed to parse WS message", err);
-        }
-      };
-
-      socket.onclose = () => {
-        reconnectTimeout = setTimeout(connect, 3000);
-      };
-
-      socket.onerror = (err) => {
-        console.error("WebSocket error", err);
-        socket?.close();
-      };
+    // Remove any existing listeners first to prevent duplicates
+    if (window.electronAPI.removeProgressListener) {
+      window.electronAPI.removeProgressListener();
     }
 
-    connect();
+    window.electronAPI.onDownloadProgress((data: any) => {
+      const key = data.id ?? data.downloadId;
+      setProgressMap((prev) => {
+        // Remove completed / error / cancelled from live map
+        if (data.state === 'completed' || data.state === 'error' || data.state === 'cancelled') {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return {
+          ...prev,
+          [key]: {
+            ...data,
+            downloadId: key,
+          },
+        };
+      });
+    });
 
     return () => {
-      if (socket) {
-        socket.onclose = null;
-        socket.close();
+      if (window.electronAPI?.removeProgressListener) {
+        window.electronAPI.removeProgressListener();
       }
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
     };
   }, []);
 

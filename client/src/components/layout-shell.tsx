@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { Download, HardDrive, Settings } from "lucide-react";
+import { Download, HardDrive, Settings, Heart } from "lucide-react";
 
 interface LayoutShellProps {
   children: ReactNode;
@@ -12,20 +12,28 @@ export function LayoutShell({ children }: LayoutShellProps) {
 
   const navItems = [
     { href: "/", label: "Downloader", icon: Download },
-    { href: "#queue", label: "Queue & History", icon: HardDrive },
-    { href: "#settings", label: "Settings", icon: Settings },
+    { href: "/queue", label: "Queue & History", icon: HardDrive },
+    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/support", label: "Support", icon: Heart },
   ];
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row font-sans">
-      {/* Sidebar for Desktop */}
-      <aside className="w-full md:w-64 border-b md:border-r border-border bg-card p-4 flex flex-col gap-8 sticky top-0 z-50">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground font-sans">
+      {/* Sidebar — fixed, never moves */}
+      <aside className="w-64 min-w-64 h-screen flex-shrink-0 overflow-hidden sticky top-0 border-r border-border bg-card p-4 flex flex-col gap-8 z-50">
         <div className="flex items-center gap-3 px-2 mt-2">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-            <Download className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm overflow-hidden">
+            <img
+              src="./icon.png"
+              alt="Internet Download Hub"
+              className="w-6 h-6 object-contain"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
           </div>
           <div>
-            <span className="font-bold text-xl tracking-tight text-white block leading-none">Download Hub</span>
+            <span className="font-bold text-base tracking-tight text-foreground block leading-none">Internet Download Hub</span>
           </div>
         </div>
 
@@ -40,10 +48,11 @@ export function LayoutShell({ children }: LayoutShellProps) {
             const isActive = location === item.href || (location === "/" && item.href === "/");
             
             return (
-              <div
+              <Link
                 key={item.href}
+                href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors font-medium",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors font-medium cursor-pointer",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -51,14 +60,14 @@ export function LayoutShell({ children }: LayoutShellProps) {
               >
                 <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "")} />
                 <span>{item.label}</span>
-              </div>
+              </Link>
             );
           })}
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 min-h-screen">
+      {/* Only this scrolls */}
+      <main className="flex-1 h-screen overflow-y-auto overflow-x-hidden">
         <div className="w-full h-full p-4 md:p-8 max-w-5xl mx-auto">
           {children}
         </div>

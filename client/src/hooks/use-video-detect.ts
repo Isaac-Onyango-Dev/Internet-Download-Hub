@@ -1,5 +1,4 @@
 import { useMutation } from "@tanstack/react-query";
-import { api } from "@shared/routes";
 
 export interface DetectedVideoFormat {
     formatId: string;
@@ -22,22 +21,38 @@ export interface DetectedVideo {
     formats: DetectedVideoFormat[];
 }
 
+export interface PlaylistData {
+    isPlaylist: true;
+    videos: DetectedVideo[];
+}
+
+export interface VideoDetectMeta {
+    playlistDetected?: boolean;
+    detectPlaylistsEnabled?: boolean;
+    collapsedToSingle?: boolean;
+    playlistTitle?: string;
+    playlistVideoCount?: number;
+}
+
+export interface VideoDetectResponse {
+    data: DetectedVideo | PlaylistData;
+    meta?: VideoDetectMeta;
+}
+
 export function useVideoDetect() {
-    return useMutation<DetectedVideo[], Error, string>({
+    return useMutation<VideoDetectResponse, Error, string>({
         mutationFn: async (url: string) => {
-            const res = await fetch(api.downloads.fetchInfo.path, {
-                method: api.downloads.fetchInfo.method,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url }),
-                credentials: "include",
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ message: "Detection failed" }));
-                throw new Error(err.message ?? "Detection failed");
+            if (!window.electronAPI) {
+                throw new Error("Electron API not available");
             }
-            const data = await res.json();
-            // The endpoint returns a single video object, but the component expects an array or we wrap it
-            return Array.isArray(data) ? data : [data];
+            const result = await window.electronAPI.fetchVideoInfo(url);
+            if (!result.success) {
+                throw new Error(result.error || "Could not fetch video information.");
+            }
+            if (!result.data) {
+                throw new Error("No video information was returned.");
+            }
+            return { data: result.data, meta: (result as any).meta };
         },
     });
 }
