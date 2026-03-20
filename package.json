@@ -23,10 +23,13 @@
     "dev:main": "npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:electron-updater --external:sql.js --external:playwright-core",
     "dev": "npx kill-port 5173 5005 && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron && concurrently --kill-others-on-fail \"vite\" \"npm run dev:main && wait-on http://localhost:5173 && node scripts/dev-electron.cjs\"",
     "build": "tsx scripts/build.ts && electron-builder build",
+    "setup:binaries": "tsx scripts/download-binaries.ts",
+    "setup:binaries:force": "tsx scripts/download-binaries.ts --force",
+    "build:electron": "npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron",
     "prebuild:win": "vite build && npx esbuild electron/main.ts --bundle --platform=node --format=cjs --define:import.meta.url=undefined --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --define:import.meta.url=undefined --outfile=electron/preload.cjs --external:electron",
-    "build:win": "electron-builder build --win",
-    "build:mac": "electron-builder build --mac",
-    "build:linux": "electron-builder build --linux",
+    "build:win": "npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --win",
+    "build:mac": "npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --mac",
+    "build:linux": "npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --linux",
     "check": "tsc"
   },
   "dependencies": {

@@ -5,9 +5,13 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -15,39 +19,64 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: npm
 
       - name: Install dependencies
         run: npm install
 
+      - name: Verify setup:binaries script exists
+        run: npm run --list | findstr setup:binaries || echo "WARNING setup:binaries not found"
+        shell: cmd
+
       - name: Download binaries
         run: npm run setup:binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate icons
+        run: npm run generate:icons
+        continue-on-error: true
+
+      - name: Build Vite frontend
+        run: npx vite build
+
+      - name: Build Electron main and preload
+        run: npm run build:electron
 
       - name: Build Windows installer
-        run: npm run build:win
+        run: npx electron-builder build --win
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload to GitHub Release
+      - name: List release files
+        run: dir release
+        shell: cmd
+
+      - name: Upload installer to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            release/*.exe
+          files: release/*.exe
           generate_release_notes: true
           body: |
             ## Internet Download Hub ${{ github.ref_name }}
 
             ### Download
-            Download the installer below and run it on your Windows 10 or Windows 11 PC.
-            No additional software required — everything is bundled inside.
+            Download the `.exe` installer below and run it on your Windows 10 or Windows 11 PC.
+            No additional software required — yt-dlp, FFmpeg, and all dependencies are bundled inside.
 
-            ### Installation
-            1. Download the `.exe` file below
-            2. Double click to install
-            3. Open Internet Download Hub from your Start Menu
+            ### How to Install
+            1. Download `Internet Download Hub Setup x.x.x.exe` from the assets below
+            2. Double click the installer
+            3. Follow the installation steps
+            4. Open Internet Download Hub from your Start Menu or Desktop
 
-            > **Note:** Windows may show a security warning. Click **More info → Run anyway** to proceed. This is normal for unsigned applications.
+            > **Windows Security Note:** Windows may show a SmartScreen warning because the app is not code-signed.
+            > Click **More info → Run anyway** to proceed. This is normal for open source apps.
+
+            ### Supported Sites
+            YouTube, Twitter/X, TikTok, Instagram, Facebook, Reddit, Vimeo, and 1000+ more sites.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
