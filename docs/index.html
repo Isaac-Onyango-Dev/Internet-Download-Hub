@@ -58,7 +58,9 @@
   <section class="stats-bar">
     <div class="stats-inner">
       <div class="stat">
-        <span class="stat-number" id="total-downloads">—</span>
+        <span class="stat-number" id="total-downloads">
+          <span class="loading-dots">···</span>
+        </span>
         <span class="stat-label">Total Downloads</span>
       </div>
       <div class="stat">
@@ -166,6 +168,7 @@
         <a id="download-btn" href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" class="btn-download" target="_blank" rel="noopener">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Download .exe
+          <span id="file-size" class="file-size-label"></span>
         </a>
       </div>
       <p class="download-note">

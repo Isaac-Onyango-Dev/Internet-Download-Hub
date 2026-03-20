@@ -48,6 +48,22 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-muted); font-size: 0.95rem;
   transition: color 0.2s;
 }
+
+.loading-dots {
+  opacity: 0.4;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.file-size-label {
+  font-size: 0.8rem;
+  opacity: 0.8;
+  margin-left: 6px;
+}
 .nav-links a:hover { color: var(--text); }
 
 /* Hero */
