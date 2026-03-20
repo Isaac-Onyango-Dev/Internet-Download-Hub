@@ -55,11 +55,23 @@ if (!gotTheLock) {
 function setupPaths() {
   isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   isTest = process.env.NODE_ENV === 'test';
+  
+  const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
+  const userDataYtDlpPath = path.join(userDataBinariesPath, 'yt-dlp.exe');
+
   binariesPath = app.isPackaged
     ? path.join(process.resourcesPath, 'binaries')
     : path.join(process.cwd(), 'binaries');
 
-  ytDlpPath = path.join(binariesPath, 'yt-dlp.exe');
+  // Priority: 1. Updated binary in AppData  2. Original packaged binary
+  if (fs.existsSync(userDataYtDlpPath)) {
+    ytDlpPath = userDataYtDlpPath;
+    log.info(`[Main] Using updated yt-dlp from userData: ${ytDlpPath}`);
+  } else {
+    ytDlpPath = path.join(binariesPath, 'yt-dlp.exe');
+    log.info(`[Main] Using packaged yt-dlp: ${ytDlpPath}`);
+  }
+  
   ffmpegPath = path.join(binariesPath, 'ffmpeg.exe');
   ffprobePath = path.join(binariesPath, 'ffprobe.exe');
 }
@@ -671,41 +683,49 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
   const asset = release.assets.find((a: any) => a.name === 'yt-dlp.exe');
   if (!asset) throw new Error('Could not find yt-dlp.exe in the latest release');
 
-  // Write to system temp dir — always writable, even on Program Files installs
-  const tempDir = os.tmpdir();
-  const tempPath = path.join(tempDir, `yt-dlp-new-${Date.now()}.exe`);
+  // Destination folder: userData/binaries (always writable)
+  const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
+  if (!fs.existsSync(userDataBinariesPath)) {
+    fs.mkdirSync(userDataBinariesPath, { recursive: true });
+  }
+  const destPath = path.join(userDataBinariesPath, 'yt-dlp.exe');
 
-  log.info(`[UPDATE] Downloading yt-dlp ${latestVersion} to temp: ${tempPath}`);
+  // Write to a temporary file first
+  const tempPath = path.join(userDataBinariesPath, `yt-dlp-new-${Date.now()}.exe`);
+
+  log.info(`[UPDATE] Downloading yt-dlp ${latestVersion} to: ${tempPath}`);
   await downloadFile(asset.browser_download_url, tempPath);
 
   // Sanity-check the downloaded file
   const stats = fs.statSync(tempPath);
-  if (stats.size < 5 * 1024 * 1024) {
+  if (stats.size < 10 * 1024 * 1024) { // Increased to 10MB because yt-dlp is usually 15MB+
     fs.unlinkSync(tempPath);
     throw new Error(`Downloaded file is suspiciously small (${(stats.size / 1024 / 1024).toFixed(2)} MB) — aborting`);
   }
 
-  // Backup existing binary
-  const backupPath = ytDlpPath + '.backup';
+  // Backup existing binary in userData if it exists
+  const backupPath = destPath + '.backup';
   try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (_) {}
-  try { if (fs.existsSync(ytDlpPath)) fs.renameSync(ytDlpPath, backupPath); } catch (_) {}
+  try { if (fs.existsSync(destPath)) fs.renameSync(destPath, backupPath); } catch (_) {}
 
   try {
-    // Copy (not rename) into the install dir — works even across drive boundaries
-    fs.copyFileSync(tempPath, ytDlpPath);
-    fs.unlinkSync(tempPath);
+    // Replace the binary
+    fs.renameSync(tempPath, destPath);
     try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (_) {}
-    log.info(`[UPDATE] yt-dlp updated to ${latestVersion}`);
+    
+    // Switch to the new path immediately
+    ytDlpPath = destPath;
+    log.info(`[UPDATE] yt-dlp successfully updated to v${latestVersion} in userData`);
     return { updated: true, version: latestVersion };
   } catch (err: any) {
     // Restore backup on failure
     try {
-      if (!fs.existsSync(ytDlpPath) && fs.existsSync(backupPath)) {
-        fs.renameSync(backupPath, ytDlpPath);
+      if (!fs.existsSync(destPath) && fs.existsSync(backupPath)) {
+        fs.renameSync(backupPath, destPath);
       }
     } catch (_) {}
-    try { fs.unlinkSync(tempPath); } catch (_) {}
-    throw new Error(`Failed to replace binary: ${err.message}`);
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+    throw new Error(`Failed to finalize update: ${err.message}`);
   }
 }
 

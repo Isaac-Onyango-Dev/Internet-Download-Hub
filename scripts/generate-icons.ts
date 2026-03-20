@@ -42,22 +42,33 @@ async function generateIcons() {
 }
 
 async function generateWindowsIco() {
-  const icoSizes = [16, 32, 48, 64, 128, 256]
-  const pngBuffers = await Promise.all(
-    icoSizes.map(size =>
-      sharp(SOURCE_IMAGE)
-        .resize(size, size, {
-           fit: 'contain',
-           background: { r: 0, g: 0, b: 0, alpha: 0 }
-         })
-        .png()
-        .toBuffer()
+  // Use png2icons for more robust ICO generation (handles multiple layers/BMP-embedded better)
+  const input = fs.readFileSync(path.join(OUTPUT_DIR, 'icon-512.png'))
+  const ico = png2icons.createICO(input, png2icons.BILINEAR, 0, true, true)
+  if (ico) {
+    fs.writeFileSync(path.join(__dirname, '../assets/icon.ico'), ico)
+    console.log('Windows ICO generated successfully (via png2icons)')
+  } else {
+    console.error('Failed to generate ICO via png2icons')
+    
+    // Fallback to simpler method if needed
+    const icoSizes = [16, 32, 48, 64, 128, 256]
+    const pngBuffers = await Promise.all(
+      icoSizes.map(size =>
+        sharp(SOURCE_IMAGE)
+          .resize(size, size, {
+             fit: 'contain',
+             background: { r: 0, g: 0, b: 0, alpha: 0 }
+           })
+          .png()
+          .toBuffer()
+      )
     )
-  )
 
-  const icoBuffer = await toIco(pngBuffers)
-  fs.writeFileSync(path.join(__dirname, '../assets/icon.ico'), icoBuffer)
-  console.log('Windows ICO generated')
+    const icoBuffer = await toIco(pngBuffers)
+    fs.writeFileSync(path.join(__dirname, '../assets/icon.ico'), icoBuffer)
+    console.log('Windows ICO generated via fallback (to-ico)')
+  }
 }
 
 async function generateMacIcns() {
