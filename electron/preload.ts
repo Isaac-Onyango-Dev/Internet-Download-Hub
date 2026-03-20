@@ -52,6 +52,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   openFolder: (filePath: string) =>
     ipcRenderer.invoke('open-folder', filePath),
+  
+  openExternal: (url: string) =>
+    ipcRenderer.invoke('open-external', url),
 
   checkDiskSpace: (path: string, requiredBytes: number) =>
     ipcRenderer.invoke('check-disk-space', { path, requiredBytes }),

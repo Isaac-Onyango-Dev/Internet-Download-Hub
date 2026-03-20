@@ -30,6 +30,8 @@ declare global {
       chooseSaveFolder: () => Promise<string | null>
       openFilePath: (filePath: string) => Promise<{ success: boolean }>
       openFolder: (filePath: string) => Promise<{ success: boolean }>
+  
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
       checkDiskSpace: (path: string, requiredBytes: number) => Promise<{
         isEnough: boolean;
         freeSpace: number;

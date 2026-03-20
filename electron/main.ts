@@ -1091,22 +1091,19 @@ function setupIpcHandlers() {
     return { success: true };
   });
 
-  // ── open-folder ───────────────────────────────────────────────────────────
+  // ── open-folder ───────────────────────────────────────────────────
   ipcMain.handle('open-folder', async (_: any, targetPath: string) => {
     try {
       if (targetPath && typeof targetPath === 'string' && fs.existsSync(targetPath)) {
         const stat = fs.statSync(targetPath);
-        if (stat.isFile()) {
-          shell.showItemInFolder(targetPath);
+        if (stat.isDirectory()) {
+          shell.openPath(targetPath);
         } else {
-          const result = await shell.openPath(targetPath);
-          if (result) throw new Error(result);
+          shell.showItemInFolder(targetPath);
         }
-        return { success: true };
       }
-
-      // Fallback 1: configured default save folder
-      const fallback = getDefaultSavePath();
+    } catch (error) {
+      log.error('Failed to open folder:', error);
       if (fallback && fs.existsSync(fallback)) {
         const result = await shell.openPath(fallback);
         if (result) throw new Error(result);
