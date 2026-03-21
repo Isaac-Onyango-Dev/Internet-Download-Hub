@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 const BINARIES_DIR = 'binaries';
 
 const BINARIES = [
+  // Always latest Windows binary (same endpoint the app uses for in-app updates).
   {
     name: 'yt-dlp.exe',
     url: 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',

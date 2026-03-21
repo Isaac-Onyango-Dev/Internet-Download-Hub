@@ -10,7 +10,8 @@ import os from 'os';
 import https from 'https';
 import { promisify } from 'util';
 import initSqlJs from 'sql.js';
-import { translateDownloadError } from './errors';
+import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors';
+import { ytDlpCommonArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
 
 log.transports.file.level = 'debug';
 log.catchErrors();
@@ -1298,10 +1299,18 @@ function setupIpcHandlers() {
 const lineBuffers = new Map<number, string>();
 
 // ── Spawn Download (shared logic) ─────────────────────────────────────────────
-function spawnDownload(downloadId: number, url: string, outputPath: string, formatId?: string | null, isResume: boolean = false): { id: number } {
+function spawnDownload(
+  downloadId: number,
+  url: string,
+  outputPath: string,
+  formatId?: string | null,
+  isResume: boolean = false,
+  youtubePlayerClient?: YoutubePlayerClient
+): { id: number } {
   taskStopReasons.delete(downloadId);
   // Used for translating yt-dlp failures reliably (close handler only gives the exit code).
   let lastStderrOutput = '';
+  let aggregatedStderr = '';
   let actualFilePath = outputPath;
   let cleanedFilePathCandidate: string | null = null;
   const formatArg = formatId === 'bestvideo+bestaudio' || !formatId
@@ -1327,7 +1336,10 @@ function spawnDownload(downloadId: number, url: string, outputPath: string, form
     '--progress',
     '--no-colors',
     '--no-warnings',
-    '--no-playlist',
+    ...ytDlpCommonArgs(url, {
+      noPlaylist: true,
+      ...(youtubePlayerClient !== undefined ? { youtubePlayerClient } : {}),
+    }),
     '--windows-filenames',
     '--trim-filenames', '200',
     '-f', formatArg,
@@ -1476,8 +1488,34 @@ function spawnDownload(downloadId: number, url: string, outputPath: string, form
       ) {
         log.error(`[PROGRESS] Error for job ${jobId}:`, trimmed);
         const userFriendlyError = translateDownloadError(trimmed, null, url);
-        if (mainWindow) mainWindow.webContents.send('download-progress', { jobId: String(jobId), id: jobId, percent: 0, phase: userFriendlyError, status: 'failed', error: userFriendlyError });
-        updateDownloadInDb(jobId, { state: 'failed', error: userFriendlyError });
+        const deferFailForAgeRetry =
+          isYouTubeUrl(url) &&
+          youtubePlayerClient !== 'tv_embedded' &&
+          isLikelyYoutubeAgeRestrictionError(trimmed);
+        if (deferFailForAgeRetry) {
+          log.info(`[PROGRESS] Holding failed state for job ${jobId} pending tv_embedded retry`);
+          if (mainWindow) {
+            mainWindow.webContents.send('download-progress', {
+              jobId: String(jobId),
+              id: jobId,
+              percent: 0,
+              phase: 'Retrying with alternate player…',
+              status: 'downloading',
+            });
+          }
+        } else {
+          if (mainWindow) {
+            mainWindow.webContents.send('download-progress', {
+              jobId: String(jobId),
+              id: jobId,
+              percent: 0,
+              phase: userFriendlyError,
+              status: 'failed',
+              error: userFriendlyError,
+            });
+          }
+          updateDownloadInDb(jobId, { state: 'failed', error: userFriendlyError });
+        }
         continue;
       }
     }
@@ -1490,6 +1528,7 @@ function spawnDownload(downloadId: number, url: string, outputPath: string, form
 
   ytDlpProcess.stderr.on('data', (data: Buffer) => {
     const text = data.toString();
+    aggregatedStderr += text;
     log.info('[PROGRESS-AUDIT] STDERR received:', text);
     lastStderrOutput = text;
     parseYtDlpOutput(text, downloadId);
@@ -1560,8 +1599,18 @@ function spawnDownload(downloadId: number, url: string, outputPath: string, form
         } catch (_) {}
       }
     } else if (code !== null) {
+      if (
+        youtubePlayerClient !== 'tv_embedded' &&
+        isYouTubeUrl(url) &&
+        isLikelyYoutubeAgeRestrictionError(aggregatedStderr)
+      ) {
+        log.info(`[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`);
+        spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded');
+        processQueue();
+        return;
+      }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = translateDownloadError(lastStderrOutput, code, url);
+      const userFriendlyError = translateDownloadError(aggregatedStderr || lastStderrOutput, code, url);
       updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {

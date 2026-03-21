@@ -4,6 +4,8 @@ import execa from 'execa';
 import { chromium } from 'playwright-core';
 import { analyseUrl, Engine } from './url-analyser';
 import log from 'electron-log';
+import { ytDlpCommonArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
+import { isLikelyYoutubeAgeRestrictionError } from './errors';
 
 export interface VideoInfo {
   // The URL that yt-dlp should download from (must be defined to persist to SQLite).
@@ -77,23 +79,51 @@ export async function extractVideoInfo(
   throw lastError || new Error('All extraction engines failed.');
 }
 
-async function runYtDlp(url: string, ytDlpPath: string): Promise<VideoInfo | VideoInfo[]> {
-  if (!fs.existsSync(ytDlpPath)) throw new Error('yt-dlp not found');
-  const result = await execa(ytDlpPath, [
+const YT_DLP_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+function buildYtDlpJsonArgs(url: string, youtubeClient?: YoutubePlayerClient): string[] {
+  return [
     '-J',
     '--no-warnings',
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--add-header', 'Accept-Language:en-US,en;q=0.9',
-    url
-  ], { timeout: 120000 });
+    '--user-agent',
+    YT_DLP_UA,
+    '--add-header',
+    'Accept-Language:en-US,en;q=0.9',
+    ...ytDlpCommonArgs(url, {
+      noPlaylist: true,
+      ...(youtubeClient !== undefined ? { youtubePlayerClient: youtubeClient } : {}),
+    }),
+    url,
+  ]
+}
 
-  const info = JSON.parse(result.stdout);
+function parseYtDlpJsonStdout(stdout: string, pageUrl: string): VideoInfo | VideoInfo[] {
+  const info = JSON.parse(stdout)
   if (info._type === 'playlist' && Array.isArray(info.entries)) {
     return info.entries.map((entry: any) =>
-      parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, url)
-    );
+      parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, pageUrl)
+    )
   }
-  return parseYtDlpInfo(info, url);
+  return parseYtDlpInfo(info, pageUrl)
+}
+
+async function runYtDlp(url: string, ytDlpPath: string): Promise<VideoInfo | VideoInfo[]> {
+  if (!fs.existsSync(ytDlpPath)) throw new Error('yt-dlp not found')
+  try {
+    const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url), { timeout: 120000 })
+    return parseYtDlpJsonStdout(result.stdout, url)
+  } catch (err: any) {
+    const stderr = String(err.stderr ?? err.message ?? '')
+    if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
+      log.info('[Extractor] Retrying yt-dlp info with youtube:player_client=tv_embedded')
+      const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, 'tv_embedded'), {
+        timeout: 120000,
+      })
+      return parseYtDlpJsonStdout(result.stdout, url)
+    }
+    throw err
+  }
 }
 
 async function runStreamlink(url: string, streamlinkPath: string): Promise<VideoInfo> {
@@ -155,6 +185,34 @@ async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoIn
   };
 }
 
+async function execYtDlpPlaylistJson(
+  ytDlpPath: string,
+  pageUrl: string,
+  opts: { playlistItemLimit?: number; youtubePlayerClient?: YoutubePlayerClient }
+) {
+  const args: string[] = [
+    '-J',
+    '--no-warnings',
+    '--user-agent',
+    YT_DLP_UA,
+    '--add-header',
+    'Accept-Language:en-US,en;q=0.9',
+    ...ytDlpCommonArgs(pageUrl, {
+      noPlaylist: false,
+      ...(opts.youtubePlayerClient !== undefined
+        ? { youtubePlayerClient: opts.youtubePlayerClient }
+        : {}),
+    }),
+  ]
+
+  if (opts.playlistItemLimit && Number.isFinite(opts.playlistItemLimit)) {
+    args.push('--playlist-items', String(opts.playlistItemLimit))
+  }
+
+  args.push(pageUrl)
+  return execa(ytDlpPath, args, { timeout: 120000 })
+}
+
 export async function extractPlaylistInfo(
   url: string,
   paths: {
@@ -168,23 +226,24 @@ export async function extractPlaylistInfo(
   videoCount: number;
   videos: VideoInfo[];
 }> {
-  // Use yt-dlp directly so each entry contains formats (needed for per-video quality selection).
-  const args = [
-    '-J',
-    '--no-warnings',
-    '--user-agent',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--add-header',
-    'Accept-Language:en-US,en;q=0.9',
-  ] as string[];
-
-  if (opts?.playlistItemLimit && Number.isFinite(opts.playlistItemLimit)) {
-    args.push('--playlist-items', String(opts.playlistItemLimit));
+  let result
+  try {
+    result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
+      playlistItemLimit: opts?.playlistItemLimit,
+    })
+  } catch (err: any) {
+    const stderr = String(err.stderr ?? err.message ?? '')
+    if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
+      log.info('[Extractor] Retrying playlist yt-dlp with youtube:player_client=tv_embedded')
+      result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
+        playlistItemLimit: opts?.playlistItemLimit,
+        youtubePlayerClient: 'tv_embedded',
+      })
+    } else {
+      throw err
+    }
   }
 
-  args.push(url);
-
-  const result = await execa(paths.ytDlp, args, { timeout: 120000 });
   const info = JSON.parse(result.stdout);
 
   if (info?._type !== 'playlist' || !Array.isArray(info.entries)) {
@@ -328,6 +387,7 @@ async function extractWithPlaywright(
       const result = await execa(ytDlpPath, [
         '--dump-json',
         '--no-warnings',
+        ...ytDlpCommonArgs(bestUrl, { noPlaylist: true }),
         bestUrl
       ], { timeout: 15000 })
       const info = JSON.parse(result.stdout)

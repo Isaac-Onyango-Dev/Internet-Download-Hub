@@ -1,3 +1,17 @@
+/** True when yt-dlp stderr suggests YouTube age-gating (narrow — avoids false positives like "package"). */
+export function isLikelyYoutubeAgeRestrictionError(raw: string): boolean {
+  const m = (raw || '').toLowerCase()
+  return (
+    m.includes('age-restricted') ||
+    m.includes('age restricted') ||
+    m.includes('confirm your age') ||
+    m.includes('inappropriate for some users') ||
+    m.includes('this video may be inappropriate') ||
+    (m.includes('sign in') && m.includes('age')) ||
+    (m.includes('login') && m.includes('age-restrict'))
+  )
+}
+
 export function translateDownloadError(
   rawError: string,
   exitCode: number | null,
@@ -43,14 +57,9 @@ export function translateDownloadError(
     return 'This video is private and cannot be downloaded.';
   }
 
-  // Age restricted
-  if (
-    msg.includes('sign in') ||
-    msg.includes('age') ||
-    msg.includes('confirm your age') ||
-    msg.includes('age-restricted')
-  ) {
-    return 'This video requires age verification. It cannot be downloaded without a login.';
+  // YouTube age-gate / sign-in to confirm age (do not use broad `includes('age')` — too many false positives)
+  if (isLikelyYoutubeAgeRestrictionError(rawError)) {
+    return 'This video requires sign-in to verify age. Try adding your browser cookies in Settings (coming soon) or try a different video.';
   }
 
   // Video removed or unavailable
