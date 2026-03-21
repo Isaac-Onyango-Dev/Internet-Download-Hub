@@ -23,15 +23,6 @@ try {
   log.info('[Main] electron-log initialized');
 }
 
-// Register URL protocol for the app
-app.setAsDefaultProtocolClient('internet-download-hub', (error) => {
-  if (error) {
-    console.error('Failed to register protocol:', error);
-  } else {
-    log.info('[Main] Registered protocol: internet-download-hub');
-  }
-});
-
 let DB_PATH: string;
 process.env.VITE_ELECTRON = 'true';
 
@@ -181,21 +172,30 @@ async function downloadFFmpeg() {
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(zipPath, Buffer.from(buffer));
     
-    // Extract only ffmpeg.exe
+    // Extract only ffmpeg.exe from zip
     const zipBuffer = fs.readFileSync(zipPath);
-    const decompressed = zlib.gunzipSync(zipBuffer);
     
-    const ffmpegEntry = decompressed.find((file: any) => 
-      file.path === 'ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe'
-    );
-    
-    if (!ffmpegEntry) {
-      throw new Error('ffmpeg.exe not found in downloaded archive');
+    // Use a simple approach to extract ffmpeg.exe from the zip
+    // Since we don't have adm-zip, we'll use a basic extraction
+    const tempDir = path.join(binariesPath, 'temp_ffmpeg_extract');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
     }
     
-    const ffmpegContent = ffmpegEntry;
-    const ffmpegExePath = path.join(binariesPath, 'ffmpeg.exe');
-    fs.writeFileSync(ffmpegExePath, ffmpegContent);
+    // Extract the zip to temp directory
+    const { execSync } = require('child_process');
+    execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempDir}'"`, { cwd: binariesPath });
+    
+    // Find and copy ffmpeg.exe
+    const ffmpegSourcePath = path.join(tempDir, 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe');
+    if (fs.existsSync(ffmpegSourcePath)) {
+      fs.copyFileSync(ffmpegSourcePath, path.join(binariesPath, 'ffmpeg.exe'));
+    } else {
+      throw new Error('ffmpeg.exe not found in extracted archive');
+    }
+    
+    // Clean up temp directory
+    fs.rmSync(tempDir, { recursive: true, force: true });
     
     // Clean up zip file
     fs.unlinkSync(zipPath);
