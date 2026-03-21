@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import React from "react";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -99,6 +100,19 @@ export default function Dashboard() {
   const [ytdlpLatestVersion, setYtdlpLatestVersion] = useState('');
   const [ytdlpBannerDismissed, setYtdlpBannerDismissed] = useState(false);
 
+  // Playlist detection dialog state
+  const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
+  const [playlistDetectedData, setPlaylistDetectedData] = useState<{
+    title: string;
+    count: number;
+    entries: Array<{
+      url: string;
+      title: string;
+      thumbnail?: string;
+      index: number;
+    }>;
+  } | null>(null);
+
   useEffect(() => {
     if (!window.electronAPI) return;
     window.electronAPI.onYtDlpUpdateAvailable?.((data) => {
@@ -107,6 +121,10 @@ export default function Dashboard() {
     });
     window.electronAPI.onYtDlpVersionInfo?.((data) => {
       if (!data.updateAvailable) setYtdlpUpdateAvailable(false);
+    });
+    window.electronAPI.onPlaylistDetected?.((data) => {
+      setPlaylistDetectedData(data);
+      setShowPlaylistDialog(true);
     });
   }, []);
 
@@ -143,6 +161,7 @@ export default function Dashboard() {
               onDismissBanner={() => setYtdlpBannerDismissed(true)}
               onGoToSettings={() => handleTabChange('settings')}
               onGoToQueue={() => handleTabChange('queue')}
+              setSuccessMsg={setSuccessMsg}
             />
           </TabsContent>
 
@@ -178,7 +197,8 @@ function VideoCapturePanel({
   ytdlpLatestVersion,
   onDismissBanner,
   onGoToSettings,
-  onGoToQueue
+  onGoToQueue,
+  setSuccessMsg
 }: {
   onScanStart?: () => void;
   onError: (err: { message: string }) => void;
@@ -191,10 +211,10 @@ function VideoCapturePanel({
   onDismissBanner?: () => void;
   onGoToSettings?: () => void;
   onGoToQueue?: () => void;
+  setSuccessMsg: (msg: string | null) => void;
 }) {
   const videoDetectMutation = useVideoDetect();
   const [urlError, setUrlError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [errorObj, setErrorObj] = useState<{ message: string } | null>(null);
@@ -1644,6 +1664,89 @@ function SettingsPanel() {
 
         </CardContent>
       </Card>
+
+      {/* Playlist Detection Dialog */}
+      <Dialog open={showPlaylistDialog} onOpenChange={setShowPlaylistDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Playlist Detected</DialogTitle>
+            <DialogDescription>
+              This URL is a playlist with {playlistDetectedData?.count || 0} videos. How would you like to proceed?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="text-center">
+              <h3 className="font-semibold text-lg">{playlistDetectedData?.title || 'Playlist'}</h3>
+              <p className="text-muted-foreground">{playlistDetectedData?.count || 0} videos</p>
+            </div>
+
+            {/* Thumbnail grid preview */}
+            <ScrollArea className="h-48 w-full border rounded-md p-2">
+              <div className="grid grid-cols-4 gap-2">
+                {playlistDetectedData?.entries?.slice(0, 12).map((entry, index) => (
+                  <div key={index} className="relative group">
+                    {entry.thumbnail ? (
+                      <img 
+                        src={entry.thumbnail} 
+                        alt={entry.title}
+                        className="w-full h-20 object-cover rounded border"
+                      />
+                    ) : (
+                      <div className="w-full h-20 bg-muted rounded border flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-muted-foreground/30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                      <span className="text-white text-xs font-medium">{entry.index}</span>
+                    </div>
+                  </div>
+                ))}
+                {playlistDetectedData?.entries && playlistDetectedData.entries.length > 12 && (
+                  <div className="w-full h-20 bg-muted rounded border flex items-center justify-center">
+                    <span className="text-muted-foreground text-sm">+{playlistDetectedData.entries.length - 12} more</span>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                onClick={async () => {
+                  if (!playlistDetectedData) return;
+                  try {
+                    const settings = await window.electronAPI.getSettings();
+                    await window.electronAPI.addPlaylistToQueue(playlistDetectedData.entries, {
+                      savePath: settings?.download_path || settings?.downloadPath,
+                      createFolder: settings?.create_playlist_folder ?? settings?.createPlaylistFolder ?? true,
+                      playlistTitle: playlistDetectedData.title
+                    });
+                    setShowPlaylistDialog(false);
+                    setSuccessMsg(`Added ${playlistDetectedData.count} videos to queue! Switch to Queue & History to track progress.`);
+                    onGoToQueue?.();
+                  } catch (error: any) {
+                    onError({ message: `Failed to add playlist to queue: ${error.message}` });
+                  }
+                }}
+                className="flex-1 btn-primary"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download All Videos
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPlaylistDialog(false);
+                  // Continue with single video download (already handled by the main process)
+                }}
+              >
+                Download This Video Only
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

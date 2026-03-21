@@ -101,4 +101,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('ytdlp-update-available');
     ipcRenderer.on('ytdlp-update-available', (_event, data) => callback(data));
   },
+
+  // ── Playlist Detection ─────────────────────────────────────────────────────
+  onPlaylistDetected: (callback: (data: any) => void) => {
+    ipcRenderer.removeAllListeners('playlist-detected');
+    ipcRenderer.on('playlist-detected', (_event, data) => callback(data));
+  },
+
+  addPlaylistToQueue: (entries: Array<{
+    url: string;
+    title: string;
+    thumbnail?: string;
+    index: number;
+  }>, options: {
+    savePath?: string;
+    createFolder?: boolean;
+    playlistTitle?: string;
+  }) => ipcRenderer.invoke('add-playlist-to-queue', { entries, options }),
 })

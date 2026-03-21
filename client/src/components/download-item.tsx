@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
-import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle, RotateCcw, ShieldCheck } from "lucide-react";
+import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle, RotateCcw, ShieldCheck, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,9 @@ interface Download {
   error: string | null;
   savePath: string | null;
   createdAt: Date;
+  playlistTitle?: string;
+  playlistIndex?: number;
+  playlistTotal?: number;
 }
 
 interface DownloadItemProps {
@@ -173,6 +176,12 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
               <Clock className="w-3 h-3" />
               {download.createdAt ? formatDistanceToNow(new Date(download.createdAt), { addSuffix: true }) : 'Just now'}
             </span>
+            {download.playlistIndex && download.playlistTotal && (
+              <span className="flex items-center gap-1.5">
+                <Layers className="w-3 h-3" />
+                {download.playlistIndex} of {download.playlistTotal}
+              </span>
+            )}
             {download.savePath && (
               <span className="hidden md:inline-flex truncate max-w-[200px] opacity-70">
                 {download.savePath}

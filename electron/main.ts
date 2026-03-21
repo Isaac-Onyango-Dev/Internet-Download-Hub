@@ -255,7 +255,10 @@ async function initDb() {
       error           TEXT,
       save_path       TEXT,
       created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-      completed_at    TEXT
+      completed_at    TEXT,
+      playlist_title   TEXT,
+      playlist_index   INTEGER,
+      playlist_total   INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -285,6 +288,9 @@ async function initDb() {
     `ALTER TABLE settings ADD COLUMN create_playlist_folder INTEGER NOT NULL DEFAULT 1`,
     `ALTER TABLE settings ADD COLUMN eula_age_acknowledged INTEGER DEFAULT 0`,
     `ALTER TABLE settings ADD COLUMN cookies_file_path TEXT DEFAULT ''`,
+    `ALTER TABLE downloads ADD COLUMN playlist_title TEXT`,
+    `ALTER TABLE downloads ADD COLUMN playlist_index INTEGER`,
+    `ALTER TABLE downloads ADD COLUMN playlist_total INTEGER`,
   ];
   for (const sql of migrations) {
     try { db.run(sql); } catch (_) { /* column already exists */ }
@@ -889,29 +895,51 @@ function setupIpcHandlers() {
 
       if (playlistCheck.isPlaylist) {
         if (!detectPlaylistsEnabled) {
-          const playlist = await extractPlaylistInfo(
-            rawUrl,
-            { ytDlp: ytDlpPath, ffmpeg: ffmpegPath, cookiesFile },
-            { playlistItemLimit: 1 }
-          );
+          // Toggle OFF: Download only single video, ignore playlist context
+          const urlToUse = cleanVideoUrl(rawUrl);
+          const info = await extractVideoInfo(urlToUse, {
+            ytDlp: ytDlpPath,
+            ffmpeg: ffmpegPath,
+            streamlink: streamlinkPath,
+            nm3u8dl: n_m3u8dlPath,
+            galleryDl: galleryDlPath,
+            cookiesFile,
+          });
+
           return {
             success: true,
-            data: playlist.videos[0],
+            data: Array.isArray(info) ? info[0] : info,
             meta: {
               playlistDetected: true,
               detectPlaylistsEnabled: false,
               collapsedToSingle: true,
-              playlistTitle: playlist.title,
-              playlistVideoCount: playlist.videoCount,
+              playlistTitle: 'Playlist',
+              playlistVideoCount: 0,
             },
           };
         }
 
+        // Toggle ON: Detect playlist and send event to renderer
         const playlist = await extractPlaylistInfo(rawUrl, {
           ytDlp: ytDlpPath,
           ffmpeg: ffmpegPath,
           cookiesFile,
         });
+
+        // Send playlist-detected event to renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('playlist-detected', {
+            title: playlist.title,
+            count: playlist.videoCount,
+            entries: playlist.videos.map((video, index) => ({
+              url: video.url,
+              title: video.title,
+              thumbnail: video.thumbnail,
+              index: index + 1
+            }))
+          });
+        }
+
         return {
           success: true,
           data: { isPlaylist: true, videos: playlist.videos },
@@ -1340,6 +1368,114 @@ function setupIpcHandlers() {
   // ── check-ytdlp-version ─────────────────────────────────────────────────────
   ipcMain.handle('check-ytdlp-version', async () => {
     return await checkYtDlpVersion();
+  });
+
+  // ── add-playlist-to-queue ───────────────────────────────────────────────────
+  ipcMain.handle('add-playlist-to-queue', async (_: any, { entries, options }: { 
+    entries: Array<{
+      url: string;
+      title: string;
+      thumbnail?: string;
+      index: number;
+    }>;
+    options: {
+      savePath?: string;
+      createFolder?: boolean;
+      playlistTitle?: string;
+    };
+  }) => {
+    log.info(`[IPC] add-playlist-to-queue called with ${entries.length} entries`);
+    
+    try {
+      const settings = getQuery(db, 'SELECT * FROM settings WHERE id = 1');
+      const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
+      const createFolder = options.createFolder ?? true;
+      
+      let playlistFolderPath = baseSavePath;
+      if (createFolder && options.playlistTitle) {
+        const playlistFolderName = options.playlistTitle
+          .replace(/[<>:"/\\|?*]/g, '')
+          .trim()
+          .slice(0, 100);
+        playlistFolderPath = path.join(baseSavePath, playlistFolderName || 'Playlist');
+        
+        // Ensure playlist folder exists
+        if (!fs.existsSync(playlistFolderPath)) {
+          fs.mkdirSync(playlistFolderPath, { recursive: true });
+        }
+      }
+
+      let addedCount = 0;
+      for (const entry of entries) {
+        try {
+          // Get video info for this entry to determine formats
+          const videoInfo = await extractVideoInfo(entry.url, {
+            ytDlp: ytDlpPath,
+            ffmpeg: ffmpegPath,
+            streamlink: streamlinkPath,
+            nm3u8dl: n_m3u8dlPath,
+            galleryDl: galleryDlPath,
+            cookiesFile: getResolvedCookiesPath(),
+          });
+
+          const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
+          
+          // Determine format based on settings
+          const prefQuality = settings?.default_quality || 'best';
+          const prefFormat = settings?.default_format || 'mp4';
+          let formatId = 'bestvideo+bestaudio';
+          
+          if (prefFormat === 'mp3') {
+            formatId = 'bestaudio';
+          } else if (prefQuality !== 'best') {
+            const targetQuality = prefQuality + 'p';
+            const match = video.formats?.find((f: any) => f.quality === targetQuality);
+            formatId = match ? match.formatId : 'bestvideo+bestaudio';
+          }
+
+          const cleanTitle = entry.title ? entry.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
+          const isAudioOnly = formatId === 'bestaudio';
+          const ext = isAudioOnly ? "mp3" : (video.formats?.find((f: any) => f.formatId === formatId)?.ext || "mp4");
+          
+          // For playlist downloads, include playlist index in filename
+          const filename = createFolder 
+            ? `${entry.index.toString().padStart(2, '0')} - ${cleanTitle}.${ext}`
+            : `${cleanTitle}.${ext}`;
+
+          // Create download entry directly in database
+          const downloadId = db.run(`
+            INSERT INTO downloads (
+              url, filename, format_id, save_path, thumbnail, duration, uploader, 
+              state, created_at, updated_at, playlist_title, playlist_index, playlist_total
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'), ?, ?, ?)
+          `, [
+            entry.url,
+            filename,
+            formatId,
+            playlistFolderPath,
+            entry.thumbnail,
+            video.duration,
+            video.uploader,
+            options.playlistTitle,
+            entry.index,
+            entries.length
+          ]).lastInsertRowid;
+
+          // Start the download process
+          const outputPath = path.join(playlistFolderPath, filename);
+          spawnDownload(downloadId, entry.url, outputPath, formatId, playlistFolderPath);
+          
+          addedCount++;
+        } catch (error: any) {
+          log.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+        }
+      }
+
+      return { success: true, addedCount };
+    } catch (error: any) {
+      log.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
+      throw new Error(`Failed to add playlist to queue: ${error.message}`);
+    }
   });
 }
 
