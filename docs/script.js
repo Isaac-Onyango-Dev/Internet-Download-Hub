@@ -2,6 +2,38 @@ const REPO = 'Isaac-Onyango-Dev/Internet-Download-Hub'
 const PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub'
 const SHARE_TEXT = 'Check out Internet Download Hub — a free desktop app that downloads videos from YouTube, TikTok, Instagram and 1000+ sites. Completely free and open source.'
 
+// Screenshot carousel functionality
+let currentScreenshot = 0
+const totalScreenshots = 3
+
+function changeScreenshot(direction) {
+  currentScreenshot = (currentScreenshot + direction + totalScreenshots) % totalScreenshots
+  updateScreenshotDisplay()
+}
+
+function goToScreenshot(index) {
+  currentScreenshot = index
+  updateScreenshotDisplay()
+}
+
+function updateScreenshotDisplay() {
+  const slides = document.querySelectorAll('.screenshot-slide')
+  const indicators = document.querySelectorAll('.indicator')
+  const prevBtn = document.querySelector('.screenshot-nav.prev')
+  const nextBtn = document.querySelector('.screenshot-nav.next')
+  
+  slides.forEach((slide, index) => {
+    slide.classList.toggle('active', index === currentScreenshot)
+  })
+  
+  indicators.forEach((indicator, index) => {
+    indicator.classList.toggle('active', index === currentScreenshot)
+  })
+  
+  if (prevBtn) prevBtn.disabled = currentScreenshot === 0
+  if (nextBtn) nextBtn.disabled = currentScreenshot === totalScreenshots - 1
+}
+
 // Smooth scroll to section without triggering browser favicon reload
 function scrollToSection(sectionId) {
   const element = document.getElementById(sectionId)
