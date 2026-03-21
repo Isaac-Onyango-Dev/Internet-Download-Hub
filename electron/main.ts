@@ -1,7 +1,6 @@
 import log from 'electron-log';
 import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, powerSaveBlocker, Notification } from 'electron';
 import path from 'path';
-
 import { spawn, ChildProcess } from 'child_process';
 import execa from 'execa';
 import { extractPlaylistInfo, extractVideoInfo } from './extractor';
@@ -9,6 +8,7 @@ import fs from 'fs';
 import os from 'os';
 import https from 'https';
 import { promisify } from 'util';
+import zlib from 'zlib';
 import initSqlJs from 'sql.js';
 import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors';
 import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
@@ -120,6 +120,120 @@ function checkBinaries() {
     }
   });
   log.info('------------------------');
+}
+
+// ── FFmpeg On-Demand Download ─────────────────────────────────────────
+async function downloadFFmpeg() {
+  const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
+  
+  if (ffmpegDownloaded) {
+    log.info('[Main] FFmpeg already downloaded, skipping');
+    return;
+  }
+
+  try {
+    // Show one-time notification
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-notification', {
+        title: 'Downloading FFmpeg',
+        body: 'FFmpeg will be downloaded automatically (~80MB) for first time you download a video that needs audio merging. This is normal and only happens once.',
+        type: 'info'
+      });
+    }
+
+    // Start background download
+    const ffmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
+    const userDataPath = app.getPath('userData');
+    const binariesPath = path.join(userDataPath, 'binaries');
+    
+    // Ensure binaries directory exists
+    if (!fs.existsSync(binariesPath)) {
+      fs.mkdirSync(binariesPath, { recursive: true });
+    }
+
+    const zipPath = path.join(binariesPath, 'ffmpeg.zip');
+    
+    // Send progress updates to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-progress', {
+        phase: 'downloading',
+        percent: 0
+      });
+    }
+
+    log.info('[Main] Starting FFmpeg download from:', ffmpegUrl);
+    
+    // Download the file
+    const response = await fetch(ffmpegUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download FFmpeg: ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(zipPath, Buffer.from(buffer));
+    
+    // Extract only ffmpeg.exe
+    const zipBuffer = fs.readFileSync(zipPath);
+    const decompressed = zlib.gunzipSync(zipBuffer);
+    
+    const ffmpegEntry = decompressed.find((file: any) => 
+      file.path === 'ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe'
+    );
+    
+    if (!ffmpegEntry) {
+      throw new Error('ffmpeg.exe not found in downloaded archive');
+    }
+    
+    const ffmpegContent = ffmpegEntry;
+    const ffmpegExePath = path.join(binariesPath, 'ffmpeg.exe');
+    fs.writeFileSync(ffmpegExePath, ffmpegContent);
+    
+    // Clean up zip file
+    fs.unlinkSync(zipPath);
+    
+    // Update database
+    db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
+    
+    // Send completion notification
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-progress', {
+        phase: 'completed',
+        percent: 100
+      });
+      
+      setTimeout(() => {
+        mainWindow.webContents.send('ffmpeg-download-notification', {
+          title: 'FFmpeg Download Complete',
+          body: 'FFmpeg has been successfully downloaded and installed. You can now download videos that require audio merging.',
+          type: 'success'
+        });
+      }, 1000);
+    }
+    
+    log.info('[Main] FFmpeg download completed successfully');
+    
+  } catch (error: any) {
+    log.error(`[Main] FFmpeg download failed: ${error.message}`);
+    
+    if (mainWindow) {
+      mainWindow.webContents.send('ffmpeg-download-progress', {
+        phase: 'error',
+        percent: 0,
+        error: error.message
+      });
+      
+      mainWindow.webContents.send('ffmpeg-download-notification', {
+        title: 'FFmpeg Download Failed',
+        body: `Failed to download FFmpeg: ${error.message}. Please try again later.`,
+        type: 'error'
+      });
+    }
+  }
+}
+
+// Check if FFmpeg is needed for a download
+function checkFFmpegRequired(formatId: string): boolean {
+  return formatId.includes('audio') || formatId.includes('merge');
 }
 
 // ── Filename Cleaning ────────────────────────────────────────────────────────
@@ -272,7 +386,8 @@ async function initDb() {
       default_format           TEXT    NOT NULL DEFAULT 'mp4',
       detect_playlists         INTEGER NOT NULL DEFAULT 0,
       playlist_download_mode  TEXT    NOT NULL DEFAULT 'all',
-      create_playlist_folder   INTEGER NOT NULL DEFAULT 1
+      create_playlist_folder   INTEGER NOT NULL DEFAULT 1,
+      ffmpeg_downloaded         INTEGER NOT NULL DEFAULT 0
     );
   `);
 
@@ -288,6 +403,7 @@ async function initDb() {
     `ALTER TABLE settings ADD COLUMN create_playlist_folder INTEGER NOT NULL DEFAULT 1`,
     `ALTER TABLE settings ADD COLUMN eula_age_acknowledged INTEGER DEFAULT 0`,
     `ALTER TABLE settings ADD COLUMN cookies_file_path TEXT DEFAULT ''`,
+    `ALTER TABLE settings ADD COLUMN ffmpeg_downloaded INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE downloads ADD COLUMN playlist_title TEXT`,
     `ALTER TABLE downloads ADD COLUMN playlist_index INTEGER`,
     `ALTER TABLE downloads ADD COLUMN playlist_total INTEGER`,
@@ -537,6 +653,21 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    
+    // Check if FFmpeg notification needs to be shown
+    const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
+    
+    if (!ffmpegDownloaded) {
+      log.info('[Main] FFmpeg not downloaded, showing one-time notification');
+      
+      if (mainWindow) {
+        mainWindow.webContents.send('ffmpeg-download-notification', {
+          title: 'Downloading FFmpeg',
+          body: 'FFmpeg will be downloaded automatically (~80MB) for first time you download a video that needs audio merging. This is normal and only happens once.',
+          type: 'info'
+        });
+      }
+    }
   });
 
   mainWindow.webContents.on('did-fail-load', (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string) => {
@@ -550,7 +681,7 @@ function createWindow() {
   });
 
   // Prevent in-app external navigation
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
     // Allow only whitelisted domains
     const allowed = [
       'https://github.com/Isaac-Onyango-Dev',
@@ -1024,6 +1155,16 @@ function setupIpcHandlers() {
       typeof options.formatId === 'string' && options.formatId.trim()
         ? options.formatId.trim()
         : null
+
+    // Check if FFmpeg is needed and download if required
+    if (checkFFmpegRequired(formatId)) {
+      const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
+      
+      if (!ffmpegDownloaded) {
+        log.info('[Main] FFmpeg required but not downloaded, starting download...');
+        await downloadFFmpeg();
+      }
+    }
 
     const optionsSavePath =
       typeof options.savePath === 'string' && options.savePath.trim()

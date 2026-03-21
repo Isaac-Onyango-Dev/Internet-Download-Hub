@@ -118,4 +118,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createFolder?: boolean;
     playlistTitle?: string;
   }) => ipcRenderer.invoke('add-playlist-to-queue', { entries, options }),
+
+  // ── FFmpeg Download Events ─────────────────────────────────────────────
+  onFFmpegDownloadProgress: (callback: (data: any) => void) => {
+    ipcRenderer.removeAllListeners('ffmpeg-download-progress');
+    ipcRenderer.on('ffmpeg-download-progress', (_event, data) => callback(data));
+  },
+
+  onFFmpegDownloadNotification: (callback: (data: any) => void) => {
+    ipcRenderer.removeAllListeners('ffmpeg-download-notification');
+    ipcRenderer.on('ffmpeg-download-notification', (_event, data) => callback(data));
+  },
 })
