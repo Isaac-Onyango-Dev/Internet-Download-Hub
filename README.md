@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/github/v/release/Isaac-Onyango-Dev/Internet-Download-Hub?label=Download&style=for-the-badge&color=2563EB" alt="Download" />
   </a>
   <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest">
-    <img src="https://img.shields.io/github/downloads/Isaac-Onyango-Dev/Internet-Download-Hub/total?style=for-the-badge&color=059669" alt="Downloads" />
+    <img src="https://img.shields.io/github/downloads/Isaac-Onyango-Dev/Internet-Download-Hub/total?style=for-the-badge&amp;color=059669" alt="Downloads" />
   </a>
   <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=for-the-badge" alt="Windows" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" />

@@ -55,10 +55,23 @@ jobs:
         run: dir release
         shell: cmd
 
+      # Shields.io /github/downloads/.../total only increases when releases have downloadable assets.
+      # Fail here if electron-builder produced no .exe — otherwise the job "succeeds" with an empty release.
+      - name: Verify Windows installer exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "release")) { throw "release/ directory missing" }
+          $exes = Get-ChildItem -Path "release" -Filter "*.exe" -File -ErrorAction SilentlyContinue
+          if (-not $exes -or $exes.Count -eq 0) {
+            throw "No .exe in release/ — GitHub release would have no installer; download counts stay at 0."
+          }
+          $exes | ForEach-Object { Write-Host "Installer:" $_.Name "(" ([math]::Round($_.Length / 1MB, 1)) "MB)" }
+
       - name: Upload installer to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: release/*.exe
+          fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
             ## Internet Download Hub ${{ github.ref_name }}

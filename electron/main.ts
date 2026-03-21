@@ -1,3 +1,4 @@
+import log from 'electron-log';
 import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, powerSaveBlocker, Notification } from 'electron';
 import path from 'path';
 
@@ -8,11 +9,18 @@ import fs from 'fs';
 import os from 'os';
 import https from 'https';
 import { promisify } from 'util';
-import log from 'electron-log';
 import initSqlJs from 'sql.js';
 import { translateDownloadError } from './errors';
 
-
+log.transports.file.level = 'debug';
+log.catchErrors();
+try {
+  const fileTransport = log.transports.file as { getFile?: () => { path?: string } };
+  const p = fileTransport.getFile?.()?.path;
+  log.info('[Main] electron-log file path:', p ?? '(default location)');
+} catch {
+  log.info('[Main] electron-log initialized');
+}
 
 let DB_PATH: string;
 process.env.VITE_ELECTRON = 'true';
@@ -45,6 +53,7 @@ let galleryDlPath: string;
 // ── Single Instance Lock ─────────────────────────────────────────────────────
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
+  log.warn('[Main] Another instance is already running — exiting (single-instance lock).');
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -187,9 +196,38 @@ function allQuery(database: any, sql: string, params: any[] = []): any[] {
   });
 }
 
+/** sql.js must load sql-wasm.wasm from a real path; default resolution breaks inside asar / packaged apps. */
+function getSqlJsWasmDir(): string {
+  const unpackedDist = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'sql.js', 'dist');
+  const insideAsar = path.join(app.getAppPath(), 'node_modules', 'sql.js', 'dist');
+  const devCwd = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist');
+  const nextToMain = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist');
+
+  const candidates = app.isPackaged
+    ? [unpackedDist, insideAsar]
+    : [devCwd, nextToMain, unpackedDist, insideAsar];
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(path.join(dir, 'sql-wasm.wasm'))) {
+        log.info('[Main] sql.js WASM directory:', dir, app.isPackaged ? '(packaged)' : '(dev)');
+        return dir;
+      }
+    } catch {
+      /* continue */
+    }
+  }
+
+  log.error('[Main] sql-wasm.wasm not found in candidates:', candidates);
+  return candidates[0] ?? devCwd;
+}
+
 // ── Database initialization ──────────────────────────────────────────────────
 async function initDb() {
-  const SQL = await initSqlJs();
+  const wasmDir = getSqlJsWasmDir();
+  const SQL = await initSqlJs({
+    locateFile: (file: string) => path.join(wasmDir, file),
+  });
   DB_PATH = path.join(app.getPath('userData'), 'downloads.db');
   if (fs.existsSync(DB_PATH)) {
     const fileBuffer = fs.readFileSync(DB_PATH);
@@ -438,6 +476,28 @@ const getPreloadPath = (): string => {
   }
 }
 
+/**
+ * Vite `outDir` is `dist/public` (see vite.config.ts). Some builds may use `dist/` only.
+ */
+function getPackagedIndexHtmlPath(): string {
+  const candidates = [
+    path.join(__dirname, '..', 'dist', 'public', 'index.html'),
+    path.join(__dirname, '..', 'dist', 'index.html'),
+    path.join(app.getAppPath(), 'dist', 'public', 'index.html'),
+    path.join(app.getAppPath(), 'dist', 'index.html'),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      log.info('[MAIN] Loading renderer from:', p);
+      return p;
+    }
+    log.warn('[MAIN] index.html not found at:', p);
+  }
+  const fallback = candidates[0];
+  log.error('[MAIN] No index.html found; attempting loadFile with:', fallback);
+  return fallback;
+}
+
 function createWindow() {
   const preloadPath = getPreloadPath();
 
@@ -468,10 +528,13 @@ function createWindow() {
     mainWindow?.show();
   });
 
-  mainWindow.webContents.on('did-fail-load', (event: any, errorCode: any, errorDescription: any, validatedURL: any) => {
-    log.error(`Failed to load: ${validatedURL}, Error: ${errorDescription}`);
+  mainWindow.webContents.on('did-fail-load', (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string) => {
+    log.error('[MAIN] did-fail-load', { errorCode, errorDescription, validatedURL });
+    const msg = `Failed to load (${errorCode}): ${validatedURL}\n${errorDescription}`;
     if (!(app as any).isPackaged) {
-      dialog.showErrorBox('Load Error', `Failed to load: ${validatedURL}\nError: ${errorDescription}`);
+      dialog.showErrorBox('Load Error', msg);
+    } else {
+      dialog.showErrorBox('Internet Download Hub — load error', `${msg}\n\nIf this persists, check the log file from Help or %APPDATA% logs.`);
     }
   });
 
@@ -487,12 +550,11 @@ function createWindow() {
     mainWindow = null;
   });
 
-  if (app.isPackaged) {
-    mainWindow.loadFile(
-      path.join(__dirname, '..', 'dist', 'public', 'index.html')
-    )
+  const isDevRenderer = !app.isPackaged;
+  if (isDevRenderer) {
+    mainWindow.loadURL('http://localhost:5173');
   } else {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadFile(getPackagedIndexHtmlPath());
   }
 }
 
@@ -1561,29 +1623,43 @@ if (app) {
     (app as any).isQuitting = true;
   });
 
-  app.on('ready', async () => {
-    checkBinaries();
-    await initDb();
-    setupIpcHandlers();
-    createWindow();
-    createTray();
-
-    // Kickstart any queued items
-    processQueue();
-
-    // Ensure Playwright Chromium is available (installs if missing)
-    ensurePlaywrightBrowser();
-
-    // Background yt-dlp version check — delayed so it doesn't slow startup
-    setTimeout(() => runBackgroundVersionCheck(), 5000);
-
-    // Pre-warm yt-dlp process
+  app.whenReady().then(async () => {
     try {
-      await execa(ytDlpPath, ['--version'], { timeout: 5000 });
-      log.info('[Main] yt-dlp pre-warmed successfully');
-    } catch (e: any) {
-      log.warn('[Main] yt-dlp pre-warm failed — binary may be missing');
+      log.info('[Main] App ready — startup sequence begin');
+      checkBinaries();
+      await initDb();
+      setupIpcHandlers();
+      createWindow();
+      createTray();
+
+      processQueue();
+
+      ensurePlaywrightBrowser();
+
+      setTimeout(() => runBackgroundVersionCheck(), 5000);
+
+      try {
+        await execa(ytDlpPath, ['--version'], { timeout: 5000 });
+        log.info('[Main] yt-dlp pre-warmed successfully');
+      } catch {
+        log.warn('[Main] yt-dlp pre-warm failed — binary may be missing');
+      }
+    } catch (err: unknown) {
+      log.error('[Main] Startup error:', err);
+      const text = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+      try {
+        dialog.showErrorBox(
+          'Internet Download Hub — startup failed',
+          `${text}\n\nDetails were written to the log file.`
+        );
+      } catch {
+        /* dialog may be unavailable in headless edge cases */
+      }
+      app.quit();
     }
+  }).catch((err: unknown) => {
+    log.error('[Main] app.whenReady() rejected:', err);
+    app.quit();
   });
 }
 

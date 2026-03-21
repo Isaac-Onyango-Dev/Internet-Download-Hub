@@ -97,6 +97,55 @@ function protectFavicon() {
   })
 }
 
+const GITHUB_API_HEADERS = {
+  Accept: 'application/vnd.github.v3+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  // Anonymous quota is low (60/hr/IP); a UA may reduce erroneous blocks.
+  'User-Agent': 'Internet-Download-Hub-docs-page'
+}
+
+/** All published releases, paginated (GitHub caps per_page at 100). */
+async function fetchAllReleases() {
+  const all = []
+  let page = 1
+  const maxPages = 30
+  while (page <= maxPages) {
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`,
+      { headers: GITHUB_API_HEADERS }
+    )
+    if (!res.ok) return { ok: false, status: res.status, releases: all }
+    const batch = await res.json()
+    if (!Array.isArray(batch) || batch.length === 0) break
+    all.push(...batch)
+    if (batch.length < 100) break
+    page += 1
+  }
+  return { ok: true, releases: all }
+}
+
+/** Matches Shields.io github/downloads/.../total: sum of every asset download_count on all releases. */
+function sumAllAssetDownloads(releases) {
+  return releases.reduce((sum, r) => {
+    const assets = r.assets || []
+    return sum + assets.reduce((s, a) => s + (a.download_count || 0), 0)
+  }, 0)
+}
+
+/** Installer-only total (NSIS setup .exe, excludes blockmap / uninstaller stubs). */
+function sumInstallerDownloads(releases) {
+  let total = 0
+  for (const r of releases) {
+    for (const asset of r.assets || []) {
+      const n = (asset.name || '').toLowerCase()
+      if (n.endsWith('.exe') && !n.includes('blockmap') && !n.includes('uninstaller')) {
+        total += asset.download_count || 0
+      }
+    }
+  }
+  return total
+}
+
 async function loadReleaseInfo() {
   try {
     console.log('[IDH] Fetching latest release from GitHub API...')
@@ -104,10 +153,7 @@ async function loadReleaseInfo() {
     const res = await fetch(
       `https://api.github.com/repos/${REPO}/releases/latest`,
       {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'X-GitHub-Api-Version': '2022-11-28'
-        }
+        headers: GITHUB_API_HEADERS
       }
     )
 
@@ -125,6 +171,7 @@ async function loadReleaseInfo() {
     if (res.status === 404) {
       console.log('[IDH] No releases found')
       updateVersionText('Latest version')
+      updateDownloadCounter(0)
       return
     }
 
@@ -168,43 +215,20 @@ async function loadReleaseInfo() {
       }
     }
 
-    // Fetch ALL releases to calculate total downloads
+    // Paginated fetch so totals stay correct past 100 releases; align with Shields /total when possible.
     console.log('[IDH] Fetching all releases for total count...')
-    const allRes = await fetch(
-      `https://api.github.com/repos/${REPO}/releases?per_page=100`,
-      {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'X-GitHub-Api-Version': '2022-11-28'
-        }
-      }
-    )
+    const { ok, status, releases: allReleases } = await fetchAllReleases()
 
-    if (allRes.ok) {
-      const allReleases = await allRes.json()
+    if (ok && allReleases.length >= 0) {
       console.log('[IDH] Total releases:', allReleases.length)
-
-      let total = 0
-      allReleases.forEach(release => {
-        console.log('[IDH] Release:', release.tag_name, 'assets:', release.assets?.length)
-        release.assets?.forEach(asset => {
-          console.log('[IDH]   Asset:', asset.name, 'downloads:', asset.download_count)
-          // Count only .exe installer downloads
-          if (
-            asset.name.toLowerCase().endsWith('.exe') &&
-            !asset.name.includes('blockmap') &&
-            !asset.name.includes('uninstaller')
-          ) {
-            total += asset.download_count || 0
-          }
-        })
-      })
-
-      console.log('[IDH] Total downloads calculated:', total)
-      updateDownloadCounter(total)
+      const shieldStyleTotal = sumAllAssetDownloads(allReleases)
+      const installerTotal = sumInstallerDownloads(allReleases)
+      console.log('[IDH] Sum all assets (Shields-style):', shieldStyleTotal, 'installer .exe only:', installerTotal)
+      // Prefer installer-only for the landing page; falls back to all-assets if no exe rows (older releases)
+      const displayTotal = installerTotal > 0 ? installerTotal : shieldStyleTotal
+      updateDownloadCounter(displayTotal)
     } else {
-      console.warn('[IDH] Could not fetch all releases:', allRes.status)
-      // Fall back to just the latest release count
+      console.warn('[IDH] Could not fetch all releases:', status)
       const fallbackCount = exeAsset?.download_count || 0
       updateDownloadCounter(fallbackCount)
     }
@@ -223,7 +247,10 @@ function updateVersionText(text) {
 function updateDownloadCounter(count) {
   const el = document.getElementById('total-downloads')
   if (el) {
-    el.textContent = count > 0 ? count.toLocaleString() : '0'
+    el.textContent =
+      count > 0
+        ? `${count.toLocaleString()}+`
+        : 'Be the first!'
     console.log('[IDH] Counter updated to:', count)
   }
 }
@@ -277,16 +304,15 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeDonateModal()
 })
 
-// Run everything when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  loadReleaseInfo()
+function bootDocsPage() {
   setupShareButtons()
   protectFavicon()
-})
+  loadReleaseInfo()
+}
 
-// Also run immediately in case DOMContentLoaded already fired
-if (document.readyState === 'interactive' || document.readyState === 'complete') {
-  loadReleaseInfo()
-  setupShareButtons()
-  protectFavicon()
+// Run once: duplicate listeners were firing loadReleaseInfo() twice and burning anonymous GitHub API quota.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootDocsPage)
+} else {
+  bootDocsPage()
 }
