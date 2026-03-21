@@ -61,8 +61,8 @@ export function translateDownloadError(
   if (isLikelyYoutubeAgeRestrictionError(rawError)) {
     return (
       'The host site is blocking this link until you sign in there (common on YouTube for some videos). ' +
-      'This app does not replace your account: try Update yt-dlp in Settings and fetch again, try again later, ' +
-      'or use another URL for the same content. Browser cookie export for signed-in downloads may be added in a future update.'
+      'In Settings → Age eligibility & site sign-in, add a cookies file exported from your browser while logged in, ' +
+      'then try again. You can also update yt-dlp in Settings or use another URL for the same content.'
     );
   }
 

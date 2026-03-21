@@ -4,7 +4,7 @@ import execa from 'execa';
 import { chromium } from 'playwright-core';
 import { analyseUrl, Engine } from './url-analyser';
 import log from 'electron-log';
-import { ytDlpCommonArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
+import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
 import { isLikelyYoutubeAgeRestrictionError } from './errors';
 
 export interface VideoInfo {
@@ -36,6 +36,8 @@ export async function extractVideoInfo(
     streamlink: string;
     nm3u8dl: string;
     galleryDl: string;
+    /** Netscape cookies file (e.g. exported from browser) — optional */
+    cookiesFile?: string | null;
   }
 ): Promise<VideoInfo | VideoInfo[]> {
   const { engineOrder } = analyseUrl(url);
@@ -50,7 +52,7 @@ export async function extractVideoInfo(
 
       switch (engine) {
         case 'yt-dlp':
-          result = await runYtDlp(url, paths.ytDlp);
+          result = await runYtDlp(url, paths.ytDlp, paths.cookiesFile);
           break;
         case 'streamlink':
           result = await runStreamlink(url, paths.streamlink);
@@ -62,7 +64,7 @@ export async function extractVideoInfo(
           result = await runGalleryDl(url, paths.galleryDl);
           break;
         case 'playwright':
-          result = await extractWithPlaywright(url, paths.ytDlp);
+          result = await extractWithPlaywright(url, paths.ytDlp, paths.cookiesFile);
           break;
         default:
           continue;
@@ -82,7 +84,11 @@ export async function extractVideoInfo(
 const YT_DLP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-function buildYtDlpJsonArgs(url: string, youtubeClient?: YoutubePlayerClient): string[] {
+function buildYtDlpJsonArgs(
+  url: string,
+  cookiesFile: string | null | undefined,
+  youtubeClient?: YoutubePlayerClient
+): string[] {
   return [
     '-J',
     '--no-warnings',
@@ -94,6 +100,7 @@ function buildYtDlpJsonArgs(url: string, youtubeClient?: YoutubePlayerClient): s
       noPlaylist: true,
       ...(youtubeClient !== undefined ? { youtubePlayerClient: youtubeClient } : {}),
     }),
+    ...ytDlpCookiesArgs(cookiesFile),
     url,
   ]
 }
@@ -108,16 +115,20 @@ function parseYtDlpJsonStdout(stdout: string, pageUrl: string): VideoInfo | Vide
   return parseYtDlpInfo(info, pageUrl)
 }
 
-async function runYtDlp(url: string, ytDlpPath: string): Promise<VideoInfo | VideoInfo[]> {
+async function runYtDlp(
+  url: string,
+  ytDlpPath: string,
+  cookiesFile?: string | null
+): Promise<VideoInfo | VideoInfo[]> {
   if (!fs.existsSync(ytDlpPath)) throw new Error('yt-dlp not found')
   try {
-    const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url), { timeout: 120000 })
+    const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, cookiesFile), { timeout: 120000 })
     return parseYtDlpJsonStdout(result.stdout, url)
   } catch (err: any) {
     const stderr = String(err.stderr ?? err.message ?? '')
     if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
       log.info('[Extractor] Retrying yt-dlp info with youtube:player_client=tv_embedded')
-      const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, 'tv_embedded'), {
+      const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, cookiesFile, 'tv_embedded'), {
         timeout: 120000,
       })
       return parseYtDlpJsonStdout(result.stdout, url)
@@ -188,7 +199,11 @@ async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoIn
 async function execYtDlpPlaylistJson(
   ytDlpPath: string,
   pageUrl: string,
-  opts: { playlistItemLimit?: number; youtubePlayerClient?: YoutubePlayerClient }
+  opts: {
+    playlistItemLimit?: number
+    youtubePlayerClient?: YoutubePlayerClient
+    cookiesFile?: string | null
+  }
 ) {
   const args: string[] = [
     '-J',
@@ -203,6 +218,7 @@ async function execYtDlpPlaylistJson(
         ? { youtubePlayerClient: opts.youtubePlayerClient }
         : {}),
     }),
+    ...ytDlpCookiesArgs(opts.cookiesFile),
   ]
 
   if (opts.playlistItemLimit && Number.isFinite(opts.playlistItemLimit)) {
@@ -218,6 +234,7 @@ export async function extractPlaylistInfo(
   paths: {
     ytDlp: string;
     ffmpeg: string;
+    cookiesFile?: string | null;
   },
   opts?: { playlistItemLimit?: number }
 ): Promise<{
@@ -230,6 +247,7 @@ export async function extractPlaylistInfo(
   try {
     result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
       playlistItemLimit: opts?.playlistItemLimit,
+      cookiesFile: paths.cookiesFile,
     })
   } catch (err: any) {
     const stderr = String(err.stderr ?? err.message ?? '')
@@ -238,6 +256,7 @@ export async function extractPlaylistInfo(
       result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
         playlistItemLimit: opts?.playlistItemLimit,
         youtubePlayerClient: 'tv_embedded',
+        cookiesFile: paths.cookiesFile,
       })
     } else {
       throw err
@@ -264,7 +283,8 @@ export async function extractPlaylistInfo(
 
 async function extractWithPlaywright(
   pageUrl: string,
-  ytDlpPath: string
+  ytDlpPath: string,
+  cookiesFile?: string | null
 ): Promise<VideoInfo> {
   // Check that Chromium is actually installed before trying to launch
   const browserPath = chromium.executablePath()
@@ -388,6 +408,7 @@ async function extractWithPlaywright(
         '--dump-json',
         '--no-warnings',
         ...ytDlpCommonArgs(bestUrl, { noPlaylist: true }),
+        ...ytDlpCookiesArgs(cookiesFile),
         bestUrl
       ], { timeout: 15000 })
       const info = JSON.parse(result.stdout)

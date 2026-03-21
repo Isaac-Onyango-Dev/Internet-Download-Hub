@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseSaveFolder: () =>
     ipcRenderer.invoke('choose-save-folder'),
 
+  chooseCookiesFile: () =>
+    ipcRenderer.invoke('choose-cookies-file'),
+
   openFilePath: (filePath: string) =>
     ipcRenderer.invoke('open-file-path', filePath),
 

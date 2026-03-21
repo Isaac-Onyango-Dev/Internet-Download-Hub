@@ -6,6 +6,8 @@ export type UpdateSettingsRequest = {
   autoCapture?: boolean;
   fileTypes?: string[];
   downloadPath?: string;
+  eulaAgeAcknowledged?: 0 | 1;
+  cookiesFilePath?: string;
 };
 
 const SETTINGS_KEY = ["/api/settings"];

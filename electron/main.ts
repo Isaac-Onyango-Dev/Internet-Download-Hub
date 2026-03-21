@@ -11,7 +11,7 @@ import https from 'https';
 import { promisify } from 'util';
 import initSqlJs from 'sql.js';
 import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors';
-import { ytDlpCommonArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
+import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
 
 log.transports.file.level = 'debug';
 log.catchErrors();
@@ -283,6 +283,8 @@ async function initDb() {
     `ALTER TABLE settings ADD COLUMN detect_playlists INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE settings ADD COLUMN playlist_download_mode TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE settings ADD COLUMN create_playlist_folder INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE settings ADD COLUMN eula_age_acknowledged INTEGER DEFAULT 0`,
+    `ALTER TABLE settings ADD COLUMN cookies_file_path TEXT DEFAULT ''`,
   ];
   for (const sql of migrations) {
     try { db.run(sql); } catch (_) { /* column already exists */ }
@@ -306,6 +308,8 @@ async function initDb() {
     detect_playlists: 0,
     playlist_download_mode: 'all',
     create_playlist_folder: 1,
+    eula_age_acknowledged: 0,
+    cookies_file_path: '',
   };
 
   for (const [key, value] of Object.entries(defaults)) {
@@ -846,6 +850,23 @@ function processQueue() {
   }
 }
 
+/** Netscape cookie file from settings, if path exists on disk. */
+function getResolvedCookiesPath(): string | null {
+  if (!db) return null;
+  try {
+    const row = getQuery(db, 'SELECT cookies_file_path FROM settings WHERE id = 1');
+    const raw = row?.cookies_file_path;
+    if (typeof raw === 'string' && raw.trim()) {
+      const p = raw.trim();
+      if (fs.existsSync(p)) return p;
+      log.warn('[Main] cookies_file_path set but file missing:', p);
+    }
+  } catch (e: any) {
+    log.warn('[Main] getResolvedCookiesPath:', e?.message);
+  }
+  return null;
+}
+
 // ── IPC Handlers ─────────────────────────────────────────────────────────────
 function setupIpcHandlers() {
   // ── fetch-video-info ──────────────────────────────────────────────────────
@@ -862,12 +883,17 @@ function setupIpcHandlers() {
     try {
       const settings = getQuery(db, 'SELECT detect_playlists FROM settings WHERE id = 1');
       const detectPlaylistsEnabled = settings?.detect_playlists === 1;
+      const cookiesFile = getResolvedCookiesPath();
 
       const playlistCheck = detectPlaylist(rawUrl);
 
       if (playlistCheck.isPlaylist) {
         if (!detectPlaylistsEnabled) {
-          const playlist = await extractPlaylistInfo(rawUrl, { ytDlp: ytDlpPath, ffmpeg: ffmpegPath }, { playlistItemLimit: 1 });
+          const playlist = await extractPlaylistInfo(
+            rawUrl,
+            { ytDlp: ytDlpPath, ffmpeg: ffmpegPath, cookiesFile },
+            { playlistItemLimit: 1 }
+          );
           return {
             success: true,
             data: playlist.videos[0],
@@ -881,7 +907,11 @@ function setupIpcHandlers() {
           };
         }
 
-        const playlist = await extractPlaylistInfo(rawUrl, { ytDlp: ytDlpPath, ffmpeg: ffmpegPath });
+        const playlist = await extractPlaylistInfo(rawUrl, {
+          ytDlp: ytDlpPath,
+          ffmpeg: ffmpegPath,
+          cookiesFile,
+        });
         return {
           success: true,
           data: { isPlaylist: true, videos: playlist.videos },
@@ -902,7 +932,8 @@ function setupIpcHandlers() {
         ffmpeg: ffmpegPath,
         streamlink: streamlinkPath,
         nm3u8dl: n_m3u8dlPath,
-        galleryDl: galleryDlPath
+        galleryDl: galleryDlPath,
+        cookiesFile,
       });
 
       return {
@@ -1174,6 +1205,21 @@ function setupIpcHandlers() {
     return null;
   });
 
+  ipcMain.handle('choose-cookies-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Select browser cookies file',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Cookies / text', extensions: ['txt', 'cookies'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePaths[0]) {
+      return result.filePaths[0];
+    }
+    return null;
+  });
+
   // ── check-disk-space ──────────────────────────────────────────────────────
   ipcMain.handle('check-disk-space', async (_: any, { path: targetPath, requiredBytes }: { path: string, requiredBytes: number }) => {
     const freeSpace = await getFreeSpace(targetPath || getDefaultSavePath());
@@ -1262,7 +1308,9 @@ function setupIpcHandlers() {
         default_format = 'mp4',
         detect_playlists = 0,
         playlist_download_mode = 'all',
-        create_playlist_folder = 1
+        create_playlist_folder = 1,
+        eula_age_acknowledged = 0,
+        cookies_file_path = ''
       WHERE id = 1
     `, [defaultPath]);
     saveDatabase(db);
@@ -1331,6 +1379,8 @@ function spawnDownload(
       .replace(/[<>:"/\\|?*]/g, '');
   };
 
+  const cookiesPath = getResolvedCookiesPath();
+
   const ytDlpArgs = [
     '--newline',
     '--progress',
@@ -1340,6 +1390,7 @@ function spawnDownload(
       noPlaylist: true,
       ...(youtubePlayerClient !== undefined ? { youtubePlayerClient } : {}),
     }),
+    ...ytDlpCookiesArgs(cookiesPath),
     '--windows-filenames',
     '--trim-filenames', '200',
     '-f', formatArg,

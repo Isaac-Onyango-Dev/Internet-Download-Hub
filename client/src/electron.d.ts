@@ -28,6 +28,7 @@ declare global {
 
       // File System
       chooseSaveFolder: () => Promise<string | null>
+      chooseCookiesFile: () => Promise<string | null>
       openFilePath: (filePath: string) => Promise<{ success: boolean }>
       openFolder: (filePath: string) => Promise<{ success: boolean }>
   

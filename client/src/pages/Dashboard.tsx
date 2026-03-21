@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Download, Image as ImageIcon, Settings, Loader2, Music, User, Trash2,
   List, AlertCircle, PlayCircle, FolderOpen, Zap, RotateCcw, FileVideo,
-  ExternalLink, RefreshCw, CheckCircle2, XCircle, Pause, Play, Clock, X
+  ExternalLink, RefreshCw, CheckCircle2, XCircle, Pause, Play, Clock, X, ShieldCheck
 } from "lucide-react";
 import { useDownloadProgress } from "@/hooks/use-ws-progress";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1229,6 +1229,8 @@ function SettingsPanel() {
     detectPlaylists: false,
     playlistDownloadMode: 'all',
     createPlaylistFolder: true,
+    eulaAgeAcknowledged: 0 as 0 | 1,
+    cookiesFilePath: '',
   };
 
   const loadSettings = useCallback(async () => {
@@ -1258,6 +1260,8 @@ function SettingsPanel() {
         detectPlaylists: s.detect_playlists ?? s.detectPlaylists ?? false,
         playlistDownloadMode: s.playlist_download_mode || s.playlistDownloadMode || 'all',
         createPlaylistFolder: Boolean(s.create_playlist_folder ?? s.createPlaylistFolder ?? true),
+        eulaAgeAcknowledged: Number(s.eula_age_acknowledged ?? s.eulaAgeAcknowledged ?? 0) === 1 ? 1 : 0,
+        cookiesFilePath: String(s.cookies_file_path ?? s.cookiesFilePath ?? ''),
       });
     } catch (error) {
       setSettings(defaultSettings);
@@ -1322,6 +1326,12 @@ function SettingsPanel() {
     if (chosen) {
       await saveSetting('downloadPath', chosen);
     }
+  };
+
+  const handleBrowseCookies = async () => {
+    if (!window.electronAPI?.chooseCookiesFile) return;
+    const chosen = await window.electronAPI.chooseCookiesFile();
+    if (chosen) await saveSetting('cookiesFilePath', chosen);
   };
   const handleReset = async () => {
     if (!window.electronAPI) return;
@@ -1400,6 +1410,65 @@ function SettingsPanel() {
             <div className="flex gap-4 max-w-md">
               <Input value={settings.downloadPath} readOnly className="bg-muted border-border cursor-default" />
               <Button onClick={handleBrowse} variant="secondary">Browse</Button>
+            </div>
+          </div>
+
+          <div className="border-t border-border/50 pt-8 space-y-3">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-primary" /> Age eligibility &amp; site sign-in
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Some hosts only serve certain videos after you sign in there. yt-dlp can use a browser
+              cookie file you export (Netscape format). The app does not handle your password—only the
+              file you pick on this device.
+            </p>
+            <div className="flex items-center space-x-3">
+              <Switch
+                id="eula-settings"
+                checked={settings.eulaAgeAcknowledged === 1}
+                onCheckedChange={(checked) => saveSetting('eulaAgeAcknowledged', checked ? 1 : 0)}
+              />
+              <Label htmlFor="eula-settings" className="text-sm cursor-pointer leading-snug">
+                I am of legal age where I live and I accept the EULA (required to use the app).
+              </Label>
+            </div>
+            <button
+              type="button"
+              className="text-sm text-primary underline-offset-4 hover:underline inline-flex items-center gap-1"
+              onClick={() =>
+                window.electronAPI?.openExternal(
+                  'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt'
+                )
+              }
+            >
+              Read the EULA
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+            <div className="space-y-2 pt-2">
+              <Label className="text-sm text-muted-foreground">Cookies file (optional)</Label>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Input
+                  value={settings.cookiesFilePath || ''}
+                  readOnly
+                  className="bg-muted border-border cursor-default flex-1 min-w-[12rem]"
+                  placeholder="None selected"
+                />
+                <Button onClick={handleBrowseCookies} variant="secondary" type="button">
+                  Browse…
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!settings.cookiesFilePath}
+                  onClick={() => saveSetting('cookiesFilePath', '')}
+                >
+                  Clear
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Export cookies while logged into the site (for example YouTube) using a trusted method;
+                keep the file private and clear it here when you no longer need it.
+              </p>
             </div>
           </div>
 
