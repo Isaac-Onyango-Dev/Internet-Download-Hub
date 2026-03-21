@@ -23,6 +23,15 @@ try {
   log.info('[Main] electron-log initialized');
 }
 
+// Register URL protocol for the app
+app.setAsDefaultProtocolClient('internet-download-hub', (error) => {
+  if (error) {
+    console.error('Failed to register protocol:', error);
+  } else {
+    log.info('[Main] Registered protocol: internet-download-hub');
+  }
+});
+
 let DB_PATH: string;
 process.env.VITE_ELECTRON = 'true';
 
