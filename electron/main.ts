@@ -549,6 +549,22 @@ function createWindow() {
     }
   });
 
+  // Prevent in-app external navigation
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Allow only whitelisted domains
+    const allowed = [
+      'https://github.com/Isaac-Onyango-Dev',
+      'https://isaac-onyango-dev.github.io'
+    ];
+    
+    if (allowed.some(prefix => url.startsWith(prefix))) {
+      shell.openExternal(url);
+    } else {
+      log.warn(`[MAIN] Blocked external navigation: ${url}`);
+    }
+    return { action: 'deny' };
+  });
+
   // Minimize to tray instead of closing
   mainWindow.on('close', (event: any) => {
     if (tray && !(app as any).isQuitting) {
@@ -1309,8 +1325,19 @@ function setupIpcHandlers() {
   // ── open-external ─────────────────────────────────────────────────────────
   ipcMain.handle('open-external', async (_: any, url: string) => {
     try {
-      await shell.openExternal(url);
-      return { success: true };
+      // Whitelist allowed domains for security
+      const allowed = [
+        'https://github.com/Isaac-Onyango-Dev',
+        'https://isaac-onyango-dev.github.io'
+      ];
+      
+      if (allowed.some(prefix => url.startsWith(prefix))) {
+        await shell.openExternal(url);
+        return { success: true };
+      } else {
+        log.warn(`[IPC] Blocked external URL: ${url}`);
+        throw new Error('External URL not allowed');
+      }
     } catch (error: any) {
       log.error(`[IPC Error] open-external failed: ${error.message}`);
       throw error;
