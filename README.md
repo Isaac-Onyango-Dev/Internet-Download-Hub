@@ -71,6 +71,10 @@ npm run build:win
 
 If you find this app useful please consider sharing it with others. Visit the [project website](https://isaac-onyango-dev.github.io/Internet-Download-Hub) to share or report issues.
 
+## End-user agreement (EULA)
+
+**Internet Download Hub is intended for adults only** (18+, or the age of majority where you live, whichever is greater). By installing or using the app you agree to the [EULA.txt](./EULA.txt). The Windows installer shows this text before installation.
+
 ## License
 
-MIT License — see LICENSE for details.
+The **source code** is licensed under the MIT License — see [LICENSE](./LICENSE) for details. The EULA governs **use** of the distributed application; the MIT license governs the **software** as a project.

@@ -57,9 +57,13 @@ export function translateDownloadError(
     return 'This video is private and cannot be downloaded.';
   }
 
-  // YouTube age-gate / sign-in to confirm age (do not use broad `includes('age')` — too many false positives)
+  // YouTube / host age-gate or sign-in (narrow detection; see isLikelyYoutubeAgeRestrictionError)
   if (isLikelyYoutubeAgeRestrictionError(rawError)) {
-    return 'This video requires sign-in to verify age. Try adding your browser cookies in Settings (coming soon) or try a different video.';
+    return (
+      'The host site is blocking this link until you sign in there (common on YouTube for some videos). ' +
+      'This app does not replace your account: try Update yt-dlp in Settings and fetch again, try again later, ' +
+      'or use another URL for the same content. Browser cookie export for signed-in downloads may be added in a future update.'
+    );
   }
 
   // Video removed or unavailable

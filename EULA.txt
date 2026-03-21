@@ -1,0 +1,41 @@
+END USER LICENSE AGREEMENT (EULA)
+Internet Download Hub
+
+Last updated: March 2026
+
+IMPORTANT - PLEASE READ BEFORE USING THIS SOFTWARE
+
+1. ELIGIBILITY (AGE)
+   This application is intended only for adults. By installing or using
+   Internet Download Hub, you represent and warrant that you are at least
+   eighteen (18) years of age, or the age of majority in your country,
+   province, or region of residence, whichever is greater, and that you have
+   the legal capacity to enter into this agreement.
+
+2. PURPOSE OF THE SOFTWARE
+   Internet Download Hub is a tool to download media from sources you are
+   legally permitted to access and save. You are solely responsible for
+   ensuring that your use complies with applicable laws, each site's terms
+   of service, and copyright rules.
+
+3. PLATFORM AGE AND SIGN-IN REQUIREMENTS
+   Some websites may require account sign-in, age confirmation, or other
+   checks that this app cannot always satisfy on its own. Those requirements
+   are imposed by the host site, not by Internet Download Hub. You agree
+   that you will not use the software to obtain content you are not legally
+   entitled to access.
+
+4. NO WARRANTY
+   The software is provided "as is" without warranty of any kind. The
+   complete license for the source code is in the LICENSE file (MIT).
+
+5. LIMITATION OF LIABILITY
+   To the maximum extent permitted by law, the authors and contributors are
+   not liable for any damages arising from your use of this software.
+
+6. ACCEPTANCE
+   If you do not agree with these terms, do not install or use Internet
+   Download Hub.
+
+For open-source software license terms, see the LICENSE file in the project
+repository.
