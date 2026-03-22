@@ -212,6 +212,7 @@ function VideoCapturePanel({
   onGoToQueue,
   setSuccessMsg
 }: VideoInfoProps & VideoInfoState) {
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const videoDetectMutation = useVideoDetect();
   const [urlError, setUrlError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -233,6 +234,13 @@ function VideoCapturePanel({
     }, 3000);
     return () => clearInterval(interval);
   }, [loading]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      urlInputRef.current?.focus();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();

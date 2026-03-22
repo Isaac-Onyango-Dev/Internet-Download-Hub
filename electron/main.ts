@@ -53,7 +53,8 @@ let galleryDlPath: string;
 
 // ── Single Instance Lock ─────────────────────────────────────────────────────
 // Only enforce single instance in production - allow multiple dev runs
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+// Initialize isDev here since it's used before setupPaths() is called
+isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 if (!isDev) {
   // Production mode: enforce single instance
