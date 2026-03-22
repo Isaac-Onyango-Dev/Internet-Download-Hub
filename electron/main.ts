@@ -103,11 +103,28 @@ function checkBinaries() {
     { name: 'ffprobe', path: ffprobePath },
     { name: 'streamlink', path: streamlinkPath },
     { name: 'N_m3u8DL-RE', path: n_m3u8dlPath },
-    { name: 'gallery-dl', path: galleryDlPath }
+    { name: 'gallery-dl', path: galleryDlPath },
   ];
 
-  log.info('--- Binary Detection ---');
-  log.info(`[Main] NODE_ENV: ${process.env.NODE_ENV}`);
+  log.info('[MAIN] === BINARY VERIFICATION ===');
+  log.info('[MAIN] Binaries path:', binariesPath);
+  log.info('[MAIN] App packaged:', app.isPackaged);
+  
+  let missingCount = 0;
+  binaries.forEach(({ name, path }) => {
+    if (fs.existsSync(path)) {
+      log.info(`[BINARY OK] ${name}: ${path}`);
+    } else {
+      log.error(`[BINARY MISSING] ${name}: ${path}`);
+      missingCount++;
+    }
+  });
+  
+  log.info('[MAIN] === END BINARY VERIFICATION ===');
+  if (missingCount > 0) {
+    log.warn(`[MAIN] ${missingCount} binaries missing. Some features may not work.`);
+  }
+
   log.info(`[Main] isDev: ${isDev}`);
   log.info(`[Main] isPackaged: ${app.isPackaged}`);
   log.info('[MAIN] Default save path:', app.getPath('downloads'));
@@ -644,6 +661,31 @@ function createWindow() {
     ? path.join(process.resourcesPath, 'assets/icon.png')
     : path.join(process.cwd(), 'assets/icon.png');
 
+  // Show splash screen immediately
+  const splash = new BrowserWindow({
+    width: 400,
+    height: 300,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: { 
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  const splashPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'splash.html')
+    : path.join(process.cwd(), 'client', 'splash.html');
+
+  if (fs.existsSync(splashPath)) {
+    splash.loadFile(splashPath);
+  } else {
+    log.warn('[MAIN] Splash screen not found at:', splashPath);
+  }
+
+  // Create main window in parallel
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -661,6 +703,8 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => {
+    // Close splash and show main window
+    splash.close();
     mainWindow?.show();
     
     // Check if FFmpeg notification needs to be shown
@@ -789,21 +833,30 @@ function detectPlaylist(url: string): { isPlaylist: boolean } {
 }
 
 // ── Playwright Browser Check ──────────────────────────────────────────────────
-async function ensurePlaywrightBrowser() {
-  try {
-    const playwrightCore = require('playwright-core');
-    const browserPath = playwrightCore.chromium.executablePath();
-    if (!fs.existsSync(browserPath)) {
-      log.info('[MAIN] Playwright Chromium not found, installing...');
-      const { execSync } = require('child_process');
-      execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 120000 });
-      log.info('[MAIN] Playwright Chromium installed successfully');
-    } else {
-      log.info('[MAIN] Playwright Chromium found at:', browserPath);
+let playwrightBrowser = null;
+
+async function getPlaywrightBrowser() {
+  if (!playwrightBrowser) {
+    try {
+      const playwrightCore = require('playwright-core');
+      const browserPath = playwrightCore.chromium.executablePath();
+      if (!fs.existsSync(browserPath)) {
+        log.info('[MAIN] Playwright Chromium not found, installing...');
+        const { execSync } = require('child_process');
+        execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 120000 });
+        log.info('[MAIN] Playwright Chromium installed successfully');
+      } else {
+        log.info('[MAIN] Playwright Chromium found at:', browserPath);
+      }
+      
+      playwrightBrowser = await playwrightCore.chromium.launch({ headless: true });
+      log.info('[MAIN] Playwright browser launched successfully');
+    } catch (err: any) {
+      log.warn('[MAIN] Could not initialize Playwright browser:', err?.message ?? err);
+      throw err;
     }
-  } catch (err: any) {
-    log.warn('[MAIN] Could not verify Playwright Chromium:', err?.message ?? err);
   }
+  return playwrightBrowser;
 }
 
 // ── yt-dlp Helper Functions ───────────────────────────────────────────────
@@ -2206,8 +2259,6 @@ if (app) {
       createTray();
 
       processQueue();
-
-      ensurePlaywrightBrowser();
 
       setTimeout(() => runBackgroundVersionCheck(), 5000);
 

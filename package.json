@@ -111,11 +111,13 @@
     },
     "files": [
       "dist/**/*",
+      "client/splash.html",
       "electron/main.cjs",
       "electron/preload.cjs",
       "node_modules/sql.js/dist/sql-wasm.wasm",
       "node_modules/sql.js/dist/sql-wasm.js",
       "node_modules/electron-log/**/*",
+      "node_modules/playwright-core/**/*",
       "!node_modules/.cache/**/*",
       "!node_modules/typescript/**/*",
       "!node_modules/vite/**/*",
@@ -137,6 +139,8 @@
       "binaries/gallery-dl.exe",
       "binaries/streamlink.exe",
       "binaries/N_m3u8DL-RE.exe",
+      "binaries/ffmpeg.exe",
+      "binaries/ffprobe.exe",
       "node_modules/sql.js/dist/sql-wasm.wasm",
       "node_modules/playwright-core/.local-browsers/**/*",
       "node_modules/playwright/**/*"
@@ -161,7 +165,20 @@
       "deleteAppDataOnUninstall": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "license": "EULA.txt"
+      "licenseFile": "assets/license.txt",
+      "multilingual": true,
+      "installerLanguages": [
+        "en_US",
+        "fr_FR",
+        "de_DE",
+        "es_ES",
+        "pt_BR",
+        "ar",
+        "zh_CN",
+        "ja",
+        "ko",
+        "sw"
+      ]
     },
     "extraResources": [
       {
@@ -171,7 +188,9 @@
           "yt-dlp.exe",
           "gallery-dl.exe",
           "streamlink.exe",
-          "N_m3u8DL-RE.exe"
+          "N_m3u8DL-RE.exe",
+          "ffmpeg.exe",
+          "ffprobe.exe"
         ]
       },
       {
