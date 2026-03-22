@@ -879,6 +879,41 @@ async function checkYtDlpVersion(): Promise<{
 }
 
 /**
+ * Binary configurations for all download engines
+ */
+const BINARIES = [
+  {
+    name: 'yt-dlp',
+    releaseApi: 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest',
+    downloadUrl: (tag: string) => `https://github.com/yt-dlp/yt-dlp/releases/download/${tag}/yt-dlp.exe`,
+    versionFlag: '--version',
+    fileName: 'yt-dlp.exe'
+  },
+  {
+    name: 'streamlink',
+    releaseApi: 'https://api.github.com/repos/streamlink/streamlink/releases/latest',
+    downloadUrl: (tag: string) => `https://github.com/streamlink/streamlink/releases/download/${tag}/streamlink-${tag.replace('v','')}-py311-x86_64.exe`,
+    versionFlag: '--version',
+    fileName: 'streamlink.exe'
+  },
+  {
+    name: 'gallery-dl',
+    releaseApi: 'https://api.github.com/repos/mikf/gallery-dl/releases/latest',
+    downloadUrl: (tag: string) => `https://github.com/mikf/gallery-dl/releases/download/${tag}/gallery-dl.exe`,
+    versionFlag: '--version',
+    fileName: 'gallery-dl.exe'
+  },
+  {
+    name: 'N_m3u8DL-RE',
+    releaseApi: 'https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest',
+    downloadUrl: (tag: string) => `https://github.com/nilaoda/N_m3u8DL-RE/releases/download/${tag}/N_m3u8DL-RE_${tag.replace('v','')}_win-x64.zip`,
+    versionFlag: '--version',
+    fileName: 'N_m3u8DL-RE.exe',
+    isZip: true
+  }
+];
+
+/**
  * Safe update: download new binary to system temp dir first,
  * then copy it into the binaries folder — this avoids EPERM when installed in
  * C:\Program Files\ because the temp dir is always writable.
@@ -1542,7 +1577,132 @@ function setupIpcHandlers() {
     return await getCurrentYtDlpVersion();
   });
 
-  // ── check-ytdlp-version ─────────────────────────────────────────────────────
+  // ── check-all-binary-updates ───────────────────────────────────────────────
+  ipcMain.handle('check-all-binary-updates', async () => {
+    try {
+      const results = [];
+      
+      for (const binary of BINARIES) {
+        const installedVersion = await getBinaryVersion(binary);
+        const latestVersion = await getLatestBinaryVersion(binary);
+        
+        results.push({
+          name: binary.name,
+          installedVersion,
+          latestVersion,
+          needsUpdate: installedVersion !== latestVersion,
+          downloadUrl: binary.downloadUrl(latestVersion)
+        });
+      }
+      
+      return results;
+    } catch (error: any) {
+      log.error(`[IPC Error] check-all-binary-updates failed: ${error.message}`);
+      throw new Error(`Failed to check updates: ${error.message}`);
+    }
+  });
+
+  // ── update-binary ───────────────────────────────────────────────────────────
+  ipcMain.handle('update-binary', async (_: any, { binaryName }: { binaryName: string }) => {
+    try {
+      const binary = BINARIES.find(b => b.name === binaryName);
+      if (!binary) {
+        throw new Error(`Unknown binary: ${binaryName}`);
+      }
+      
+      log.info(`[IPC] Updating ${binaryName}...`);
+      const result = await performBinaryUpdate(binary);
+      return result;
+    } catch (error: any) {
+      log.error(`[IPC Error] update-binary failed for ${binaryName}: ${error.message}`);
+      throw new Error(`Update failed: ${error.message}`);
+    }
+  });
+
+  // ── get-binary-version ───────────────────────────────────────────────────────
+  async function getBinaryVersion(binary: typeof BINARIES[0]): Promise<string> {
+    try {
+      const binaryPath = path.join(binariesPath, binary.fileName);
+      if (!fs.existsSync(binaryPath)) {
+        return 'Not installed';
+      }
+      
+      const { execSync } = require('child_process');
+      const output = execSync(`"${binaryPath}" ${binary.versionFlag}`, { encoding: 'utf8' });
+      const version = output.split('\n')[0].trim();
+      return version;
+    } catch (error: any) {
+      log.error(`Failed to get version for ${binary.name}: ${error.message}`);
+      return 'Unknown';
+    }
+  }
+
+  async function getLatestBinaryVersion(binary: typeof BINARIES[0]): Promise<string> {
+    try {
+      const release = await fetchJson(binary.releaseApi);
+      return release.tag_name;
+    } catch (error: any) {
+      log.error(`Failed to fetch latest version for ${binary.name}: ${error.message}`);
+      return 'Unknown';
+    }
+  }
+
+  async function performBinaryUpdate(binary: typeof BINARIES[0]): Promise<{ success: boolean; newVersion: string }> {
+    try {
+      const release = await fetchJson(binary.releaseApi);
+      const latestVersion = release.tag_name;
+      
+      const downloadUrl = binary.downloadUrl(latestVersion);
+      const tempPath = path.join(app.getPath('temp'), `${binary.fileName}.tmp`);
+      
+      // Download to temp
+      const response = await fetch(downloadUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to download ${binary.name}: ${response.statusText}`);
+      }
+      
+      const buffer = await response.arrayBuffer();
+      fs.writeFileSync(tempPath, Buffer.from(buffer));
+      
+      // Handle zip files
+      if (binary.isZip) {
+        const tempDir = path.join(app.getPath('temp'), `${binary.name}_extract`);
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        // Extract using PowerShell (built-in)
+        const { execSync } = require('child_process');
+        execSync(`powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`, { cwd: app.getPath('temp') });
+        
+        // Find the .exe in extracted files
+        const extractedFiles = fs.readdirSync(tempDir);
+        const exeFile = extractedFiles.find(f => f.endsWith('.exe'));
+        if (!exeFile) {
+          throw new Error(`Could not find ${binary.fileName} in extracted archive`);
+        }
+        
+        const finalPath = path.join(tempDir, exeFile);
+        fs.copyFileSync(finalPath, path.join(binariesPath, binary.fileName));
+        
+        // Clean up
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } else {
+        // Direct copy for .exe files
+        fs.copyFileSync(tempPath, path.join(binariesPath, binary.fileName));
+      }
+      
+      // Clean up temp file
+      fs.unlinkSync(tempPath);
+      
+      return { success: true, newVersion: latestVersion };
+    } catch (error: any) {
+      log.error(`Failed to update ${binary.name}: ${error.message}`);
+      return { success: false, newVersion: '' };
+    }
+  }
+
+  // ── check-ytdlp-version ───────────────────────────────────────────────────────
   ipcMain.handle('check-ytdlp-version', async () => {
     return await checkYtDlpVersion();
   });

@@ -92,6 +92,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getYtDlpVersion: () =>
     ipcRenderer.invoke('get-ytdlp-version'),
 
+  checkAllBinaryUpdates: () =>
+    ipcRenderer.invoke('check-all-binary-updates'),
+
+  updateBinary: (binaryName: string) =>
+    ipcRenderer.invoke('update-binary', { binaryName }),
+
   onYtDlpVersionInfo: (callback: (data: any) => void) => {
     ipcRenderer.removeAllListeners('ytdlp-version-info');
     ipcRenderer.on('ytdlp-version-info', (_event, data) => callback(data));

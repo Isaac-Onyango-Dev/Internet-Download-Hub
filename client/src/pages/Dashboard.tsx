@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { LayoutShell } from "@/components/layout-shell";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -59,8 +59,27 @@ export default function Dashboard() {
   const [location, setLocation] = useLocation();
   const [globalError, setGlobalError] = useState<{ message: string } | null>(null);
   const [renderedTabs, setRenderedTabs] = useState<Set<string>>(new Set(['downloader']));
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const currentTab = location === '/' ? 'downloader' : location.split('/')[1];
+
+  // Restore focus to URL input when returning to downloader tab
+  useEffect(() => {
+    if (currentTab === 'downloader' && urlInputRef.current) {
+      const timer = setTimeout(() => {
+        urlInputRef.current?.focus();
+      }, 150); // Small delay to allow tab transition to complete
+      return () => clearTimeout(timer);
+    }
+  }, [currentTab]);
+
+  // Reset loading state when switching away from downloader tab
+  useEffect(() => {
+    if (currentTab !== 'downloader') {
+      setLoading(false);
+      setLoadingMessage('');
+    }
+  }, [currentTab]);
 
   useEffect(() => {
     if (currentTab) {
@@ -199,20 +218,7 @@ function VideoCapturePanel({
   onGoToSettings,
   onGoToQueue,
   setSuccessMsg
-}: {
-  onScanStart?: () => void;
-  onError: (err: { message: string }) => void;
-  scanUrl: string;
-  setScanUrl: (url: string) => void;
-  videoInfo: DetectedVideo[] | null;
-  setVideoInfo: (info: DetectedVideo[] | null) => void;
-  showUpdateBanner?: boolean;
-  ytdlpLatestVersion?: string;
-  onDismissBanner?: () => void;
-  onGoToSettings?: () => void;
-  onGoToQueue?: () => void;
-  setSuccessMsg: (msg: string | null) => void;
-}) {
+}: VideoInfoProps & VideoInfoState) {
   const videoDetectMutation = useVideoDetect();
   const [urlError, setUrlError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -548,6 +554,7 @@ function VideoCapturePanel({
           <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Input
+                ref={urlInputRef}
                 placeholder="Paste your video link here..."
                 value={scanUrl}
                 onChange={(e) => {
@@ -1233,12 +1240,83 @@ function SettingsPanel() {
   const [resetting, setResetting] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
 
-  // yt-dlp version state
-  const [ytDlpVersion, setYtDlpVersion] = useState<string>('Checking...');
-  const [latestVersion, setLatestVersion] = useState<string>('');
-  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
-  const [updating, setUpdating] = useState<boolean>(false);
-  const [updateStatus, setUpdateStatus] = useState<string>('');
+  // Binary updates state
+  const [binaryUpdates, setBinaryUpdates] = useState<Array<{
+    name: string;
+    installedVersion: string;
+    latestVersion: string;
+    needsUpdate: boolean;
+    downloadUrl: string;
+    updating?: boolean;
+  }>>([]);
+
+  const loadBinaryUpdates = useCallback(async () => {
+    if (!window.electronAPI) return;
+    try {
+      const updates = await window.electronAPI.checkAllBinaryUpdates();
+      setBinaryUpdates(updates.map(u => ({ ...u, updating: false })));
+    } catch (error: any) {
+      console.error('Failed to check binary updates:', error);
+    }
+  }, []);
+
+  // Load binary updates on mount
+  useEffect(() => {
+    loadBinaryUpdates();
+  }, [loadBinaryUpdates]);
+
+  const handleUpdateBinary = async (binaryName: string) => {
+    if (!window.electronAPI) return;
+    
+    setBinaryUpdates(prev => 
+      prev.map(u => u.name === binaryName ? { ...u, updating: true } : u)
+    );
+    
+    try {
+      const result = await window.electronAPI.updateBinary(binaryName);
+      if (result.success) {
+        setBinaryUpdates(prev => 
+          prev.map(u => u.name === binaryName ? { 
+            ...u, 
+            installedVersion: result.newVersion, 
+            latestVersion: result.newVersion, 
+            needsUpdate: false, 
+            updating: false 
+          } : u)
+        );
+      }
+    } catch (error: any) {
+      console.error(`Failed to update ${binaryName}:`, error);
+      setBinaryUpdates(prev => 
+        prev.map(u => u.name === binaryName ? { ...u, updating: false } : u)
+      );
+    }
+  };
+
+  const handleUpdateAllBinaries = async () => {
+    if (!window.electronAPI) return;
+    
+    setBinaryUpdates(prev => prev.map(u => ({ ...u, updating: true })));
+    
+    try {
+      const updates = await window.electronAPI.checkAllBinaryUpdates();
+      const outdatedBinaries = updates.filter(u => u.needsUpdate);
+      
+      for (const binary of outdatedBinaries) {
+        try {
+          await window.electronAPI.updateBinary(binary.name);
+        } catch (error: any) {
+          console.error(`Failed to update ${binary.name}:`, error);
+        }
+      }
+      
+      // Reload all updates after completion
+      await loadBinaryUpdates();
+    } catch (error: any) {
+      console.error('Failed to update binaries:', error);
+      setBinaryUpdates(prev => prev.map(u => ({ ...u, updating: false })));
+    }
+  };
 
   const defaultSettings = {
     downloadPath: '',
@@ -1368,26 +1446,7 @@ function SettingsPanel() {
     }
   };
 
-  const handleUpdateYtDlp = async () => {
-    if (!window.electronAPI) return;
-    setUpdating(true);
-    setUpdateStatus('Downloading update...');
-    try {
-      const result = await window.electronAPI.updateYtDlp();
-      if (result.updated) {
-        setYtDlpVersion(result.version);
-        setUpdateAvailable(false);
-        setUpdateStatus(`Updated to v${result.version}`);
-      } else {
-        setUpdateStatus('Already up to date');
-      }
-    } catch (err: any) {
-      setUpdateStatus('Update failed — check your internet connection');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
+  
   if (!settings) {
     return (
       <div className="flex items-center justify-center p-20">
@@ -1606,46 +1665,76 @@ function SettingsPanel() {
 
           <div className="border-t border-border/50 pt-8 space-y-3">
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <RefreshCw className={cn("w-5 h-5 text-primary", updating && "animate-spin")} /> Software updates
+              <RefreshCw className={cn("w-5 h-5 text-primary", binaryUpdates.some(u => u.updating) && "animate-spin")} /> Software updates
             </h3>
-            <p className="text-sm text-muted-foreground">Keep the core download engine up to date to ensure compatibility with all sites.</p>
+            <p className="text-sm text-muted-foreground">Keep all download engines up to date for best compatibility with all sites.</p>
 
-            {/* Version + button row */}
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              {/* Version info */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">yt-dlp version:</span>
-                <span className="text-sm font-mono font-medium">{ytDlpVersion}</span>
-                {updateAvailable && (
-                  <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full">
-                    Update available — v{latestVersion}
-                  </span>
-                )}
-                {!updateAvailable && ytDlpVersion !== 'Checking...' && ytDlpVersion !== 'unknown' && (
-                  <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Up to date
-                  </span>
-                )}
-              </div>
-
-              {/* Update button */}
+            {/* Update All button */}
+            <div className="mb-4">
               <Button
-                onClick={handleUpdateYtDlp}
-                disabled={updating}
-                variant={updateAvailable ? 'default' : 'outline'}
-                className={cn(
-                  "h-9",
-                  updateAvailable && "btn-primary"
-                )}
+                onClick={handleUpdateAllBinaries}
+                disabled={binaryUpdates.every(u => !u.needsUpdate) || binaryUpdates.some(u => u.updating)}
+                variant="default"
+                className="h-9"
               >
-                {updating ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Downloading...</>
-                ) : updateAvailable ? (
-                  <>Update Now</>
+                {binaryUpdates.some(u => u.updating) ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Updating All...</>
+                ) : binaryUpdates.some(u => u.needsUpdate) ? (
+                  <>Update All</>
                 ) : (
-                  <>Check for Updates</>
+                  <>All Up to Date</>
                 )}
               </Button>
+            </div>
+
+            {/* Individual binary updates */}
+            <div className="space-y-4">
+              {binaryUpdates.map((binary) => (
+                <div key={binary.name} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h4 className="font-medium">{binary.name}</h4>
+                      <span className="text-xs text-muted-foreground">
+                        v{binary.installedVersion} installed
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Latest: v{binary.latestVersion}</span>
+                      {binary.needsUpdate && (
+                        <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full ml-2">
+                          Update available
+                        </span>
+                      )}
+                      {!binary.needsUpdate && binary.installedVersion !== 'Checking...' && binary.installedVersion !== 'Not installed' && (
+                        <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Up to date
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {binary.updating ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-sm">Updating...</span>
+                      </div>
+                    ) : binary.needsUpdate ? (
+                      <Button
+                        onClick={() => handleUpdateBinary(binary.name)}
+                        disabled={binary.updating}
+                        variant="default"
+                        size="sm"
+                      >
+                        Update
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Up to date</span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Status message */}

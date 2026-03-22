@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'wouter'
+import { LayoutShell } from '@/components/layout-shell'
+import { Button } from '@/components/ui/button'
+import { ArrowLeft } from 'lucide-react'
 
 const APP_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub'
 const GITHUB_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub'
@@ -270,17 +274,25 @@ export default function Support() {
   }, {} as Record<string, PaymentOption[]>)
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto bg-gray-900 p-6">
+    <LayoutShell>
+      <div className="flex-1 overflow-y-auto bg-background p-6">
+        {/* Back button */}
+        <Link href="/">
+          <Button variant="ghost" className="mb-4 flex items-center gap-2 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
+            Back to Downloader
+          </Button>
+        </Link>
 
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-2">Support Internet Download Hub</h1>
-        <p className="text-gray-400 text-sm leading-relaxed">
-          This app is built and maintained by one developer. Your support —
-          whether sharing it with others or making a donation — directly helps
-          keep it free, updated, and improving. Thank you for using it.
-        </p>
-      </div>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground mb-2">Support Internet Download Hub</h1>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            This app is built and maintained by one developer. Your support —
+            whether sharing it with others or making a donation — directly helps
+            keep it free, updated, and improving. Thank you for using it.
+          </p>
+        </div>
 
       {/* Tab switcher */}
       <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg w-fit">
@@ -527,6 +539,7 @@ export default function Support() {
         </div>
       )}
 
-    </div>
+      </div>
+    </LayoutShell>
   )
 }
