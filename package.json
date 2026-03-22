@@ -165,8 +165,8 @@
       "deleteAppDataOnUninstall": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
-      "licenseFile": "assets/license.txt",
-      "multilingual": true,
+      "license": "assets/license.txt",
+      "multiLanguageInstaller": true,
       "installerLanguages": [
         "en_US",
         "fr_FR",

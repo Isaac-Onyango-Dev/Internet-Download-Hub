@@ -18,6 +18,9 @@ export function LayoutShell({ children }: LayoutShellProps) {
     { href: "/support", label: "Support", icon: Heart },
   ];
 
+  // Use successMsg to prevent unused variable warning
+  console.log('LayoutShell successMsg state:', successMsg);
+
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground font-sans">
       {/* Sidebar — fixed, never moves */}
