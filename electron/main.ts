@@ -274,7 +274,7 @@ function checkFFmpegRequired(formatId: string): boolean {
 }
 
 // ── Filename Cleaning ────────────────────────────────────────────────────────
-export function cleanFilename(filename: string): string {
+function cleanFilename(filename: string): string {
   return filename
     .replace(/_{2,}/g, ' ')
     .replace(/-{2,}/g, ' - ')
