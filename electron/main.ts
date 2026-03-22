@@ -833,7 +833,7 @@ function detectPlaylist(url: string): { isPlaylist: boolean } {
 }
 
 // ── Playwright Browser Check ──────────────────────────────────────────────────
-let playwrightBrowser = null;
+let playwrightBrowser: any = null;
 
 async function getPlaywrightBrowser() {
   if (!playwrightBrowser) {
