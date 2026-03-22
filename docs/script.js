@@ -336,10 +336,49 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeDonateModal()
 })
 
+/** Fetch download count from GitHub API and update counter */
+async function fetchDownloadCount() {
+  try {
+    console.log('[IDH] Refreshing download count...')
+    const { ok, status, releases: allReleases } = await fetchAllReleases()
+
+    if (ok && allReleases.length >= 0) {
+      const shieldStyleTotal = sumAllAssetDownloads(allReleases)
+      const installerTotal = sumInstallerDownloads(allReleases)
+      const displayTotal = installerTotal > 0 ? installerTotal : shieldStyleTotal
+      updateDownloadCounter(displayTotal)
+      console.log('[IDH] Download count refreshed:', displayTotal)
+    } else {
+      console.warn('[IDH] Could not refresh download count:', status)
+    }
+  } catch (err) {
+    console.error('[IDH] Failed to refresh download count:', err.message)
+  }
+}
+
 function bootDocsPage() {
   setupShareButtons()
   protectFavicon()
   loadReleaseInfo()
+  
+  // Add download click listeners to refresh counter after 3 seconds
+  const downloadBtn = document.getElementById('download-btn')
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        fetchDownloadCount()
+      }, 3000)
+    })
+  }
+  
+  const heroDownloadBtn = document.getElementById('hero-download-btn')
+  if (heroDownloadBtn) {
+    heroDownloadBtn.addEventListener('click', () => {
+      setTimeout(() => {
+        fetchDownloadCount()
+      }, 3000)
+    })
+  }
 }
 
 // Run once: duplicate listeners were firing loadReleaseInfo() twice and burning anonymous GitHub API quota.
