@@ -61,31 +61,24 @@ export default function Dashboard() {
   const [renderedTabs, setRenderedTabs] = useState<Set<string>>(new Set(['downloader']));
   const urlInputRef = useRef<HTMLInputElement>(null);
 
+  // Binary updates state
+  const [binaryUpdates, setBinaryUpdates] = useState<Array<{
+    name: string;
+    installedVersion: string;
+    latestVersion: string;
+    needsUpdate: boolean;
+    downloadUrl: string;
+    updating?: boolean;
+  }>>([]);
+
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   const currentTab = location === '/' ? 'downloader' : location.split('/')[1];
 
-  // Restore focus to URL input when returning to downloader tab
+  // Load binary updates on mount
   useEffect(() => {
-    if (currentTab === 'downloader' && urlInputRef.current) {
-      const timer = setTimeout(() => {
-        urlInputRef.current?.focus();
-      }, 150); // Small delay to allow tab transition to complete
-      return () => clearTimeout(timer);
-    }
-  }, [currentTab]);
-
-  // Reset loading state when switching away from downloader tab
-  useEffect(() => {
-    if (currentTab !== 'downloader') {
-      setLoading(false);
-      setLoadingMessage('');
-    }
-  }, [currentTab]);
-
-  useEffect(() => {
-    if (currentTab) {
-      setRenderedTabs(prev => new Set(prev).add(currentTab));
-    }
-  }, [currentTab]);
+    loadBinaryUpdates();
+  }, []);
 
   const handleTabChange = (value: string) => {
     setLocation(value === 'downloader' ? '/' : `/${value}`);
