@@ -56,24 +56,27 @@ let galleryDlPath: string;
 // Initialize isDev here since it's used before setupPaths() is called
 isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-if (!isDev) {
-  // Production mode: enforce single instance
-  const gotTheLock = app.requestSingleInstanceLock();
-  if (!gotTheLock) {
-    log.info('[Main] Another instance is running — focusing it and exiting');
-    app.quit();
-    return;
-  }
-  
-  app.on('second-instance', () => {
-    // Focus the existing window instead of doing nothing
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
+function initializeSingleInstanceLock(): boolean {
+  if (!isDev) {
+    // Production mode: enforce single instance
+    const gotTheLock = app.requestSingleInstanceLock();
+    if (!gotTheLock) {
+      log.info('[Main] Another instance is running — focusing it and exiting');
+      app.quit();
+      return false; // Exit early
     }
-  });
-} else {
-  log.info('[Main] Development mode detected — single-instance lock disabled');
+    
+    app.on('second-instance', () => {
+      // Focus the existing window instead of doing nothing
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+      }
+    });
+  } else {
+    log.info('[Main] Development mode detected — single-instance lock disabled');
+  }
+  return true; // Continue with startup
 }
 
 function setupPaths() {
@@ -2276,6 +2279,11 @@ if (app) {
 
   app.whenReady().then(async () => {
     try {
+      // Check single instance lock first - exit early if another instance is running
+      if (!initializeSingleInstanceLock()) {
+        return; // Exit early, app.quit() was called in the function
+      }
+      
       log.info('[Main] App ready — startup sequence begin');
       checkBinaries();
       await initDb();
