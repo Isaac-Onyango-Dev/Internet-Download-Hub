@@ -707,11 +707,23 @@ function createWindow() {
     splash.close();
     mainWindow?.show();
     
+    // Open DevTools in development for debugging
+    if (isDev) {
+      mainWindow.webContents.openDevTools();
+    }
+    
     // Check if FFmpeg notification needs to be shown
+    const ffmpegExists = fs.existsSync(ffmpegPath);
     const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
     
-    if (!ffmpegDownloaded) {
-      log.info('[Main] FFmpeg not downloaded, showing one-time notification');
+    // Update database flag if FFmpeg exists but flag is false
+    if (ffmpegExists && !ffmpegDownloaded) {
+      log.info('[Main] FFmpeg found but database flag is false, updating flag');
+      db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
+    }
+    
+    if (!ffmpegExists) {
+      log.info('[Main] FFmpeg not found, showing one-time notification');
       
       if (mainWindow) {
         mainWindow.webContents.send('ffmpeg-download-notification', {
@@ -906,8 +918,10 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 /** Get the currently installed yt-dlp version string. */
 async function getCurrentYtDlpVersion(): Promise<string> {
   try {
-    const { stdout } = await execa(ytDlpPath, ['--version'], { timeout: 10000 });
-    return stdout.trim();
+    const { stdout, stderr } = await execa(ytDlpPath, ['--version'], { timeout: 10000 });
+    // yt-dlp outputs version to stdout, but some builds use stderr
+    const version = (stdout || stderr || '').trim();
+    return version || 'unknown';
   } catch {
     return 'unknown';
   }
@@ -2265,8 +2279,10 @@ if (app) {
       try {
         await execa(ytDlpPath, ['--version'], { timeout: 5000 });
         log.info('[Main] yt-dlp pre-warmed successfully');
-      } catch {
-        log.warn('[Main] yt-dlp pre-warm failed — binary may be missing');
+      } catch (err: any) {
+        log.warn('[Main] yt-dlp pre-warm failed:', err?.message || err);
+        log.warn('[Main] yt-dlp pre-warm stderr:', err?.stderr || 'No stderr');
+        // Do NOT crash the app - pre-warm failure is not critical
       }
     } catch (err: unknown) {
       log.error('[Main] Startup error:', err);
