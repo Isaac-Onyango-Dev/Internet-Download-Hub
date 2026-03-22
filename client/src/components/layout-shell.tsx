@@ -9,6 +9,7 @@ interface LayoutShellProps {
 
 export function LayoutShell({ children }: LayoutShellProps) {
   const [location] = useLocation();
+  const [successMsg] = useState<string | null>(null); // Defensive declaration to prevent undefined errors
 
   const navItems = [
     { href: "/", label: "Downloader", icon: Download },
