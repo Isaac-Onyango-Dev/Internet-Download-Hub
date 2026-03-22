@@ -52,17 +52,27 @@ let n_m3u8dlPath: string;
 let galleryDlPath: string;
 
 // ── Single Instance Lock ─────────────────────────────────────────────────────
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  log.warn('[Main] Another instance is already running — exiting (single-instance lock).');
-  app.quit();
-} else {
+// Only enforce single instance in production - allow multiple dev runs
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+if (!isDev) {
+  // Production mode: enforce single instance
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    log.info('[Main] Another instance is running — focusing it and exiting');
+    app.quit();
+    return;
+  }
+  
   app.on('second-instance', () => {
+    // Focus the existing window instead of doing nothing
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
   });
+} else {
+  log.info('[Main] Development mode detected — single-instance lock disabled');
 }
 
 function setupPaths() {
