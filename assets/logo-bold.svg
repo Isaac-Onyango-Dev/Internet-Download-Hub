@@ -1,0 +1,28 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4F46E5;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="40" y="40" width="432" height="432" rx="80" fill="url(#bgGradient)" />
+  
+  <!-- Simplified globe/world icon -->
+  <circle cx="256" cy="160" r="50" fill="none" stroke="white" stroke-width="12"/>
+  <path d="M206 160 Q256 120, 306 160" fill="none" stroke="white" stroke-width="12"/>
+  <path d="M206 160 Q256 200, 306 160" fill="none" stroke="white" stroke-width="12"/>
+  <line x1="256" y1="110" x2="256" y2="210" stroke="white" stroke-width="12"/>
+  
+  <!-- Bold download arrow -->
+  <path d="M256 240 L256 340 M210 290 L256 340 L302 290" 
+        stroke="#10B981" 
+        stroke-width="24" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        fill="none" />
+  
+  <!-- Download base -->
+  <rect x="170" y="360" width="172" height="24" rx="12" fill="#10B981" />
+</svg>

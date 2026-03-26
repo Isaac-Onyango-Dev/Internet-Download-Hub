@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', sans-serif;
+
+    /* Base Colors - Clean Dark Theme */
+    --background: 220 15% 10%;
+    --foreground: 0 0% 98%;
+
+    /* Bright Primary Accent (Blue) for clear calls to action */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Subtle Secondary text/elements */
+    --secondary: 220 15% 16%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* Card/Surface Colors - Solid and clear */
+    --card: 220 15% 13%;
+    --card-foreground: 0 0% 98%;
+    
+    --popover: 220 15% 13%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Muted / Neutral Elements */
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 10% 65%;
+
+    --accent: 220 15% 20%;
+    --accent-foreground: 0 0% 98%;
+
+    /* Utilities - Standard Red for Danger/Cancel */
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 16%;
+    --ring: 217 91% 60%; 
+
+    --radius: 0.75rem;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight text-white;
+  }
+}
+
+@layer utilities {
+  /* Minimal glass effect for sidebars/headers, without heavy glow */
+  .glass-panel {
+    @apply bg-card/90 backdrop-blur-md border border-white/5 shadow-sm;
+  }
+
+  /* Clear button styling */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-medium transition-colors;
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+  }
+}
