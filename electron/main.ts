@@ -216,14 +216,8 @@ async function downloadFFmpeg() {
 
     log.info('[Main] Starting FFmpeg download from:', ffmpegUrl);
     
-    // Download the file
-    const response = await fetch(ffmpegUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to download FFmpeg: ${response.statusText}`);
-    }
-
-    const buffer = await response.arrayBuffer();
-    fs.writeFileSync(zipPath, Buffer.from(buffer));
+    // Download the file using disk streaming to prevent memory hang
+    await downloadFile(ffmpegUrl, zipPath);
     
     // Extract only ffmpeg.exe from zip
     const tempDir = path.join(binariesPath, 'temp_ffmpeg_extract');
@@ -949,7 +943,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
           return;
         }
         if (res.statusCode !== 200) {
-          reject(new Error(`Failed to download yt-dlp binary: HTTP ${res.statusCode}`));
+          reject(new Error(`Failed to download file (HTTP ${res.statusCode}): ${url}`));
           return;
         }
         const file = fs.createWriteStream(dest);
