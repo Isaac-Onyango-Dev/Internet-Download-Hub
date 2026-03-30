@@ -3562,60 +3562,6 @@ function setupIpcHandlers() {
     processQueue();
     return { id: downloadId };
   });
-  import_electron.ipcMain.handle("add-playlist-to-queue", async (_, payload) => {
-    const { entries, options } = payload;
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error("No entries provided for playlist queue");
-    }
-    const basePath = options.savePath || getDefaultSavePath();
-    const playlistFolderName = (options.playlistTitle || "Playlist").replace(/[<>:"/\\|?*]/g, "").trim().slice(0, 100);
-    const saveFolder = options.createFolder !== false ? import_path.default.join(basePath, playlistFolderName) : basePath;
-    if (!import_fs3.default.existsSync(saveFolder)) {
-      import_fs3.default.mkdirSync(saveFolder, { recursive: true });
-    }
-    const added = [];
-    const skipped = [];
-    for (const entry of entries) {
-      const url = typeof entry.url === "string" ? entry.url.trim() : "";
-      if (!url) {
-        skipped.push(entry.index);
-        continue;
-      }
-      const rawTitle = entry.title || `Video ${entry.index}`;
-      const cleanTitle = rawTitle.replace(/[<>:"/\\|?*]/gi, "_").slice(0, 100);
-      const filename = `${String(entry.index).padStart(3, "0")} - ${cleanTitle}.mp4`;
-      const outputPath = import_path.default.join(saveFolder, filename);
-      const existing = allQuery(
-        db,
-        "SELECT id FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')",
-        [url]
-      );
-      if (existing.length > 0) {
-        skipped.push(entry.index);
-        continue;
-      }
-      db.run(
-        `INSERT INTO downloads (url, filename, thumbnail, format_id, state, save_path, playlist_title, playlist_index, playlist_total)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
-        [
-          url,
-          filename,
-          entry.thumbnail ?? null,
-          "bestvideo+bestaudio",
-          outputPath,
-          playlistFolderName,
-          entry.index,
-          entries.length
-        ]
-      );
-      const row = getQuery(db, "SELECT last_insert_rowid() as id");
-      added.push(row.id);
-    }
-    saveDatabase(db);
-    processQueue();
-    import_electron_log2.default.info(`[add-playlist-to-queue] Added ${added.length}, skipped ${skipped.length}`);
-    return { added: added.length, skipped: skipped.length };
-  });
   import_electron.ipcMain.handle("restart-download", async (_, id) => {
     const dl = getQuery(db, "SELECT * FROM downloads WHERE id = ?", [id]);
     if (!dl) throw new Error("Download not found");

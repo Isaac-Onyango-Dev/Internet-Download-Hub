@@ -1375,76 +1375,7 @@ function setupIpcHandlers() {
     return { id: downloadId };
   });
 
-  // ── add-playlist-to-queue ─────────────────────────────────────────────────
-  // Called when the user confirms a playlist selection in the PlaylistDialog.
-  // `entries` is the filtered list the user chose; each needs its own download row.
-  ipcMain.handle('add-playlist-to-queue', async (_: any, payload: {
-    entries: Array<{ url: string; title: string; thumbnail?: string; index: number }>;
-    options: { savePath?: string; createFolder?: boolean; playlistTitle?: string };
-  }) => {
-    const { entries, options } = payload;
-    if (!Array.isArray(entries) || entries.length === 0) {
-      throw new Error('No entries provided for playlist queue');
-    }
-
-    const basePath = options.savePath || getDefaultSavePath();
-    const playlistFolderName = (options.playlistTitle || 'Playlist')
-      .replace(/[<>:"/\\|?*]/g, '')
-      .trim()
-      .slice(0, 100);
-
-    const saveFolder = options.createFolder !== false
-      ? path.join(basePath, playlistFolderName)
-      : basePath;
-
-    if (!fs.existsSync(saveFolder)) {
-      fs.mkdirSync(saveFolder, { recursive: true });
-    }
-
-    const added: number[] = [];
-    const skipped: number[] = [];
-
-    for (const entry of entries) {
-      const url = typeof entry.url === 'string' ? entry.url.trim() : '';
-      if (!url) { skipped.push(entry.index); continue; }
-
-      const rawTitle = entry.title || `Video ${entry.index}`;
-      const cleanTitle = rawTitle.replace(/[<>:"/\\|?*]/gi, '_').slice(0, 100);
-      const filename = `${String(entry.index).padStart(3, '0')} - ${cleanTitle}.mp4`;
-      const outputPath = path.join(saveFolder, filename);
-
-      // Skip duplicates already in the queue
-      const existing = allQuery(
-        db,
-        "SELECT id FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')",
-        [url]
-      );
-      if (existing.length > 0) { skipped.push(entry.index); continue; }
-
-      db.run(
-        `INSERT INTO downloads (url, filename, thumbnail, format_id, state, save_path, playlist_title, playlist_index, playlist_total)
-         VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
-        [
-          url,
-          filename,
-          entry.thumbnail ?? null,
-          'bestvideo+bestaudio',
-          outputPath,
-          playlistFolderName,
-          entry.index,
-          entries.length,
-        ]
-      );
-      const row = getQuery(db, 'SELECT last_insert_rowid() as id');
-      added.push(row.id);
-    }
-
-    saveDatabase(db);
-    processQueue();
-    log.info(`[add-playlist-to-queue] Added ${added.length}, skipped ${skipped.length}`);
-    return { added: added.length, skipped: skipped.length };
-  });
-
+  
   // ── restart-download ──────────────────────────────────────────────────────
 
   ipcMain.handle('restart-download', async (_: any, id: number) => {
