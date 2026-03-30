@@ -50,7 +50,7 @@ Internet Download Hub supports downloading from **1000+ websites**, including:
 
 | Downloader | Active Queue | Empty Queue | Settings |
 |:---:|:---:|:---:|:---:|
-| ![Downloader](https://raw.githubusercontent.com/Isaac-Onyango-Dev/Internet-Download-Hub/main/docs/screenshots/downloader.jpg) | ![Active Queue](https://raw.githubusercontent.com/Isaac-Onyango-Dev/Internet-Download-Hub/main/docs/screenshots/queue.jpg) | ![Empty Queue](https://raw.githubusercontent.com/Isaac-Onyango-Dev/Internet-Download-Hub/main/docs/screenshots/queue2.jpg) | ![Settings](https://raw.githubusercontent.com/Isaac-Onyango-Dev/Internet-Download-Hub/main/docs/screenshots/settings.jpg) |
+| ![Downloader](docs/screenshots/downloader.jpg) | ![Active Queue](docs/screenshots/queue.jpg) | ![Empty Queue](docs/screenshots/queue2.jpg) | ![Settings](docs/screenshots/settings.jpg) |
 
 ## Features
 
