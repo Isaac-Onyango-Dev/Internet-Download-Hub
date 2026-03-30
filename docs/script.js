@@ -262,8 +262,8 @@ async function loadReleaseInfo() {
       const shieldStyleTotal = sumAllAssetDownloads(allReleases)
       const installerTotal = sumInstallerDownloads(allReleases)
       console.log('[IDH] Sum all assets (Shields-style):', shieldStyleTotal, 'installer .exe only:', installerTotal)
-      // Prefer installer-only for the landing page; falls back to all-assets if no exe rows (older releases)
-      const displayTotal = installerTotal > 0 ? installerTotal : shieldStyleTotal
+      // Use shieldStyleTotal to match the GitHub repository's total download count
+      const displayTotal = shieldStyleTotal
       updateDownloadCounter(displayTotal)
     } else {
       console.warn('[IDH] Could not fetch all releases:', status)
@@ -287,7 +287,7 @@ function updateDownloadCounter(count) {
   if (el) {
     el.textContent =
       count > 0
-        ? `${count.toLocaleString()}+`
+        ? count.toLocaleString()
         : 'Be the first!'
     console.log('[IDH] Counter updated to:', count)
   }
@@ -351,7 +351,7 @@ async function fetchDownloadCount() {
     if (ok && allReleases.length >= 0) {
       const shieldStyleTotal = sumAllAssetDownloads(allReleases)
       const installerTotal = sumInstallerDownloads(allReleases)
-      const displayTotal = installerTotal > 0 ? installerTotal : shieldStyleTotal
+      const displayTotal = shieldStyleTotal
       updateDownloadCounter(displayTotal)
       console.log('[IDH] Download count refreshed:', displayTotal)
     } else {
