@@ -2228,17 +2228,25 @@ var YT_DLP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 function buildYtDlpJsonArgs(url, cookiesFile, youtubeClient) {
   return [
     "-J",
+    // Output JSON format
     "--no-warnings",
+    // Suppress warnings
     "--user-agent",
     YT_DLP_UA,
+    // Set user agent
     "--add-header",
     "Accept-Language:en-US,en;q=0.9",
+    // Set language header
     ...ytDlpCommonArgs(url, {
+      // Common yt-dlp arguments
       noPlaylist: true,
+      // Don't extract playlists
       ...youtubeClient !== void 0 ? { youtubePlayerClient: youtubeClient } : {}
     }),
     ...ytDlpCookiesArgs(cookiesFile),
+    // Add cookies if available
     url
+    // Target URL
   ];
 }
 function parseYtDlpJsonStdout(stdout, pageUrl) {
@@ -2280,6 +2288,7 @@ async function runStreamlink(url, streamlinkPath2) {
     title: info.metadata?.title || "Live Stream",
     thumbnail: info.metadata?.thumbnail || "",
     duration: 0,
+    // Live streams have no duration
     uploader: info.metadata?.author || new URL(url).hostname,
     extractionMethod: "streamlink",
     formats: [{
@@ -2287,6 +2296,7 @@ async function runStreamlink(url, streamlinkPath2) {
       label: "Live Stream (Best)",
       quality: "best",
       ext: "ts",
+      // Typical live stream format
       filesize: null,
       height: null
     }]
@@ -2305,6 +2315,7 @@ async function runGalleryDl(url, galleryDlPath2) {
     title: "Image Gallery",
     thumbnail: Array.isArray(info) ? info[0]?.url || "" : "",
     duration: 0,
+    // Images have no duration
     uploader: new URL(url).hostname,
     extractionMethod: "gallery-dl",
     formats: [{
@@ -2312,6 +2323,7 @@ async function runGalleryDl(url, galleryDlPath2) {
       label: "Full Quality Gallery",
       quality: "best",
       ext: "zip",
+      // Typically downloaded as archive
       filesize: null,
       height: null
     }]
@@ -2608,11 +2620,17 @@ function checkBinaries() {
   setupPaths();
   const binaries = [
     { name: "yt-dlp", path: ytDlpPath },
+    // Main video downloader
     { name: "ffmpeg", path: ffmpegPath },
+    // Video/audio processing
     { name: "ffprobe", path: ffprobePath },
+    // Media analysis
     { name: "streamlink", path: streamlinkPath },
+    // Live streaming
     { name: "N_m3u8DL-RE", path: n_m3u8dlPath },
+    // HLS/DASH streams
     { name: "gallery-dl", path: galleryDlPath }
+    // Image galleries
   ];
   import_electron_log2.default.info("[MAIN] === BINARY VERIFICATION ===");
   import_electron_log2.default.info("[MAIN] Binaries path:", binariesPath);

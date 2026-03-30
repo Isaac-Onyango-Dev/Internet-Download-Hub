@@ -1,20 +1,38 @@
-import log from 'electron-log';
-import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, powerSaveBlocker, Notification } from 'electron';
-import path from 'path';
-import { spawn, ChildProcess } from 'child_process';
-import execa from 'execa';
-import { extractPlaylistInfo, extractVideoInfo } from './extractor';
-import fs from 'fs';
-import os from 'os';
-import https from 'https';
-import { promisify } from 'util';
-import zlib from 'zlib';
-import initSqlJs from 'sql.js';
-import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors';
-import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
+// ============================================================================
+// INTERNET DOWNLOAD HUB - MAIN PROCESS
+// ============================================================================
+// This is the main Electron process that handles:
+// - Application lifecycle and window management
+// - Download queue management and execution
+// - IPC (Inter-Process Communication) with the renderer process
+// - System tray integration
+// - Database operations for download history
+// - Binary tool management (yt-dlp, ffmpeg, etc.)
+// ============================================================================
 
-log.transports.file.level = 'debug';
-log.catchErrors();
+// Import core Electron modules for desktop app functionality
+import log from 'electron-log';                    // Logging utility
+import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, powerSaveBlocker, Notification } from 'electron';
+import path from 'path';                           // File path utilities
+import { spawn, ChildProcess } from 'child_process'; // Process spawning for downloads
+import execa from 'execa';                       // Better process execution
+import { extractPlaylistInfo, extractVideoInfo } from './extractor'; // Video metadata extraction
+import fs from 'fs';                              // File system operations
+import os from 'os';                              // Operating system utilities
+import https from 'https';                        // HTTP requests for FFmpeg download
+import { promisify } from 'util';                 // Utility for promise conversion
+import zlib from 'zlib';                          // Compression for FFmpeg download
+import initSqlJs from 'sql.js';                   // In-memory database
+import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors'; // Error handling
+import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args'; // yt-dlp configuration
+
+// ============================================================================
+// LOGGING CONFIGURATION
+// ============================================================================
+// Configure electron-log for debugging and error tracking
+log.transports.file.level = 'debug';  // Log everything to file
+log.catchErrors();                    // Catch unhandled exceptions
+
 try {
   const fileTransport = log.transports.file as { getFile?: () => { path?: string } };
   const p = fileTransport.getFile?.()?.path;
@@ -23,39 +41,70 @@ try {
   log.info('[Main] electron-log initialized');
 }
 
+// ============================================================================
+// GLOBAL STATE VARIABLES
+// ============================================================================
+
+// Database file path for storing download history and settings
 let DB_PATH: string;
+
+// Flag to indicate we're running in Electron environment
 process.env.VITE_ELECTRON = 'true';
 
-let mainWindow: any = null;
-let tray: any = null;
-let db: any;
+// Main application window and system tray references
+let mainWindow: any = null;    // Primary browser window
+let tray: any = null;          // System tray icon
+let db: any;                   // SQL.js database instance
+
+// Active download tasks management
+// Maps download ID to process information for tracking and control
 const activeTasks = new Map<number, {
-  process: ChildProcess;
-  url: string;
-  formatArg: string;
-  outputTemplate: string;
-  savePath: string;
-  filePath?: string;
+  process: ChildProcess;      // The actual download process
+  url: string;                // Download URL
+  formatArg: string;           // Video format argument (e.g., 'bestvideo+bestaudio')
+  outputTemplate: string;      // Output filename template
+  savePath: string;            // Where the file will be saved
+  filePath?: string;           // Full path to the downloaded file (when available)
 }>();
+
+// Track why tasks were stopped (for proper UI state management)
 const taskStopReasons = new Map<number, 'paused' | 'cancelled'>();
+
+// Power management: prevent sleep during downloads
 let powerSaveBlockerId: number | null = null;
+
+// UI behavior flag for close-to-tray functionality
 let minimizeToTray = false; // toggled by close event (always on for now)
 
-let isDev: boolean;
-let isTest: boolean;
-let binariesPath: string;
-let ytDlpPath: string;
-let ffmpegPath: string;
-let ffprobePath: string;
-let streamlinkPath: string;
-let n_m3u8dlPath: string;
-let galleryDlPath: string;
+// ============================================================================
+// ENVIRONMENT AND PATH CONFIGURATION
+// ============================================================================
 
-// ── Single Instance Lock ─────────────────────────────────────────────────────
+// Environment detection flags
+let isDev: boolean;           // True when running in development mode
+let isTest: boolean;         // True when running tests
+
+// Binary tool paths (yt-dlp, ffmpeg, etc.)
+let binariesPath: string;    // Base path for all binary tools
+let ytDlpPath: string;       // Path to yt-dlp executable
+let ffmpegPath: string;      // Path to ffmpeg executable
+let ffprobePath: string;     // Path to ffprobe executable
+let streamlinkPath: string;  // Path to streamlink executable
+let n_m3u8dlPath: string;    // Path to N_m3u8DL-RE executable
+let galleryDlPath: string;   // Path to gallery-dl executable
+
+// ============================================================================
+// SINGLE INSTANCE MANAGEMENT
+// ============================================================================
+// Prevent multiple instances of the app from running simultaneously
 // Only enforce single instance in production - allow multiple dev runs
 // Initialize isDev here since it's used before setupPaths() is called
 isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+/**
+ * Sets up single instance lock to prevent multiple app instances
+ * @returns {boolean} - True if app should continue, false if it should exit
+ */
 function initializeSingleInstanceLock(): boolean {
   if (!isDev) {
     // Production mode: enforce single instance
@@ -66,8 +115,8 @@ function initializeSingleInstanceLock(): boolean {
       return false; // Exit early
     }
     
+    // Handle second instance attempt by focusing existing window
     app.on('second-instance', () => {
-      // Focus the existing window instead of doing nothing
       if (mainWindow) {
         if (!mainWindow.isVisible()) mainWindow.show();
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -80,16 +129,30 @@ function initializeSingleInstanceLock(): boolean {
   return true; // Continue with startup
 }
 
+// ============================================================================
+// PATH CONFIGURATION AND BINARY MANAGEMENT
+// ============================================================================
+
+/**
+ * Configures paths for binary tools based on environment (dev vs production)
+ * In production: uses packaged resources, in dev: uses local binaries folder
+ */
 function setupPaths() {
   isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   isTest = process.env.NODE_ENV === 'test';
   
+  // Determine where to look for binaries based on environment
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
   binariesPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'binaries')
-    : path.join(process.cwd(), 'binaries');
+    ? path.join(process.resourcesPath, 'binaries')  // Packaged app resources
+    : path.join(process.cwd(), 'binaries');         // Development local files
 
-  // Binary resolution helper: check AppData first, then packaged resources
+  /**
+   * Binary resolution helper: checks user data first, then packaged resources
+   * This allows users to override bundled binaries with their own versions
+   * @param {string} name - The binary filename
+   * @returns {string} - Full path to the binary
+   */
   const getBinaryPath = (name: string) => {
     const userPath = path.join(userDataBinariesPath, name);
     if (fs.existsSync(userPath)) {
@@ -109,22 +172,33 @@ function setupPaths() {
   galleryDlPath = getBinaryPath('gallery-dl.exe');
 }
 
-// Check binaries on startup
+// ============================================================================
+// BINARY VERIFICATION SYSTEM
+// ============================================================================
+
+/**
+ * Checks availability of all required binary tools on startup
+ * Logs which tools are available and which are missing
+ * This helps users understand why certain features might not work
+ */
 function checkBinaries() {
   setupPaths();
+  
+  // List of all required binary tools with their display names and paths
   const binaries = [
-    { name: 'yt-dlp', path: ytDlpPath },
-    { name: 'ffmpeg', path: ffmpegPath },
-    { name: 'ffprobe', path: ffprobePath },
-    { name: 'streamlink', path: streamlinkPath },
-    { name: 'N_m3u8DL-RE', path: n_m3u8dlPath },
-    { name: 'gallery-dl', path: galleryDlPath },
+    { name: 'yt-dlp', path: ytDlpPath },        // Main video downloader
+    { name: 'ffmpeg', path: ffmpegPath },        // Video/audio processing
+    { name: 'ffprobe', path: ffprobePath },      // Media analysis
+    { name: 'streamlink', path: streamlinkPath }, // Live streaming
+    { name: 'N_m3u8DL-RE', path: n_m3u8dlPath }, // HLS/DASH streams
+    { name: 'gallery-dl', path: galleryDlPath }, // Image galleries
   ];
 
   log.info('[MAIN] === BINARY VERIFICATION ===');
   log.info('[MAIN] Binaries path:', binariesPath);
   log.info('[MAIN] App packaged:', app.isPackaged);
   
+  // Check each binary and report status
   let missingCount = 0;
   binaries.forEach(({ name, path }) => {
     if (fs.existsSync(path)) {
@@ -140,10 +214,12 @@ function checkBinaries() {
     log.warn(`[MAIN] ${missingCount} binaries missing. Some features may not work.`);
   }
 
+  // Additional environment information for debugging
   log.info(`[Main] isDev: ${isDev}`);
   log.info(`[Main] isPackaged: ${app.isPackaged}`);
   log.info('[MAIN] Default save path:', app.getPath('downloads'));
 
+  // User-friendly status display with emojis
   binaries.forEach(bin => {
     if (fs.existsSync(bin.path)) {
       log.info(`✅ ${bin.name} found at: ${bin.path}`);
@@ -154,10 +230,18 @@ function checkBinaries() {
   log.info('------------------------');
 }
 
-// ── FFmpeg On-Demand Download ─────────────────────────────────────────
+// ============================================================================
+// FFMPEG ON-DEMAND DOWNLOAD SYSTEM
+// ============================================================================
+// FFmpeg is required for high-quality video merging and audio extraction
+// To keep the app size small, we download it on-demand when first needed
 
+/**
+ * Checks if FFmpeg is available either in userData binaries or packaged resources
+ * @returns {boolean} - True if FFmpeg executable exists
+ */
 function isFFmpegAvailable(): boolean {
-  // Check if FFmpeg exists in userData binaries
+  // Check if FFmpeg exists in userData binaries (user-installed)
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
   const userFFmpegPath = path.join(userDataBinariesPath, 'ffmpeg.exe');
   
@@ -1362,6 +1446,12 @@ function setupIpcHandlers() {
       throw new Error('This video is already in your download queue.');
     }
 
+    // Pre-flight disk space check: ensure at least 50MB of free space
+    const freeSpace = await getFreeSpace(saveFolder);
+    if (freeSpace < 50 * 1024 * 1024) {
+      throw new Error('Insufficient disk space. Please free up some space before downloading.');
+    }
+
     db.run(`
       INSERT INTO downloads (url, filename, thumbnail, duration, uploader, format_id, state, save_path)
       VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
@@ -2016,6 +2106,7 @@ function spawnDownload(
     '--merge-output-format', 'mp4',
     '--ffmpeg-location', ffmpegPath,
     '-o', outputTemplate,
+    '--',
     url
   ];
 

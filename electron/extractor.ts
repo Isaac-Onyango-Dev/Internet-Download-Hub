@@ -1,3 +1,16 @@
+// ============================================================================
+// VIDEO METADATA EXTRACTION SYSTEM
+// ============================================================================
+// This module handles extracting video information from various sources using
+// multiple extraction engines (yt-dlp, streamlink, playwright, etc.)
+//
+// It provides a unified interface for:
+// - Video metadata extraction (title, duration, formats, etc.)
+// - Playlist information extraction
+// - Fallback extraction methods for difficult sites
+// - Format standardization and validation
+// ============================================================================
+
 import fs from 'fs';
 import path from 'path';
 import execa from 'execa';
@@ -7,44 +20,81 @@ import log from 'electron-log';
 import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args';
 import { isLikelyYoutubeAgeRestrictionError } from './errors';
 
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * Standardized video information structure returned by all extraction engines
+ */
 export interface VideoInfo {
-  // The URL that yt-dlp should download from (must be defined to persist to SQLite).
+  /** The URL that yt-dlp should download from (must be defined to persist to SQLite) */
   url: string
+  /** Video title */
   title: string
+  /** Thumbnail image URL */
   thumbnail: string
+  /** Video duration in seconds */
   duration: number
+  /** Channel/uploader name */
   uploader: string
+  /** Available video formats for download */
   formats: VideoFormat[]
+  /** Extracted URL if different from input (e.g., from playwright) */
   extractedUrl?: string
+  /** Which extraction engine was used */
   extractionMethod: Engine;
 }
 
+/**
+ * Video format information for download selection
+ */
 export interface VideoFormat {
+  /** Format identifier used by yt-dlp */
   formatId: string
+  /** Human-readable format label */
   label: string
+  /** Quality description (e.g., '720p', 'best') */
   quality: string
+  /** File extension */
   ext: string
+  /** File size in bytes (null if unknown) */
   filesize: number | null
+  /** Video height in pixels (null for audio-only) */
   height: number | null
 }
 
+// ============================================================================
+// MAIN EXTRACTION FUNCTIONS
+// ============================================================================
+
+/**
+ * Extracts video information using multiple engines in priority order
+ * Tries each engine until one succeeds, providing robust fallback support
+ * 
+ * @param url - Video URL to extract information from
+ * @param paths - Paths to binary tools and optional cookies file
+ * @returns Promise with video info (single video or array for playlists)
+ */
 export async function extractVideoInfo(
   url: string,
   paths: {
-    ytDlp: string;
-    ffmpeg: string;
-    streamlink: string;
-    nm3u8dl: string;
-    galleryDl: string;
+    ytDlp: string;              // Path to yt-dlp executable
+    ffmpeg: string;             // Path to ffmpeg executable
+    streamlink: string;         // Path to streamlink executable
+    nm3u8dl: string;            // Path to N_m3u8DL-RE executable
+    galleryDl: string;          // Path to gallery-dl executable
     /** Netscape cookies file (e.g. exported from browser) — optional */
     cookiesFile?: string | null;
   }
 ): Promise<VideoInfo | VideoInfo[]> {
+  // Analyze URL to determine which engines to try and in what order
   const { engineOrder } = analyseUrl(url);
   log.info(`[Extractor] Engine order for ${url}: ${engineOrder.join(', ')}`);
 
   let lastError: any = null;
 
+  // Try each engine in order until one succeeds
   for (const engine of engineOrder) {
     try {
       log.info(`[Extractor] Trying engine: ${engine}...`);
@@ -78,54 +128,89 @@ export async function extractVideoInfo(
     }
   }
 
+  // If all engines failed, throw the last error
   throw lastError || new Error('All extraction engines failed.');
 }
 
+// ============================================================================
+// YT-DLP ENGINE IMPLEMENTATION
+// ============================================================================
+
+// User agent string to mimic Chrome browser for better compatibility
 const YT_DLP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
+/**
+ * Builds command-line arguments for yt-dlp JSON extraction
+ * @param url - URL to extract from
+ * @param cookiesFile - Optional cookies file path
+ * @param youtubeClient - YouTube player client for age-restricted content
+ * @returns Array of command-line arguments
+ */
 function buildYtDlpJsonArgs(
   url: string,
   cookiesFile: string | null | undefined,
   youtubeClient?: YoutubePlayerClient
 ): string[] {
   return [
-    '-J',
-    '--no-warnings',
-    '--user-agent',
-    YT_DLP_UA,
-    '--add-header',
-    'Accept-Language:en-US,en;q=0.9',
-    ...ytDlpCommonArgs(url, {
-      noPlaylist: true,
+    '-J',                              // Output JSON format
+    '--no-warnings',                   // Suppress warnings
+    '--user-agent', YT_DLP_UA,         // Set user agent
+    '--add-header', 'Accept-Language:en-US,en;q=0.9', // Set language header
+    ...ytDlpCommonArgs(url, {          // Common yt-dlp arguments
+      noPlaylist: true,                // Don't extract playlists
       ...(youtubeClient !== undefined ? { youtubePlayerClient: youtubeClient } : {}),
     }),
-    ...ytDlpCookiesArgs(cookiesFile),
-    url,
+    ...ytDlpCookiesArgs(cookiesFile),  // Add cookies if available
+    '--',                              // Prevent parameter injection
+    url,                               // Target URL
   ]
 }
 
+/**
+ * Parses yt-dlp JSON output into standardized VideoInfo format
+ * Handles both single videos and playlists
+ * @param stdout - JSON output from yt-dlp
+ * @param pageUrl - Original URL for fallback
+ * @returns VideoInfo or array of VideoInfo for playlists
+ */
 function parseYtDlpJsonStdout(stdout: string, pageUrl: string): VideoInfo | VideoInfo[] {
   const info = JSON.parse(stdout)
+  
+  // Check if this is a playlist
   if (info._type === 'playlist' && Array.isArray(info.entries)) {
     return info.entries.map((entry: any) =>
       parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, pageUrl)
     )
   }
+  
+  // Single video
   return parseYtDlpInfo(info, pageUrl)
 }
 
+/**
+ * Executes yt-dlp for video information extraction
+ * Handles age-restricted YouTube content by retrying with different client
+ * @param url - Video URL to extract
+ * @param ytDlpPath - Path to yt-dlp executable
+ * @param cookiesFile - Optional cookies file path
+ * @returns Promise with video info
+ */
 async function runYtDlp(
   url: string,
   ytDlpPath: string,
   cookiesFile?: string | null
 ): Promise<VideoInfo | VideoInfo[]> {
   if (!fs.existsSync(ytDlpPath)) throw new Error('yt-dlp not found')
+  
   try {
+    // First attempt with standard settings
     const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, cookiesFile), { timeout: 120000 })
     return parseYtDlpJsonStdout(result.stdout, url)
   } catch (err: any) {
     const stderr = String(err.stderr ?? err.message ?? '')
+    
+    // Special handling for YouTube age-restricted content
     if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
       log.info('[Extractor] Retrying yt-dlp info with youtube:player_client=tv_embedded')
       const result = await execa(ytDlpPath, buildYtDlpJsonArgs(url, cookiesFile, 'tv_embedded'), {
@@ -133,17 +218,30 @@ async function runYtDlp(
       })
       return parseYtDlpJsonStdout(result.stdout, url)
     }
+    
     throw err
   }
 }
 
+// ============================================================================
+// OTHER EXTRACTION ENGINES
+// ============================================================================
+
+/**
+ * Extracts live stream information using streamlink
+ * @param url - Live stream URL
+ * @param streamlinkPath - Path to streamlink executable
+ * @returns Promise with stream video info
+ */
 async function runStreamlink(url: string, streamlinkPath: string): Promise<VideoInfo> {
   if (!fs.existsSync(streamlinkPath)) throw new Error('streamlink not found');
-  const result = await execa(streamlinkPath, [url, '--json'], { timeout: 30000 });
+  
+  const result = await execa(streamlinkPath, ['--json', '--', url], { timeout: 30000 });
   const info = JSON.parse(result.stdout);
   
   if (info.error) throw new Error(info.error);
   
+  // Get the best available stream
   const streams = info.streams || {};
   const bestStream = streams.best || Object.values(streams)[0] as any;
   if (!bestStream) throw new Error('No streams found for this URL.');
@@ -152,44 +250,60 @@ async function runStreamlink(url: string, streamlinkPath: string): Promise<Video
     url,
     title: info.metadata?.title || 'Live Stream',
     thumbnail: info.metadata?.thumbnail || '',
-    duration: 0,
+    duration: 0, // Live streams have no duration
     uploader: info.metadata?.author || new URL(url).hostname,
     extractionMethod: 'streamlink',
     formats: [{
       formatId: 'best',
       label: 'Live Stream (Best)',
       quality: 'best',
-      ext: 'ts',
+      ext: 'ts', // Typical live stream format
       filesize: null,
       height: null
     }]
   };
 }
 
+/**
+ * Placeholder for N_m3u8DL-RE extraction engine
+ * Currently only used as a download engine, not for metadata extraction
+ * @param url - HLS/DASH stream URL
+ * @param nm3u8dlPath - Path to N_m3u8DL-RE executable
+ * @returns Promise with video info (not implemented)
+ */
 async function runNm3u8dl(url: string, nm3u8dlPath: string): Promise<VideoInfo> {
   if (!fs.existsSync(nm3u8dlPath)) throw new Error('N_m3u8DL-RE not found');
+  
   // N_m3u8DL-RE is more of a downloader than an extractor, but we can use it to probe manifests
   // For simplicity, we'll treat it as a fallback that playwright might feed manifest URLs to
   throw new Error('N_m3u8DL-RE extraction not fully implemented — use as download engine only.');
 }
 
+/**
+ * Extracts image gallery information using gallery-dl
+ * @param url - Gallery URL (Twitter, Instagram, etc.)
+ * @param galleryDlPath - Path to gallery-dl executable
+ * @returns Promise with gallery info
+ */
 async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoInfo> {
   if (!fs.existsSync(galleryDlPath)) throw new Error('gallery-dl not found');
-  const result = await execa(galleryDlPath, ['-j', url], { timeout: 30000 });
+  
+  const result = await execa(galleryDlPath, ['-j', '--', url], { timeout: 30000 });
   const info = JSON.parse(result.stdout);
+  
   // gallery-dl output depends on the site, but usually it's an array of image data
   return {
     url,
     title: 'Image Gallery',
     thumbnail: Array.isArray(info) ? (info[0]?.url || '') : '',
-    duration: 0,
+    duration: 0, // Images have no duration
     uploader: new URL(url).hostname,
     extractionMethod: 'gallery-dl',
     formats: [{
       formatId: 'best',
       label: 'Full Quality Gallery',
       quality: 'best',
-      ext: 'zip',
+      ext: 'zip', // Typically downloaded as archive
       filesize: null,
       height: null
     }]
@@ -225,7 +339,7 @@ async function execYtDlpPlaylistJson(
     args.push('--playlist-items', String(opts.playlistItemLimit))
   }
 
-  args.push(pageUrl)
+  args.push('--', pageUrl)
   return execa(ytDlpPath, args, { timeout: 120000 })
 }
 
@@ -409,6 +523,7 @@ async function extractWithPlaywright(
         '--no-warnings',
         ...ytDlpCommonArgs(bestUrl, { noPlaylist: true }),
         ...ytDlpCookiesArgs(cookiesFile),
+        '--',
         bestUrl
       ], { timeout: 15000 })
       const info = JSON.parse(result.stdout)

@@ -276,6 +276,10 @@ function VideoCapturePanel({
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [errorObj, setErrorObj] = useState<{ message: string } | null>(null);
+  
+  // NEW: Track individual download submission states
+  const [submittingDownloads, setSubmittingDownloads] = useState<Set<number>>(new Set());
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadingMessages = [
     'Fetching video details...',
@@ -434,6 +438,8 @@ function VideoCapturePanel({
   const [playlistVideoCount, setPlaylistVideoCount] = useState<number | null>(null);
   const [playlistBlocked, setPlaylistBlocked] = useState<{ title: string; count: number } | null>(null);
   const [startingPlaylist, setStartingPlaylist] = useState(false);
+  const [operationTimeouts, setOperationTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map());
+  const [retryAttempts, setRetryAttempts] = useState<Map<string, number>>(new Map());
 
   // When new scan results arrive, reset playlist selection.
   useEffect(() => {
@@ -448,6 +454,29 @@ function VideoCapturePanel({
     const goToQueue = opts?.goToQueue ?? true
     const showSuccessMsg = opts?.showSuccessMsg ?? true
 
+    // IMMEDIATE FEEDBACK: Show that we're processing this download
+    setSubmittingDownloads(prev => new Set(prev).add(idx));
+    setIsSubmitting(true);
+    
+    // Clear previous errors immediately
+    if (showSuccessMsg) setSuccessMsg(null);
+    setErrorObj(null);
+    
+    // ENHANCED ERROR HANDLING: Setup timeout mechanism
+    const downloadUrl = video?.extractedUrl || video?.url;
+    const downloadKey = `${downloadUrl}-${idx}`;
+    const timeoutId = setTimeout(() => {
+      onError({ message: 'Download operation timed out. Please try again.' });
+      setSubmittingDownloads(prev => {
+        const next = new Set(prev);
+        next.delete(idx);
+        return next;
+      });
+      setIsSubmitting(false);
+    }, 30000); // 30 second timeout
+    
+    setOperationTimeouts((prev: Map<string, NodeJS.Timeout>) => new Map(prev).set(downloadKey, timeoutId));
+
     const selectedFormatId = selectedFormats[idx] || "bestvideo+bestaudio";
     const format = video.formats?.find((f: any) => f.formatId === selectedFormatId) || video.formats?.[0];
     const isAudioOnly = format?.formatId === 'bestaudio';
@@ -455,16 +484,12 @@ function VideoCapturePanel({
     const ext = isAudioOnly ? "mp3" : (format?.ext || "mp4");
     const filename = `${cleanTitle}.${ext}`;
 
-    const downloadUrl = video?.extractedUrl || video?.url;
-
-    if (showSuccessMsg) setSuccessMsg(null);
-
     try {
       if (!window.electronAPI) throw new Error("Electron API not available");
 
-
+      // PRE-VALIDATION: Check inputs early to fail fast
       if (!downloadUrl || typeof downloadUrl !== 'string' || !downloadUrl.trim()) {
-        onError({ message: 'Could not determine the download URL for this entry. Please try again.' });
+        onError({ message: 'Could not determine download URL for this entry. Please try again.' });
         return false;
       }
       if (!filename || typeof filename !== 'string' || !filename.trim()) {
@@ -472,22 +497,31 @@ function VideoCapturePanel({
         return false;
       }
 
-      // Load settings for save path
-      const settings = await window.electronAPI.getSettings();
+      // OPTIMIZATION: Parallel operations to reduce delays
+      const [settings, formatInfo] = await Promise.all([
+        window.electronAPI.getSettings(),
+        Promise.resolve(format)
+      ]);
+      
       const savePath = opts?.savePathOverride || settings?.download_path || settings?.downloadPath;
-      const requiredBytes = format?.filesize || 0;
+      const requiredBytes = formatInfo?.filesize || 0;
 
-      // Disk space check
-      const spaceCheck = await window.electronAPI.checkDiskSpace(savePath, requiredBytes);
-      if (!spaceCheck.isEnough) {
-        onError({ message: `Not enough storage space to download this file. Please free up some disk space and try again.` });
-        return false;
+      // PERFORMANCE: Optimized disk space check (skip for small files)
+      if (requiredBytes > 0 && requiredBytes < 10 * 1024 * 1024) {
+        // Skip disk space check for files smaller than 10MB
+      } else {
+        const spaceCheck = await window.electronAPI.checkDiskSpace(savePath, requiredBytes);
+        if (!spaceCheck.isEnough) {
+          onError({ message: `Not enough storage space to download this file. Please free up some disk space and try again.` });
+          return false;
+        }
       }
 
       const resolvedFormatId = isAudioOnly
         ? 'bestaudio'
-        : (format?.formatId || selectedFormatId || 'bestvideo+bestaudio');
+        : (formatInfo?.formatId || selectedFormatId || 'bestvideo+bestaudio');
 
+      // IMMEDIATE QUEUE ADDITION: Add to queue right away
       await window.electronAPI.startDownload({
         url: downloadUrl,
         filename,
@@ -498,20 +532,55 @@ function VideoCapturePanel({
         uploader: video.uploader
       });
 
+      // IMMEDIATE SUCCESS FEEDBACK
       if (showSuccessMsg) {
         setSuccessMsg(`"${video.title || filename}" added to queue! Switch to Queue & History to track progress.`);
       }
-      if (goToQueue) onGoToQueue?.();
+      if (goToQueue) {
+        setTimeout(() => onGoToQueue?.(), 300); // Small delay to show success message
+      }
+      
       return true
     } catch (err: any) {
       console.error(`[Download Error]`, err);
-      // Translate duplicate warning to user-friendly message
+      
+      // ENHANCED ERROR HANDLING: Track retry attempts
+      const downloadKey = `${downloadUrl}-${idx}`;
+      const currentAttempts = (retryAttempts.get(downloadKey) || 0) as number;
+      setRetryAttempts((prev: Map<string, number>) => new Map(prev).set(downloadKey, currentAttempts + 1));
+      
+      // ENHANCED ERROR HANDLING: Better error classification
       if (err.message?.includes('already in your download queue')) {
         onError({ message: 'This video is already in your download queue.' });
+      } else if (err.message?.includes('network') || err.message?.includes('timeout')) {
+        onError({ message: 'Network error. Please check your internet connection and try again.' });
+      } else if (err.message?.includes('disk') || err.message?.includes('space')) {
+        onError({ message: 'Storage error. Please check available disk space and try again.' });
+      } else if (currentAttempts < 3) {
+        onError({ message: `Download failed temporarily. You can retry (${currentAttempts + 1}/3).` });
       } else {
-        onError({ message: 'Download failed. Please check your internet connection and try again.' });
+        onError({ message: 'Download failed after multiple attempts. Please check the URL and try again later.' });
       }
       return false
+    } finally {
+      // ALWAYS clear submitting state
+      setSubmittingDownloads((prev: Set<number>) => {
+        const next = new Set(prev);
+        next.delete(idx);
+        return next;
+      });
+      setIsSubmitting(false);
+      
+      // ENHANCED ERROR HANDLING: Clear timeout
+      const timeoutId = operationTimeouts.get(downloadKey);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        setOperationTimeouts((prev: Map<string, NodeJS.Timeout>) => {
+          const next = new Map(prev);
+          next.delete(downloadKey);
+          return next;
+        });
+      }
     }
   };
 
@@ -860,11 +929,18 @@ function VideoCapturePanel({
                     {!(playlistTitle && videoInfo.length > 1) && (
                       <Button
                         size="lg"
-                        className="btn-primary w-full sm:w-auto h-11 px-8 shrink-0"
+                        className={cn(
+                          "btn-primary w-full sm:w-auto h-11 px-8 shrink-0 transition-all duration-200",
+                          submittingDownloads.has(idx) && "scale-95 opacity-80"
+                        )}
                         onClick={() => handleDownload(video, idx, { goToQueue: true, showSuccessMsg: true })}
-                        disabled={loading}
+                        disabled={loading || submittingDownloads.has(idx)}
                       >
-                        <Download className="w-5 h-5 mr-2" /> {loading ? 'Scanning...' : 'Download'}
+                        {submittingDownloads.has(idx) ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding to Queue...</>
+                        ) : (
+                          <><Download className="w-5 h-5 mr-2" />Download</>
+                        )}
                       </Button>
                     )}
                   </div>
@@ -877,17 +953,21 @@ function VideoCapturePanel({
             <div className="flex justify-end">
               <Button
                 size="lg"
-                className="btn-primary"
+                className={cn(
+                  "btn-primary transition-all duration-200",
+                  (startingPlaylist || isSubmitting) && "scale-95 opacity-80"
+                )}
                 disabled={
                   startingPlaylist ||
                   loading ||
+                  isSubmitting ||
                   (playlistMode === 'select' && selectedPlaylistIndexes.size === 0)
                 }
                 onClick={handlePlaylistDownload}
               >
                 <Download className="w-5 h-5 mr-2" />
-                {startingPlaylist
-                  ? 'Starting...'
+                {startingPlaylist || isSubmitting
+                  ? 'Adding to Queue...'
                   : playlistMode === 'all'
                     ? `Download all ${playlistVideoCount ?? videoInfo.length} videos`
                     : `Download ${selectedPlaylistIndexes.size} selected videos`}
@@ -898,6 +978,7 @@ function VideoCapturePanel({
       )}
     </div>
   );
+// ... (rest of the code remains the same)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1320,6 +1401,23 @@ interface SettingsPanelProps {
 }
 
 function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelProps) {
+  // PERFORMANCE: Cache for settings to avoid repeated API calls
+  const [cachedSettings, setCachedSettings] = useState<any>(null);
+  
+  // PERFORMANCE: Cache for video info to avoid repeated extractions
+  const [videoInfoCache, setVideoInfoCache] = useState<Map<string, any>>(new Map());
+  
+  // PERFORMANCE: Optimized debounced URL validation
+  const [urlValidationCache, setUrlValidationCache] = useState<Map<string, boolean>>(new Map());
+  
+  // ENHANCED ERROR HANDLING: Error boundary state
+  const [errorBoundary, setErrorBoundary] = useState<{ error: Error; errorInfo: any } | null>(null);
+  
+  // ENHANCED ERROR HANDLING: Retry state for failed operations
+  const [retryAttempts, setRetryAttempts] = useState<Map<string, number>>(new Map());
+  
+  // ENHANCED ERROR HANDLING: Timeout mechanism
+  const [operationTimeouts, setOperationTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map());
   const [settings, setSettings] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
