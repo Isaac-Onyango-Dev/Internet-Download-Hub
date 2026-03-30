@@ -3421,6 +3421,19 @@ function getResolvedCookiesPath() {
   }
   return null;
 }
+function killProcessTree(pid) {
+  if (!pid) return;
+  try {
+    if (process.platform === "win32") {
+      const { execSync } = require("child_process");
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
+    } else {
+      process.kill(-pid, "SIGKILL");
+    }
+  } catch (err) {
+    import_electron_log2.default.warn("[Main] Failed to kill process tree for PID", pid);
+  }
+}
 function setupIpcHandlers() {
   import_electron.ipcMain.handle("fetch-video-info", async (_, rawUrl) => {
     import_electron_log2.default.info(`[IPC] fetch-video-info called for: ${rawUrl}`);
@@ -3608,7 +3621,7 @@ function setupIpcHandlers() {
     if (!dl) throw new Error("Download not found");
     const existing = activeTasks.get(id);
     if (existing) {
-      existing.process.kill();
+      killProcessTree(existing.process.pid);
       activeTasks.delete(id);
     }
     updateDownloadInDb(id, { state: "queued", error: null, received_bytes: 0 });
@@ -3622,7 +3635,7 @@ function setupIpcHandlers() {
       import_electron_log2.default.info("[PAUSE] Pausing job:", numericId);
       taskStopReasons.set(numericId, "paused");
       updateDownloadInDb(numericId, { state: "paused" });
-      job.process.kill("SIGTERM");
+      killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
       if (mainWindow) {
@@ -3649,7 +3662,7 @@ function setupIpcHandlers() {
     const existing = activeTasks.get(numericId);
     if (existing) {
       taskStopReasons.delete(numericId);
-      existing.process.kill();
+      killProcessTree(existing.process.pid);
       activeTasks.delete(numericId);
     }
     updateDownloadInDb(numericId, { state: "queued", error: null });
@@ -3663,7 +3676,7 @@ function setupIpcHandlers() {
       import_electron_log2.default.info("[CANCEL] Cancelling job:", numericId);
       taskStopReasons.set(numericId, "cancelled");
       updateDownloadInDb(numericId, { state: "cancelled" });
-      job.process.kill("SIGTERM");
+      killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
       try {
@@ -3701,7 +3714,7 @@ function setupIpcHandlers() {
     const job = activeTasks.get(Number(id));
     if (job) {
       taskStopReasons.set(Number(id), "cancelled");
-      job.process.kill("SIGTERM");
+      killProcessTree(job.process.pid);
       activeTasks.delete(Number(id));
       updatePowerSave();
     }
@@ -3786,13 +3799,19 @@ function setupIpcHandlers() {
   import_electron.ipcMain.handle("get-download-history", async () => {
     return allQuery(db, "SELECT * FROM downloads ORDER BY created_at DESC");
   });
-  import_electron.ipcMain.handle("clear-history", async () => {
-    activeTasks.forEach((job, id) => {
-      job.process.kill("SIGTERM");
-    });
-    activeTasks.clear();
-    updatePowerSave();
-    db.run("DELETE FROM downloads");
+  import_electron.ipcMain.handle("clear-history", async (_, type = "all") => {
+    if (type === "all") {
+      activeTasks.forEach((job) => {
+        killProcessTree(job.process.pid);
+      });
+      activeTasks.clear();
+      updatePowerSave();
+      db.run("DELETE FROM downloads");
+    } else if (type === "completed") {
+      db.run("DELETE FROM downloads WHERE state = 'completed'");
+    } else if (type === "failed") {
+      db.run("DELETE FROM downloads WHERE state = 'failed'");
+    }
     saveDatabase(db);
     return { success: true };
   });

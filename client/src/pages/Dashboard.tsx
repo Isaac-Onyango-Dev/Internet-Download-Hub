@@ -23,6 +23,12 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import React from "react";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -1211,14 +1217,20 @@ function HistoryPanel() {
     await window.electronAPI.openFolder(savePath)
   }
 
-  const handleClearHistory = async () => {
+  const handleClearHistory = async (type: 'all' | 'completed' | 'failed') => {
     if (!window.electronAPI) return;
-    const confirmed = window.confirm("Clear all download history? This cannot be undone.");
+    const confirmed = window.confirm(`Are you sure you want to clear ${type} downloads? This cannot be undone.`);
     if (!confirmed) return;
     setClearing(true);
     try {
-      await window.electronAPI.clearHistory();
-      setDownloads([]);
+      await window.electronAPI.clearHistory(type);
+      if (type === 'all') {
+        setDownloads([]);
+      } else if (type === 'completed') {
+        setDownloads(prev => prev.filter(d => d.status !== 'completed' && d.percent !== 100));
+      } else if (type === 'failed') {
+        setDownloads(prev => prev.filter(d => d.status !== 'failed'));
+      }
     } finally {
       setClearing(false);
     }
@@ -1241,15 +1253,29 @@ function HistoryPanel() {
           <h3 className="text-2xl font-bold">Download Queue</h3>
           <p className="text-muted-foreground mt-1">Manage and track your video downloads.</p>
         </div>
-        <Button
-          variant="outline"
-          className="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
-          onClick={handleClearHistory}
-          disabled={clearing || isLoading}
-        >
-          {clearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-          {clearing ? 'Clearing...' : 'Clear History'}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              className="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
+              disabled={clearing || isLoading}
+            >
+              {clearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              {clearing ? 'Clearing...' : 'Clear History'}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => handleClearHistory('completed')}>
+              Clear Completed
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleClearHistory('failed')}>
+              Clear Failed
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive focus:text-destructive font-medium" onClick={() => handleClearHistory('all')}>
+              Clear All
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ScrollArea className="h-[600px]">

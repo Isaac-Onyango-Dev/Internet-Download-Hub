@@ -1172,6 +1172,20 @@ function getResolvedCookiesPath(): string | null {
   return null;
 }
 
+function killProcessTree(pid: number | undefined) {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch (err) {
+    log.warn('[Main] Failed to kill process tree for PID', pid);
+  }
+}
+
 // ── IPC Handlers ─────────────────────────────────────────────────────────────
 function setupIpcHandlers() {
   // ── fetch-video-info ──────────────────────────────────────────────────────
@@ -1440,7 +1454,7 @@ function setupIpcHandlers() {
     // Kill existing process if any
     const existing = activeTasks.get(id);
     if (existing) {
-      existing.process.kill();
+      killProcessTree(existing.process.pid);
       activeTasks.delete(id);
     }
 
@@ -1459,7 +1473,7 @@ function setupIpcHandlers() {
       // Mark paused before killing to avoid race with process "close" handler.
       taskStopReasons.set(numericId, 'paused');
       updateDownloadInDb(numericId, { state: 'paused' });
-      job.process.kill('SIGTERM');
+      killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
       
@@ -1490,7 +1504,7 @@ function setupIpcHandlers() {
     const existing = activeTasks.get(numericId);
     if (existing) {
       taskStopReasons.delete(numericId);
-      existing.process.kill();
+      killProcessTree(existing.process.pid);
       activeTasks.delete(numericId);
     }
 
@@ -1507,7 +1521,7 @@ function setupIpcHandlers() {
       log.info('[CANCEL] Cancelling job:', numericId);
       taskStopReasons.set(numericId, 'cancelled');
       updateDownloadInDb(numericId, { state: 'cancelled' });
-      job.process.kill('SIGTERM');
+      killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
 
@@ -1552,7 +1566,7 @@ function setupIpcHandlers() {
     const job = activeTasks.get(Number(id));
     if (job) {
       taskStopReasons.set(Number(id), 'cancelled');
-      job.process.kill('SIGTERM');
+      killProcessTree(job.process.pid);
       activeTasks.delete(Number(id));
       updatePowerSave();
     }
@@ -1661,15 +1675,19 @@ function setupIpcHandlers() {
   });
 
   // ── clear-history ─────────────────────────────────────────────────────────
-  ipcMain.handle('clear-history', async () => {
-    // Stop any active tasks first
-    activeTasks.forEach((job, id) => {
-      job.process.kill('SIGTERM');
-    });
-    activeTasks.clear();
-    updatePowerSave();
-
-    db.run('DELETE FROM downloads');
+  ipcMain.handle('clear-history', async (_: any, type: 'all' | 'completed' | 'failed' = 'all') => {
+    if (type === 'all') {
+      activeTasks.forEach((job) => {
+        killProcessTree(job.process.pid);
+      });
+      activeTasks.clear();
+      updatePowerSave();
+      db.run('DELETE FROM downloads');
+    } else if (type === 'completed') {
+      db.run("DELETE FROM downloads WHERE state = 'completed'");
+    } else if (type === 'failed') {
+      db.run("DELETE FROM downloads WHERE state = 'failed'");
+    }
     saveDatabase(db);
     return { success: true };
   });

@@ -31,7 +31,7 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   checkDiskSpace: (path, requiredBytes) => import_electron.ipcRenderer.invoke("check-disk-space", { path, requiredBytes }),
   // ── History ───────────────────────────────────────────────────────────────
   getDownloadHistory: () => import_electron.ipcRenderer.invoke("get-download-history"),
-  clearHistory: () => import_electron.ipcRenderer.invoke("clear-history"),
+  clearHistory: (type = "all") => import_electron.ipcRenderer.invoke("clear-history", type),
   // ── Settings ──────────────────────────────────────────────────────────────
   getSettings: () => import_electron.ipcRenderer.invoke("get-settings"),
   saveSettings: (settings) => import_electron.ipcRenderer.invoke("save-settings", settings),

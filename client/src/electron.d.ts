@@ -80,7 +80,7 @@ declare global {
 
       // History
       getDownloadHistory: () => Promise<any[]>
-      clearHistory: () => Promise<{ success: boolean }>
+      clearHistory: (type?: 'all' | 'completed' | 'failed') => Promise<{ success: boolean }>
 
       // Settings
       getSettings: () => Promise<any>

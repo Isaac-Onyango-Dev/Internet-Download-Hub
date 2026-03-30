@@ -66,8 +66,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDownloadHistory: () =>
     ipcRenderer.invoke('get-download-history'),
 
-  clearHistory: () =>
-    ipcRenderer.invoke('clear-history'),
+  clearHistory: (type: 'all' | 'completed' | 'failed' = 'all') =>
+    ipcRenderer.invoke('clear-history', type),
 
   // ── Settings ──────────────────────────────────────────────────────────────
   getSettings: () =>

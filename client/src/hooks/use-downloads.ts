@@ -99,9 +99,9 @@ export function useResumeDownload() {
 export function useClearCompletedDownloads() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (type: 'all' | 'completed' | 'failed' = 'all') => {
       if (!window.electronAPI) return;
-      await window.electronAPI.clearHistory();
+      await window.electronAPI.clearHistory(type);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
   });
