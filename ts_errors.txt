@@ -1,0 +1,17 @@
+client/src/components/ui/calendar.tsx(55,9): error TS2353: Object literal may only specify known properties, and 'IconLeft' does not exist in type 'Partial<CustomComponents>'.
+client/src/components/ui/calendar.tsx(55,22): error TS7031: Binding element 'className' implicitly has an 'any' type.
+client/src/components/ui/calendar.tsx(58,23): error TS7031: Binding element 'className' implicitly has an 'any' type.
+client/src/components/ui/chart.tsx(119,7): error TS2339: Property 'payload' does not exist on type 'Omit<Omit<Props<ValueType, NameType>, PropertiesReadFromContext> & { active?: boolean | undefined; allowEscapeViewBox?: AllowInDimension | undefined; ... 24 more ...; wrapperStyle?: CSSProperties | undefined; } & ClassAttributes<...> & HTMLAttributes<...> & { ...; }, "ref">'.
+client/src/components/ui/chart.tsx(124,7): error TS2339: Property 'label' does not exist on type 'Omit<Omit<Props<ValueType, NameType>, PropertiesReadFromContext> & { active?: boolean | undefined; allowEscapeViewBox?: AllowInDimension | undefined; ... 24 more ...; wrapperStyle?: CSSProperties | undefined; } & ClassAttributes<...> & HTMLAttributes<...> & { ...; }, "ref">'.
+client/src/components/ui/chart.tsx(188,25): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/components/ui/chart.tsx(188,31): error TS7006: Parameter 'index' implicitly has an 'any' type.
+client/src/components/ui/chart.tsx(264,41): error TS2344: Type '"payload" | "verticalAlign"' does not satisfy the constraint '"string" | "method" | "style" | "clipPath" | "filter" | "mask" | "path" | "key" | "type" | "suppressHydrationWarning" | "className" | "id" | "lang" | "tabIndex" | "role" | "content" | ... 422 more ... | "onBBoxUpdate"'.
+  Type '"payload"' is not assignable to type '"string" | "method" | "style" | "clipPath" | "filter" | "mask" | "path" | "key" | "type" | "suppressHydrationWarning" | "className" | "id" | "lang" | "tabIndex" | "role" | "content" | ... 422 more ... | "onBBoxUpdate"'.
+client/src/components/ui/chart.tsx(275,19): error TS2339: Property 'length' does not exist on type '{}'.
+client/src/components/ui/chart.tsx(288,18): error TS2339: Property 'map' does not exist on type '{}'.
+client/src/components/ui/chart.tsx(288,23): error TS7006: Parameter 'item' implicitly has an 'any' type.
+client/src/components/ui/resizable.tsx(11,51): error TS2339: Property 'PanelGroup' does not exist on type 'typeof import("C:/Users/ISAAC/Downloads/Browser-Download-Hub/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+client/src/components/ui/resizable.tsx(12,23): error TS2339: Property 'PanelGroup' does not exist on type 'typeof import("C:/Users/ISAAC/Downloads/Browser-Download-Hub/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+client/src/components/ui/resizable.tsx(27,51): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/ISAAC/Downloads/Browser-Download-Hub/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+client/src/components/ui/resizable.tsx(30,23): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/ISAAC/Downloads/Browser-Download-Hub/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
+client/src/components/ui/resizable.tsx(42,24): error TS2339: Property 'PanelResizeHandle' does not exist on type 'typeof import("C:/Users/ISAAC/Downloads/Browser-Download-Hub/node_modules/react-resizable-panels/dist/react-resizable-panels")'.
