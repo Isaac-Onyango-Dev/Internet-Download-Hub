@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-04-01
+
+### Fixed
+
+- **Build Pipeline**: Corrected the FFmpeg/ffprobe download URLs in the build scripts which was causing the 1.0.6 release to fail during the binary acquisition phase.
+
+## [1.0.6] - 2026-04-01
+
+### Added
+
+- **Full Engine Suite Bundled**: The installer now includes **all** download engines: yt-dlp, FFmpeg, ffprobe, gallery-dl, streamlink, and N_m3u8DL-RE. No background downloads required for any video format.
+
+### Improved
+
+- **Rigorous Build Verification**: Expanded the release pipeline to verify the existence of all six engines before every build.
+
 ## [1.0.5] - 2026-04-01
 
 ### Added
@@ -36,42 +52,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Neutralized Parameter Injection vector where user-controlled URLs could leak command execution parameters into yt-dlp by explicitly enforcing positional flags with \`--\`.
+- Neutralized Parameter Injection vector where user-controlled URLs could leak command execution parameters into yt-dlp by explicitly enforcing positional flags with `--`.
 
 ### Fixed
 
 - Fixed silent failures during large batch downloads on full partitions by enforcing a 50MB minimal disk space buffer prior to initiating merging and download pipelines.
 
 ## [1.0.2] - 2026-03-30
-
-### Fixed
-
-- Fixed critical startup failure caused by duplicate IPC handler registration for 'add-playlist-to-queue' channel
-- Resolved application crash on launch with "Attempted to register a second handler" error
-- Maintained enhanced playlist functionality while removing duplicate code
-
-### Changed
-
-- Cleaned up duplicate IPC handler registrations in main process
-- Preserved more advanced playlist handler with video info extraction and format detection
-
-## [1.0.1] - 2026-03-30
-
-### Fixed
-
-- Fixed an issue where the download queue would indefinitely hang during the initial FFmpeg fetch by using direct background native stream routing to disk.
-- Fixed a bug on Windows where clicking Pause or Cancel left 'yt-dlp' descendant child-processes running out of control, causing UI states to sporadically break. Replaced it with a native 'taskkill' process-tree terminator.
-
-### Changed
-
-- Expanded the 'Clear Download History' UI from a generic action into a Dropdown menu that gives the user fine-tuned control (clear Completed, Failed, or All).
-
-## [1.0.0] - 2024-01-01
-
-### Added
-
-- Initial release
-- Video download support via yt-dlp
-- Playlist detection and download
-- Download queue management
-- Settings and preferences
+...

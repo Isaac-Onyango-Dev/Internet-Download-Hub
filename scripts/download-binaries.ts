@@ -29,13 +29,13 @@ const BINARIES = [
   },
   {
     name: 'ffmpeg.exe',
-    url: 'https://github.com/BtbN/ffmpeg-static-builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+    url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
     isZip: true,
     searchFile: 'ffmpeg.exe',
   },
   {
     name: 'ffprobe.exe',
-    url: 'https://github.com/BtbN/ffmpeg-static-builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+    url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
     isZip: true,
     searchFile: 'ffprobe.exe',
   },
