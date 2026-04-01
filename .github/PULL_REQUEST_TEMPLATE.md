@@ -17,7 +17,7 @@
 - [ ] Tested download functionality with:
   - [ ] YouTube
   - [ ] TikTok
-  - [ ] Other site (specify: __________)
+  - [ ] Other site (specify: \***\*\_\_\*\***)
 - [ ] Tested installer build with `npm run build:win`
 - [ ] No new TypeScript errors (`npm run check` passes)
 

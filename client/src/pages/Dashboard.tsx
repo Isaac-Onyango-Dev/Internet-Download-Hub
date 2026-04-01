@@ -1,37 +1,76 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { LayoutShell } from "@/components/layout-shell";
-import { useLocation } from "wouter";
-import { cn } from "@/lib/utils";
-import { useDownloads, usePauseDownload, useResumeDownload } from "@/hooks/use-downloads";
-import { useVideoDetect, type DetectedVideo, type PlaylistData } from "@/hooks/use-video-detect";
-import { PlaylistDialog, type PlaylistDialogData, type PlaylistEntry } from "@/components/playlist-dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { LayoutShell } from '@/components/layout-shell';
+import { useLocation } from 'wouter';
+import { cn } from '@/lib/utils';
+import { useDownloads, usePauseDownload, useResumeDownload } from '@/hooks/use-downloads';
+import { useVideoDetect, type DetectedVideo, type PlaylistData } from '@/hooks/use-video-detect';
 import {
-  Download, Image as ImageIcon, Settings, Loader2, Music, User, Trash2,
-  List, AlertCircle, PlayCircle, FolderOpen, Zap, RotateCcw, FileVideo,
-  ExternalLink, RefreshCw, CheckCircle2, XCircle, Pause, Play, Clock, X, ShieldCheck
-} from "lucide-react";
-import Support from "@/pages/Support";
-import { useDownloadProgress } from "@/hooks/use-ws-progress";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+  PlaylistDialog,
+  type PlaylistDialogData,
+  type PlaylistEntry,
+} from '@/components/playlist-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  Download,
+  Image as ImageIcon,
+  Settings,
+  Loader2,
+  Music,
+  User,
+  Trash2,
+  List,
+  AlertCircle,
+  PlayCircle,
+  FolderOpen,
+  Zap,
+  RotateCcw,
+  FileVideo,
+  ExternalLink,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  Pause,
+  Play,
+  Clock,
+  X,
+  ShieldCheck,
+} from 'lucide-react';
+import Support from '@/pages/Support';
+import { useDownloadProgress } from '@/hooks/use-ws-progress';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import React from "react";
+} from '@/components/ui/dropdown-menu';
+import React from 'react';
 
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -45,7 +84,9 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
         <Alert variant="destructive" className="m-8">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Component Crashed</AlertTitle>
-          <AlertDescription className="mt-2 font-mono text-xs">{this.state.error?.message}</AlertDescription>
+          <AlertDescription className="mt-2 font-mono text-xs">
+            {this.state.error?.message}
+          </AlertDescription>
         </Alert>
       );
     }
@@ -70,21 +111,23 @@ export default function Dashboard() {
   const urlInputRef = useRef<HTMLInputElement>(null);
 
   // Binary updates state
-  const [binaryUpdates, setBinaryUpdates] = useState<Array<{
-    name: string;
-    installedVersion: string;
-    latestVersion: string;
-    needsUpdate: boolean;
-    downloadUrl: string;
-    updating?: boolean;
-  }>>([]);
+  const [binaryUpdates, setBinaryUpdates] = useState<
+    Array<{
+      name: string;
+      installedVersion: string;
+      latestVersion: string;
+      needsUpdate: boolean;
+      downloadUrl: string;
+      updating?: boolean;
+    }>
+  >([]);
 
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const currentTab = location === '/' ? 'downloader' : location.split('/')[1];
 
   useEffect(() => {
-    setRenderedTabs(prev => prev.has(currentTab) ? prev : new Set(prev).add(currentTab));
+    setRenderedTabs((prev) => (prev.has(currentTab) ? prev : new Set(prev).add(currentTab)));
   }, [currentTab]);
 
   const handleTabChange = (value: string) => {
@@ -92,27 +135,8 @@ export default function Dashboard() {
   };
 
   // Persist Downloader state across tab navigation
-  const [scanUrl, setScanUrl] = useState<string>(() => localStorage.getItem('idh_last_url') || '');
-  const [videoInfo, setVideoInfo] = useState<DetectedVideo[] | null>(() => {
-    try {
-      const saved = localStorage.getItem('idh_last_video_info');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('idh_last_url', scanUrl);
-  }, [scanUrl]);
-
-  useEffect(() => {
-    if (videoInfo) {
-      localStorage.setItem('idh_last_video_info', JSON.stringify(videoInfo));
-    } else {
-      localStorage.removeItem('idh_last_video_info');
-    }
-  }, [videoInfo]);
+  const [scanUrl, setScanUrl] = useState<string>('');
+  const [videoInfo, setVideoInfo] = useState<DetectedVideo[] | null>(null);
 
   // yt-dlp update banner state — driven by IPC events from main process
   const [ytdlpUpdateAvailable, setYtdlpUpdateAvailable] = useState(false);
@@ -126,7 +150,7 @@ export default function Dashboard() {
   /** Called when the user confirms their selection in the PlaylistDialog. */
   const handlePlaylistConfirm = async (
     entries: PlaylistEntry[],
-    opts: { playlistTitle: string }
+    opts: { playlistTitle: string },
   ) => {
     if (!window.electronAPI) return;
     const settings = await window.electronAPI.getSettings();
@@ -168,14 +192,21 @@ export default function Dashboard() {
       />
 
       <div className="space-y-8 animate-in fade-in duration-300">
-
         {globalError && (
-          <Alert variant="destructive" className="bg-destructive/10 border-destructive/20 text-destructive">
+          <Alert
+            variant="destructive"
+            className="bg-destructive/10 border-destructive/20 text-destructive"
+          >
             <AlertCircle className="h-5 w-5" />
             <AlertTitle className="font-semibold text-lg">Error</AlertTitle>
             <AlertDescription className="text-base mt-2 flex flex-col gap-3">
               <p>{globalError.message}</p>
-              <Button variant="outline" size="sm" className="w-fit border-destructive/30 hover:bg-destructive hover:text-white" onClick={() => setGlobalError(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit border-destructive/30 hover:bg-destructive hover:text-white"
+                onClick={() => setGlobalError(null)}
+              >
                 Dismiss
               </Button>
             </AlertDescription>
@@ -184,8 +215,8 @@ export default function Dashboard() {
 
         <Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
           <TabsContent value="downloader" className="focus-visible:outline-none">
-            <VideoCapturePanel 
-              onScanStart={() => setGlobalError(null)} 
+            <VideoCapturePanel
+              onScanStart={() => setGlobalError(null)}
               onError={(err) => setGlobalError(err)}
               scanUrl={scanUrl}
               setScanUrl={setScanUrl}
@@ -208,7 +239,7 @@ export default function Dashboard() {
           <TabsContent value="settings" className="focus-visible:outline-none">
             {renderedTabs.has('settings') && (
               <ErrorBoundary>
-                <SettingsPanel 
+                <SettingsPanel
                   setSuccessMsg={setSuccessMsg}
                   onGoToQueue={() => handleTabChange('queue')}
                   onError={(err) => setGlobalError(err)}
@@ -255,12 +286,12 @@ interface VideoInfoState {
   setSuccessMsg: (msg: string | null) => void;
 }
 
-function VideoCapturePanel({ 
-  onScanStart, 
-  onError, 
-  scanUrl, 
-  setScanUrl, 
-  videoInfo, 
+function VideoCapturePanel({
+  onScanStart,
+  onError,
+  scanUrl,
+  setScanUrl,
+  videoInfo,
   setVideoInfo,
   showUpdateBanner,
   ytdlpLatestVersion,
@@ -268,15 +299,15 @@ function VideoCapturePanel({
   onGoToSettings,
   onGoToQueue,
   successMsg,
-  setSuccessMsg
+  setSuccessMsg,
 }: VideoInfoProps & { successMsg: string | null }) {
   const urlInputRef = useRef<HTMLInputElement>(null);
   const videoDetectMutation = useVideoDetect();
   const [urlError, setUrlError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState("");
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [errorObj, setErrorObj] = useState<{ message: string } | null>(null);
-  
+
   // NEW: Track individual download submission states
   const [submittingDownloads, setSubmittingDownloads] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -284,7 +315,7 @@ function VideoCapturePanel({
   const loadingMessages = [
     'Fetching video details...',
     'Analyzing available qualities...',
-    'Almost ready...'
+    'Almost ready...',
   ];
 
   useEffect(() => {
@@ -319,16 +350,18 @@ function VideoCapturePanel({
 
     const trimmed = scanUrl.trim();
     if (!trimmed) {
-      setUrlError("Please paste a video URL first.");
+      setUrlError('Please paste a video URL first.');
       return;
     }
     if (!isValidUrl(trimmed)) {
-      setUrlError("That doesn't look like a valid URL. Please paste a full link starting with http:// or https://");
+      setUrlError(
+        "That doesn't look like a valid URL. Please paste a full link starting with http:// or https://",
+      );
       return;
     }
 
     if (onScanStart) onScanStart();
-    
+
     setLoading(true);
     setLoadingMessage('Connecting...');
 
@@ -365,7 +398,12 @@ function VideoCapturePanel({
         });
         setPlaylistTitle(null);
         setPlaylistVideoCount(null);
-      } else if (result.meta?.playlistDetected && result.meta?.detectPlaylistsEnabled && 'isPlaylist' in payload && payload.isPlaylist) {
+      } else if (
+        result.meta?.playlistDetected &&
+        result.meta?.detectPlaylistsEnabled &&
+        'isPlaylist' in payload &&
+        payload.isPlaylist
+      ) {
         setPlaylistBlocked(null);
         setPlaylistTitle(result.meta.playlistTitle || 'Playlist');
         setPlaylistVideoCount(result.meta.playlistVideoCount ?? payload.videos.length);
@@ -376,17 +414,19 @@ function VideoCapturePanel({
       }
 
       const newFormats: Record<number, string> = {};
-      
+
       try {
         if (window.electronAPI) {
           const settings = await window.electronAPI.getSettings();
           if (settings) {
             if (isEnabledPlaylist) {
-              setPlaylistMode(settings.playlist_download_mode || settings.playlistDownloadMode || 'all');
+              setPlaylistMode(
+                settings.playlist_download_mode || settings.playlistDownloadMode || 'all',
+              );
             }
             const prefQuality = settings.default_quality || 'best';
             const prefFormat = settings.default_format || 'mp4';
-            
+
             infos.forEach((v: any, idx: number) => {
               if (prefFormat === 'mp3') {
                 newFormats[idx] = 'bestaudio';
@@ -419,7 +459,7 @@ function VideoCapturePanel({
   };
 
   const handleClear = () => {
-    setScanUrl("");
+    setScanUrl('');
     setVideoInfo(null);
     setUrlError(null);
     setSuccessMsg(null);
@@ -427,8 +467,6 @@ function VideoCapturePanel({
     setPlaylistBlocked(null);
     setPlaylistTitle(null);
     setPlaylistVideoCount(null);
-    localStorage.removeItem('idh_last_url');
-    localStorage.removeItem('idh_last_video_info');
   };
 
   const [selectedFormats, setSelectedFormats] = useState<Record<number, string>>({});
@@ -436,9 +474,10 @@ function VideoCapturePanel({
   const [selectedPlaylistIndexes, setSelectedPlaylistIndexes] = useState<Set<number>>(new Set());
   const [playlistTitle, setPlaylistTitle] = useState<string | null>(null);
   const [playlistVideoCount, setPlaylistVideoCount] = useState<number | null>(null);
-  const [playlistBlocked, setPlaylistBlocked] = useState<{ title: string; count: number } | null>(null);
+  const [playlistBlocked, setPlaylistBlocked] = useState<{ title: string; count: number } | null>(
+    null,
+  );
   const [startingPlaylist, setStartingPlaylist] = useState(false);
-  const [operationTimeouts, setOperationTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map());
   const [retryAttempts, setRetryAttempts] = useState<Map<string, number>>(new Map());
 
   // When new scan results arrive, reset playlist selection.
@@ -449,43 +488,42 @@ function VideoCapturePanel({
   const handleDownload = async (
     video: any,
     idx: number,
-    opts?: { goToQueue?: boolean; showSuccessMsg?: boolean; savePathOverride?: string }
+    opts?: { goToQueue?: boolean; showSuccessMsg?: boolean; savePathOverride?: string },
   ): Promise<boolean> => {
-    const goToQueue = opts?.goToQueue ?? true
-    const showSuccessMsg = opts?.showSuccessMsg ?? true
+    const goToQueue = opts?.goToQueue ?? true;
+    const showSuccessMsg = opts?.showSuccessMsg ?? true;
 
     // IMMEDIATE FEEDBACK: Show that we're processing this download
-    setSubmittingDownloads(prev => new Set(prev).add(idx));
+    setSubmittingDownloads((prev) => new Set(prev).add(idx));
     setIsSubmitting(true);
-    
+
     // Clear previous errors immediately
     if (showSuccessMsg) setSuccessMsg(null);
     setErrorObj(null);
-    
+
+    let currentTimeoutId: NodeJS.Timeout | null = null;
     // ENHANCED ERROR HANDLING: Setup timeout mechanism
     const downloadUrl = video?.extractedUrl || video?.url;
-    const downloadKey = `${downloadUrl}-${idx}`;
-    const timeoutId = setTimeout(() => {
+    currentTimeoutId = setTimeout(() => {
       onError({ message: 'Download operation timed out. Please try again.' });
-      setSubmittingDownloads(prev => {
+      setSubmittingDownloads((prev) => {
         const next = new Set(prev);
         next.delete(idx);
         return next;
       });
       setIsSubmitting(false);
     }, 30000); // 30 second timeout
-    
-    setOperationTimeouts((prev: Map<string, NodeJS.Timeout>) => new Map(prev).set(downloadKey, timeoutId));
 
-    const selectedFormatId = selectedFormats[idx] || "bestvideo+bestaudio";
-    const format = video.formats?.find((f: any) => f.formatId === selectedFormatId) || video.formats?.[0];
+    const selectedFormatId = selectedFormats[idx] || 'bestvideo+bestaudio';
+    const format =
+      video.formats?.find((f: any) => f.formatId === selectedFormatId) || video.formats?.[0];
     const isAudioOnly = format?.formatId === 'bestaudio';
-    const cleanTitle = video.title ? video.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
-    const ext = isAudioOnly ? "mp3" : (format?.ext || "mp4");
+    const cleanTitle = video.title ? video.title.replace(/[^a-z0-9]/gi, '_').slice(0, 50) : 'video';
+    const ext = isAudioOnly ? 'mp3' : format?.ext || 'mp4';
     const filename = `${cleanTitle}.${ext}`;
 
     try {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
 
       // PRE-VALIDATION: Check inputs early to fail fast
       if (!downloadUrl || typeof downloadUrl !== 'string' || !downloadUrl.trim()) {
@@ -500,9 +538,9 @@ function VideoCapturePanel({
       // OPTIMIZATION: Parallel operations to reduce delays
       const [settings, formatInfo] = await Promise.all([
         window.electronAPI.getSettings(),
-        Promise.resolve(format)
+        Promise.resolve(format),
       ]);
-      
+
       const savePath = opts?.savePathOverride || settings?.download_path || settings?.downloadPath;
       const requiredBytes = formatInfo?.filesize || 0;
 
@@ -512,14 +550,16 @@ function VideoCapturePanel({
       } else {
         const spaceCheck = await window.electronAPI.checkDiskSpace(savePath, requiredBytes);
         if (!spaceCheck.isEnough) {
-          onError({ message: `Not enough storage space to download this file. Please free up some disk space and try again.` });
+          onError({
+            message: `Not enough storage space to download this file. Please free up some disk space and try again.`,
+          });
           return false;
         }
       }
 
       const resolvedFormatId = isAudioOnly
         ? 'bestaudio'
-        : (formatInfo?.formatId || selectedFormatId || 'bestvideo+bestaudio');
+        : formatInfo?.formatId || selectedFormatId || 'bestvideo+bestaudio';
 
       // IMMEDIATE QUEUE ADDITION: Add to queue right away
       await window.electronAPI.startDownload({
@@ -529,26 +569,30 @@ function VideoCapturePanel({
         savePath,
         thumbnail: video.thumbnail,
         duration: video.duration,
-        uploader: video.uploader
+        uploader: video.uploader,
       });
 
       // IMMEDIATE SUCCESS FEEDBACK
       if (showSuccessMsg) {
-        setSuccessMsg(`"${video.title || filename}" added to queue! Switch to Queue & History to track progress.`);
+        setSuccessMsg(
+          `"${video.title || filename}" added to queue! Switch to Queue & History to track progress.`,
+        );
       }
       if (goToQueue) {
         setTimeout(() => onGoToQueue?.(), 300); // Small delay to show success message
       }
-      
-      return true
+
+      return true;
     } catch (err: any) {
       console.error(`[Download Error]`, err);
-      
+
       // ENHANCED ERROR HANDLING: Track retry attempts
       const downloadKey = `${downloadUrl}-${idx}`;
       const currentAttempts = (retryAttempts.get(downloadKey) || 0) as number;
-      setRetryAttempts((prev: Map<string, number>) => new Map(prev).set(downloadKey, currentAttempts + 1));
-      
+      setRetryAttempts((prev: Map<string, number>) =>
+        new Map(prev).set(downloadKey, currentAttempts + 1),
+      );
+
       // ENHANCED ERROR HANDLING: Better error classification
       if (err.message?.includes('already in your download queue')) {
         onError({ message: 'This video is already in your download queue.' });
@@ -557,11 +601,16 @@ function VideoCapturePanel({
       } else if (err.message?.includes('disk') || err.message?.includes('space')) {
         onError({ message: 'Storage error. Please check available disk space and try again.' });
       } else if (currentAttempts < 3) {
-        onError({ message: `Download failed temporarily. You can retry (${currentAttempts + 1}/3).` });
+        onError({
+          message: `Download failed temporarily. You can retry (${currentAttempts + 1}/3).`,
+        });
       } else {
-        onError({ message: 'Download failed after multiple attempts. Please check the URL and try again later.' });
+        onError({
+          message:
+            'Download failed after multiple attempts. Please check the URL and try again later.',
+        });
       }
-      return false
+      return false;
     } finally {
       // ALWAYS clear submitting state
       setSubmittingDownloads((prev: Set<number>) => {
@@ -570,23 +619,17 @@ function VideoCapturePanel({
         return next;
       });
       setIsSubmitting(false);
-      
+
       // ENHANCED ERROR HANDLING: Clear timeout
-      const timeoutId = operationTimeouts.get(downloadKey);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        setOperationTimeouts((prev: Map<string, NodeJS.Timeout>) => {
-          const next = new Map(prev);
-          next.delete(downloadKey);
-          return next;
-        });
+      if (currentTimeoutId) {
+        clearTimeout(currentTimeoutId);
       }
     }
   };
 
   const joinPath = (base: string, sub: string) => {
-    const cleanedBase = base.replace(/[\\\/]+$/, '');
-    const cleanedSub = sub.replace(/[\\\/]+/g, ' ').trim();
+    const cleanedBase = base.replace(/[\\/]+$/, '');
+    const cleanedSub = sub.replace(/[\\/]+/g, ' ').trim();
     return `${cleanedBase}\\${cleanedSub}`;
   };
 
@@ -608,7 +651,9 @@ function VideoCapturePanel({
     try {
       const settings = await window.electronAPI.getSettings();
       const baseSavePath = settings?.download_path || settings?.downloadPath;
-      const createFolder = Boolean(settings?.create_playlist_folder ?? settings?.createPlaylistFolder ?? true);
+      const createFolder = Boolean(
+        settings?.create_playlist_folder ?? settings?.createPlaylistFolder ?? true,
+      );
 
       const playlistFolderName = (playlistTitle || 'Playlist')
         .replace(/[<>:"/\\|?*]/g, '')
@@ -635,7 +680,7 @@ function VideoCapturePanel({
       }
 
       setSuccessMsg(
-        `${okCount} item${okCount === 1 ? '' : 's'} added to queue! Switch to Queue & History to track progress.`
+        `${okCount} item${okCount === 1 ? '' : 's'} added to queue! Switch to Queue & History to track progress.`,
       );
       onGoToQueue?.();
     } finally {
@@ -649,8 +694,8 @@ function VideoCapturePanel({
       {showUpdateBanner && (
         <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-sm">
           <span className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 shrink-0" />
-            A yt-dlp update is available (v{ytdlpLatestVersion}). Keep it updated for best compatibility.
+            <RefreshCw className="w-4 h-4 shrink-0" />A yt-dlp update is available (v
+            {ytdlpLatestVersion}). Keep it updated for best compatibility.
           </span>
           <div className="flex items-center gap-2 shrink-0">
             <Button
@@ -676,7 +721,9 @@ function VideoCapturePanel({
         <CardContent className="p-6 md:p-8">
           <div className="mb-6">
             <h2 className="text-3xl font-bold tracking-tight mb-2">Download a Video</h2>
-            <p className="text-muted-foreground text-base">Paste a video link from YouTube, Twitter, Vimeo, or others to get started.</p>
+            <p className="text-muted-foreground text-base">
+              Paste a video link from YouTube, Twitter, Vimeo, or others to get started.
+            </p>
           </div>
 
           <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-4">
@@ -691,8 +738,8 @@ function VideoCapturePanel({
                   setSuccessMsg(null);
                 }}
                 className={cn(
-                  "h-14 md:text-lg bg-input border-border focus-visible:ring-primary focus-visible:border-primary shadow-sm rounded-lg pr-12",
-                  urlError && "border-destructive focus-visible:ring-destructive"
+                  'h-14 md:text-lg bg-input border-border focus-visible:ring-primary focus-visible:border-primary shadow-sm rounded-lg pr-12',
+                  urlError && 'border-destructive focus-visible:ring-destructive',
                 )}
               />
               {scanUrl && (
@@ -715,11 +762,19 @@ function VideoCapturePanel({
             >
               {loading ? (
                 <div className="flex flex-col items-center">
-                  <div className="flex items-center"><Loader2 className="w-5 h-5 mr-2 animate-spin" />Scanning</div>
-                  <span className="text-xs opacity-80 mt-0.5 max-w-[190px] truncate">{loadingMessage}</span>
+                  <div className="flex items-center">
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Scanning
+                  </div>
+                  <span className="text-xs opacity-80 mt-0.5 max-w-[190px] truncate">
+                    {loadingMessage}
+                  </span>
                 </div>
               ) : (
-                <><Download className="w-5 h-5 mr-3" />Get Video Info</>
+                <>
+                  <Download className="w-5 h-5 mr-3" />
+                  Get Video Info
+                </>
               )}
             </Button>
           </form>
@@ -745,17 +800,19 @@ function VideoCapturePanel({
             <Alert variant="destructive" className="mt-4 bg-destructive/10 border-destructive/20">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex flex-col gap-2">
-                <span>{errorObj.message || "Could not fetch video info. Check the URL and try again."}</span>
-                {errorObj.message?.includes("not supported") && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                <span>
+                  {errorObj.message || 'Could not fetch video info. Check the URL and try again.'}
+                </span>
+                {errorObj.message?.includes('not supported') && (
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="w-fit h-7 text-xs border-destructive/30 hover:bg-destructive hover:text-white mt-1"
                     onClick={async () => {
                       try {
                         if (!window.electronAPI) return;
                         await window.electronAPI.updateYtDlp();
-                        alert("Update successful! Please try scanning the link again.");
+                        alert('Update successful! Please try scanning the link again.');
                       } catch (err: any) {
                         alert(err.message);
                       }
@@ -773,7 +830,9 @@ function VideoCapturePanel({
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex flex-col gap-3">
                 <span>
-                  This is a playlist with {playlistBlocked.count} videos. Enable playlist downloading in Settings to download all videos, or paste a single video URL instead.
+                  This is a playlist with {playlistBlocked.count} videos. Enable playlist
+                  downloading in Settings to download all videos, or paste a single video URL
+                  instead.
                 </span>
                 <div className="flex gap-2 flex-wrap">
                   <Button
@@ -836,10 +895,14 @@ function VideoCapturePanel({
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <input
                     type="checkbox"
-                    checked={selectedPlaylistIndexes.size === videoInfo.length && videoInfo.length > 0}
+                    checked={
+                      selectedPlaylistIndexes.size === videoInfo.length && videoInfo.length > 0
+                    }
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedPlaylistIndexes(new Set(Array.from({ length: videoInfo.length }, (_, i) => i)));
+                        setSelectedPlaylistIndexes(
+                          new Set(Array.from({ length: videoInfo.length }, (_, i) => i)),
+                        );
                       } else {
                         setSelectedPlaylistIndexes(new Set());
                       }
@@ -858,7 +921,11 @@ function VideoCapturePanel({
                 <div className="md:w-72 bg-muted relative shrink-0">
                   <div className="aspect-video w-full h-full relative">
                     {video.thumbnail ? (
-                      <img src={video.thumbnail} className="w-full h-full object-cover" alt="Video thumbnail" />
+                      <img
+                        src={video.thumbnail}
+                        className="w-full h-full object-cover"
+                        alt="Video thumbnail"
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <ImageIcon className="w-12 h-12 text-muted-foreground/30" />
@@ -869,7 +936,7 @@ function VideoCapturePanel({
                       <PlayCircle className="w-3 h-3" />
                       {video.duration
                         ? `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}`
-                        : "LIVE"}
+                        : 'LIVE'}
                     </div>
                   </div>
                 </div>
@@ -878,7 +945,9 @@ function VideoCapturePanel({
                 <div className="flex-1 p-6 flex flex-col">
                   <div className="mb-6 border-b border-border/50 pb-6">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-xl md:text-2xl font-bold leading-snug mb-2 pr-4">{video.title || "Unknown Video"}</h3>
+                      <h3 className="text-xl md:text-2xl font-bold leading-snug mb-2 pr-4">
+                        {video.title || 'Unknown Video'}
+                      </h3>
                       {playlistTitle && videoInfo.length > 1 && playlistMode === 'select' && (
                         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer mt-1">
                           <input
@@ -899,7 +968,7 @@ function VideoCapturePanel({
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1.5 bg-muted px-2 py-1 rounded-md text-foreground">
-                        <User className="w-4 h-4" /> {video.uploader || "Anonymous"}
+                        <User className="w-4 h-4" /> {video.uploader || 'Anonymous'}
                       </span>
                     </div>
                   </div>
@@ -909,9 +978,11 @@ function VideoCapturePanel({
                       <label className="text-sm font-medium text-muted-foreground block">
                         Select Quality
                       </label>
-                      <Select 
-                        value={selectedFormats[idx] || "bestvideo+bestaudio"} 
-                        onValueChange={(val) => setSelectedFormats(prev => ({ ...prev, [idx]: val }))}
+                      <Select
+                        value={selectedFormats[idx] || 'bestvideo+bestaudio'}
+                        onValueChange={(val) =>
+                          setSelectedFormats((prev) => ({ ...prev, [idx]: val }))
+                        }
                       >
                         <SelectTrigger className="w-full bg-muted/50 border-border h-11">
                           <SelectValue placeholder="Select quality..." />
@@ -930,16 +1001,24 @@ function VideoCapturePanel({
                       <Button
                         size="lg"
                         className={cn(
-                          "btn-primary w-full sm:w-auto h-11 px-8 shrink-0 transition-all duration-200",
-                          submittingDownloads.has(idx) && "scale-95 opacity-80"
+                          'btn-primary w-full sm:w-auto h-11 px-8 shrink-0 transition-all duration-200',
+                          submittingDownloads.has(idx) && 'scale-95 opacity-80',
                         )}
-                        onClick={() => handleDownload(video, idx, { goToQueue: true, showSuccessMsg: true })}
+                        onClick={() =>
+                          handleDownload(video, idx, { goToQueue: true, showSuccessMsg: true })
+                        }
                         disabled={loading || submittingDownloads.has(idx)}
                       >
                         {submittingDownloads.has(idx) ? (
-                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Adding to Queue...</>
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Adding to Queue...
+                          </>
                         ) : (
-                          <><Download className="w-5 h-5 mr-2" />Download</>
+                          <>
+                            <Download className="w-5 h-5 mr-2" />
+                            Download
+                          </>
                         )}
                       </Button>
                     )}
@@ -954,8 +1033,8 @@ function VideoCapturePanel({
               <Button
                 size="lg"
                 className={cn(
-                  "btn-primary transition-all duration-200",
-                  (startingPlaylist || isSubmitting) && "scale-95 opacity-80"
+                  'btn-primary transition-all duration-200',
+                  (startingPlaylist || isSubmitting) && 'scale-95 opacity-80',
                 )}
                 disabled={
                   startingPlaylist ||
@@ -978,7 +1057,7 @@ function VideoCapturePanel({
       )}
     </div>
   );
-// ... (rest of the code remains the same)
+  // ... (rest of the code remains the same)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -986,46 +1065,55 @@ function VideoCapturePanel({
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DownloadJob {
-  jobId: string
-  url: string
-  title: string
-  thumbnail: string
-  duration: string | number
-  format: string
-  percent: number
-  speed: string
-  eta: string
-  phase: string
-  status: 'queued' | 'downloading' | 'merging' | 'paused' | 'completed' | 'failed' | 'cancelled'
-  totalSize: string
-  error?: string
-  savePath?: string
-  canRetry: boolean
+  jobId: string;
+  url: string;
+  title: string;
+  thumbnail: string;
+  duration: string | number;
+  format: string;
+  percent: number;
+  speed: string;
+  eta: string;
+  phase: string;
+  status: 'queued' | 'downloading' | 'merging' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  totalSize: string;
+  error?: string;
+  savePath?: string;
+  canRetry: boolean;
 }
 
-const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onOpenFolder, loading }: {
-  job: DownloadJob
-  onPause: (jobId: string) => void
-  onResume: (jobId: string) => void
-  onCancel: (jobId: string) => void
-  onRetry: (jobId: string) => void
-  onRemove: (jobId: string) => void
-  onOpenFolder: (savePath: string) => void
-  loading: boolean
+const DownloadCard = ({
+  job,
+  onPause,
+  onResume,
+  onCancel,
+  onRetry,
+  onRemove,
+  onOpenFolder,
+  loading,
+}: {
+  job: DownloadJob;
+  onPause: (jobId: string) => void;
+  onResume: (jobId: string) => void;
+  onCancel: (jobId: string) => void;
+  onRetry: (jobId: string) => void;
+  onRemove: (jobId: string) => void;
+  onOpenFolder: (savePath: string) => void;
+  loading: boolean;
 }) => {
-  const isActive = job.status === 'downloading' || job.status === 'merging'
-  const isPaused = job.status === 'paused'
-  const isCompleted = job.status === 'completed' || job.percent === 100
-  const isFailed = job.status === 'failed'
-  const isQueued = job.status === 'queued'
+  const isActive = job.status === 'downloading' || job.status === 'merging';
+  const isPaused = job.status === 'paused';
+  const isCompleted = job.status === 'completed' || job.percent === 100;
+  const isFailed = job.status === 'failed';
+  const isQueued = job.status === 'queued';
 
   const progressColor = isCompleted
     ? 'bg-green-500'
     : isFailed
-    ? 'bg-red-500'
-    : isPaused
-    ? 'bg-yellow-500'
-    : 'bg-primary'
+      ? 'bg-red-500'
+      : isPaused
+        ? 'bg-yellow-500'
+        : 'bg-primary';
 
   const statusLabel: Record<string, string> = {
     queued: 'Waiting',
@@ -1034,10 +1122,10 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
     paused: 'Paused',
     completed: 'Complete',
     failed: 'Failed',
-    cancelled: 'Cancelled'
-  }
+    cancelled: 'Cancelled',
+  };
 
-  const currentLabel = isCompleted ? 'Complete' : statusLabel[job.status] || job.status
+  const currentLabel = isCompleted ? 'Complete' : statusLabel[job.status] || job.status;
 
   const statusColor: Record<string, string> = {
     queued: 'text-muted-foreground',
@@ -1046,10 +1134,12 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
     paused: 'text-yellow-400',
     completed: 'text-green-400',
     failed: 'text-destructive',
-    cancelled: 'text-orange-500'
-  }
+    cancelled: 'text-orange-500',
+  };
 
-  const currentStatusColor = isCompleted ? statusColor.completed : statusColor[job.status] || statusColor.queued
+  const currentStatusColor = isCompleted
+    ? statusColor.completed
+    : statusColor[job.status] || statusColor.queued;
 
   return (
     <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg bg-card border border-border shadow-sm mb-3">
@@ -1060,7 +1150,9 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
             src={job.thumbnail}
             alt={job.title}
             className="w-full h-full object-cover"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -1073,8 +1165,14 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
       <div className="flex-1 min-w-0">
         {/* Title row */}
         <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-base font-semibold text-foreground truncate">{job.title || 'Unknown Title'}</p>
-          <span className={`text-xs font-semibold flex-shrink-0 px-2 py-0.5 rounded shadow-sm bg-muted/60 ${currentStatusColor}`}>{currentLabel}</span>
+          <p className="text-base font-semibold text-foreground truncate">
+            {job.title || 'Unknown Title'}
+          </p>
+          <span
+            className={`text-xs font-semibold flex-shrink-0 px-2 py-0.5 rounded shadow-sm bg-muted/60 ${currentStatusColor}`}
+          >
+            {currentLabel}
+          </span>
         </div>
 
         {/* Phase and size row */}
@@ -1095,14 +1193,24 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
         {(isActive || isPaused) && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
             <span className="font-mono font-medium">{job.percent.toFixed(1)}%</span>
-            {job.speed && <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> {job.speed}</span>}
-            {job.eta && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {job.eta}</span>}
+            {job.speed && (
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3" /> {job.speed}
+              </span>
+            )}
+            {job.eta && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {job.eta}
+              </span>
+            )}
           </div>
         )}
 
         {/* Error message */}
         {isFailed && job.error && (
-          <p className="text-xs text-destructive mb-2 line-clamp-2 bg-destructive/10 px-2 py-1 rounded border border-destructive/20">{job.error}</p>
+          <p className="text-xs text-destructive mb-2 line-clamp-2 bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
+            {job.error}
+          </p>
         )}
 
         {/* Completed info */}
@@ -1116,55 +1224,89 @@ const DownloadCard = ({ job, onPause, onResume, onCancel, onRetry, onRemove, onO
         <div className="flex items-center gap-2 flex-wrap mt-3">
           {/* Pause */}
           {isActive && (
-            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => onPause(job.jobId)} disabled={loading}>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 text-xs"
+              onClick={() => onPause(job.jobId)}
+              disabled={loading}
+            >
               <Pause className="w-3 h-3 mr-1" /> {loading ? 'Processing...' : 'Pause'}
             </Button>
           )}
 
           {/* Resume */}
           {isPaused && (
-            <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => onResume(job.jobId)} disabled={loading}>
+            <Button
+              size="sm"
+              variant="default"
+              className="h-7 text-xs"
+              onClick={() => onResume(job.jobId)}
+              disabled={loading}
+            >
               <Play className="w-3 h-3 mr-1" /> {loading ? 'Processing...' : 'Resume'}
             </Button>
           )}
 
           {/* Cancel */}
           {(isActive || isQueued || isPaused) && (
-            <Button size="sm" variant="outline" className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-white" onClick={() => onCancel(job.jobId)} disabled={loading}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs border-destructive/30 text-destructive hover:bg-destructive hover:text-white"
+              onClick={() => onCancel(job.jobId)}
+              disabled={loading}
+            >
               <XCircle className="w-3 h-3 mr-1" /> {loading ? 'Processing...' : 'Cancel'}
             </Button>
           )}
 
           {/* Retry */}
           {(isFailed || (isCompleted && job.error)) && (
-            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={() => onRetry(job.jobId)} disabled={loading}>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 text-xs"
+              onClick={() => onRetry(job.jobId)}
+              disabled={loading}
+            >
               <RotateCcw className="w-3 h-3 mr-1" /> {loading ? 'Processing...' : 'Retry'}
             </Button>
           )}
 
           {/* Open Folder */}
           {isCompleted && job.savePath && (
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onOpenFolder(job.savePath!)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => onOpenFolder(job.savePath!)}
+            >
               <FolderOpen className="w-3 h-3 mr-1" /> Open Folder
             </Button>
           )}
 
           {/* Remove */}
           {(isCompleted || isFailed || job.status === 'cancelled') && (
-            <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onRemove(job.jobId)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={() => onRemove(job.jobId)}
+            >
               <Trash2 className="w-3 h-3 mr-1" /> Remove
             </Button>
           )}
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
 function HistoryPanel() {
-  const [downloads, setDownloads] = useState<DownloadJob[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [clearing, setClearing] = useState(false)
+  const [downloads, setDownloads] = useState<DownloadJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   // Load initial history
   useEffect(() => {
@@ -1187,7 +1329,8 @@ function HistoryPanel() {
           totalSize: '',
           error: item.error,
           savePath: item.save_path,
-          canRetry: item.state === 'failed' || item.state === 'completed' || item.state === 'cancelled'
+          canRetry:
+            item.state === 'failed' || item.state === 'completed' || item.state === 'cancelled',
         }));
         setDownloads(initialJobs);
       } finally {
@@ -1199,108 +1342,124 @@ function HistoryPanel() {
 
   // Set up progress listener ONCE on mount
   useEffect(() => {
-    if (!window.electronAPI) return
+    if (!window.electronAPI) return;
 
     // Remove any existing listeners first
-    window.electronAPI.removeProgressListener()
+    window.electronAPI.removeProgressListener();
 
     window.electronAPI.onDownloadProgress((data: any) => {
+      setDownloads((prev) =>
+        prev.map((job) => {
+          if (job.jobId !== String(data.jobId)) return job;
 
-      setDownloads(prev => prev.map(job => {
-        if (job.jobId !== String(data.jobId)) return job
-
-        return {
-          ...job,
-          percent: typeof data.percent === 'number' ? data.percent : job.percent,
-          speed: data.speed !== undefined ? data.speed : job.speed,
-          eta: data.eta !== undefined ? data.eta : job.eta,
-          phase: data.phase || job.phase,
-          status: data.status || job.status,
-          totalSize: data.totalSize || job.totalSize,
-          error: data.error || job.error,
-          savePath: data.savePath || job.savePath,
-          canRetry: data.status === 'failed' || data.status === 'completed' || data.status === 'cancelled'
-        }
-      }))
-    })
+          return {
+            ...job,
+            percent: typeof data.percent === 'number' ? data.percent : job.percent,
+            speed: data.speed !== undefined ? data.speed : job.speed,
+            eta: data.eta !== undefined ? data.eta : job.eta,
+            phase: data.phase || job.phase,
+            status: data.status || job.status,
+            totalSize: data.totalSize || job.totalSize,
+            error: data.error || job.error,
+            savePath: data.savePath || job.savePath,
+            canRetry:
+              data.status === 'failed' ||
+              data.status === 'completed' ||
+              data.status === 'cancelled',
+          };
+        }),
+      );
+    });
 
     return () => {
-      window.electronAPI?.removeProgressListener()
-    }
-  }, [])
+      window.electronAPI?.removeProgressListener();
+    };
+  }, []);
 
   // BUTTON HANDLERS
   const handlePause = async (jobId: string) => {
-    if (!window.electronAPI) return
+    if (!window.electronAPI) return;
     try {
-      await window.electronAPI.pauseDownload(Number(jobId))
-      setDownloads(prev => prev.map(j =>
-        j.jobId === jobId ? { ...j, status: 'paused', phase: 'Paused' } : j
-      ))
+      await window.electronAPI.pauseDownload(Number(jobId));
+      setDownloads((prev) =>
+        prev.map((j) => (j.jobId === jobId ? { ...j, status: 'paused', phase: 'Paused' } : j)),
+      );
     } catch (err) {
+      console.debug('Pause failed:', err);
     }
-  }
+  };
 
   const handleResume = async (jobId: string) => {
-    if (!window.electronAPI) return
+    if (!window.electronAPI) return;
     try {
-      await window.electronAPI.resumeDownload(Number(jobId))
-      setDownloads(prev => prev.map(j =>
-        j.jobId === jobId ? { ...j, status: 'downloading', phase: 'Resuming...' } : j
-      ))
+      await window.electronAPI.resumeDownload(Number(jobId));
+      setDownloads((prev) =>
+        prev.map((j) =>
+          j.jobId === jobId ? { ...j, status: 'downloading', phase: 'Resuming...' } : j,
+        ),
+      );
     } catch (err) {
+      console.debug('Resume failed:', err);
     }
-  }
+  };
 
   const handleCancel = async (jobId: string) => {
-    if (!window.electronAPI) return
+    if (!window.electronAPI) return;
     try {
-      await window.electronAPI.cancelDownload(Number(jobId))
-      setDownloads(prev => prev.map(j =>
-        j.jobId === jobId
-          ? { ...j, status: 'cancelled', phase: 'Cancelled', percent: 0 }
-          : j
-      ))
+      await window.electronAPI.cancelDownload(Number(jobId));
+      setDownloads((prev) =>
+        prev.map((j) =>
+          j.jobId === jobId ? { ...j, status: 'cancelled', phase: 'Cancelled', percent: 0 } : j,
+        ),
+      );
     } catch (err) {
+      console.debug('Cancel failed:', err);
     }
-  }
+  };
 
   const handleRetry = async (jobId: string) => {
-    const job = downloads.find(j => j.jobId === jobId)
-    if (!job || !window.electronAPI) return
+    const job = downloads.find((j) => j.jobId === jobId);
+    if (!job || !window.electronAPI) return;
     try {
-      setDownloads(prev => prev.map(j =>
-        j.jobId === jobId
-          ? { ...j, status: 'queued', percent: 0, phase: 'Retrying...', error: undefined }
-          : j
-      ))
-      await window.electronAPI.restartDownload(Number(jobId))
+      setDownloads((prev) =>
+        prev.map((j) =>
+          j.jobId === jobId
+            ? { ...j, status: 'queued', percent: 0, phase: 'Retrying...', error: undefined }
+            : j,
+        ),
+      );
+      await window.electronAPI.restartDownload(Number(jobId));
     } catch (err) {
-      setDownloads(prev => prev.map(j =>
-        j.jobId === jobId
-          ? { ...j, status: 'failed', phase: 'Retry failed', error: String(err) }
-          : j
-      ))
+      setDownloads((prev) =>
+        prev.map((j) =>
+          j.jobId === jobId
+            ? { ...j, status: 'failed', phase: 'Retry failed', error: String(err) }
+            : j,
+        ),
+      );
     }
-  }
+  };
 
   const handleRemove = async (jobId: string) => {
-    if (!window.electronAPI) return
+    if (!window.electronAPI) return;
     try {
-      await window.electronAPI.deleteDownload(Number(jobId))
-      setDownloads(prev => prev.filter(j => j.jobId !== jobId))
+      await window.electronAPI.deleteDownload(Number(jobId));
+      setDownloads((prev) => prev.filter((j) => j.jobId !== jobId));
     } catch (err) {
+      console.debug('Remove failed:', err);
     }
-  }
+  };
 
   const handleOpenFolder = async (savePath: string) => {
-    if (!window.electronAPI) return
-    await window.electronAPI.openFolder(savePath)
-  }
+    if (!window.electronAPI) return;
+    await window.electronAPI.openFolder(savePath);
+  };
 
   const handleClearHistory = async (type: 'all' | 'completed' | 'failed') => {
     if (!window.electronAPI) return;
-    const confirmed = window.confirm(`Are you sure you want to clear ${type} downloads? This cannot be undone.`);
+    const confirmed = window.confirm(
+      `Are you sure you want to clear ${type} downloads? This cannot be undone.`,
+    );
     if (!confirmed) return;
     setClearing(true);
     try {
@@ -1308,9 +1467,9 @@ function HistoryPanel() {
       if (type === 'all') {
         setDownloads([]);
       } else if (type === 'completed') {
-        setDownloads(prev => prev.filter(d => d.status !== 'completed' && d.percent !== 100));
+        setDownloads((prev) => prev.filter((d) => d.status !== 'completed' && d.percent !== 100));
       } else if (type === 'failed') {
-        setDownloads(prev => prev.filter(d => d.status !== 'failed'));
+        setDownloads((prev) => prev.filter((d) => d.status !== 'failed'));
       }
     } finally {
       setClearing(false);
@@ -1320,7 +1479,7 @@ function HistoryPanel() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        {[1, 2, 3].map(i => (
+        {[1, 2, 3].map((i) => (
           <div key={i} className="h-32 bg-card border border-border animate-pulse rounded-lg" />
         ))}
       </div>
@@ -1341,7 +1500,11 @@ function HistoryPanel() {
               className="border-border text-muted-foreground hover:bg-destructive/10 hover:text-destructive shrink-0"
               disabled={clearing || isLoading}
             >
-              {clearing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              {clearing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4 mr-2" />
+              )}
               {clearing ? 'Clearing...' : 'Clear History'}
             </Button>
           </DropdownMenuTrigger>
@@ -1352,7 +1515,10 @@ function HistoryPanel() {
             <DropdownMenuItem onClick={() => handleClearHistory('failed')}>
               Clear Failed
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive focus:text-destructive font-medium" onClick={() => handleClearHistory('all')}>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive font-medium"
+              onClick={() => handleClearHistory('all')}
+            >
               Clear All
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -1381,7 +1547,10 @@ function HistoryPanel() {
                 <Download className="w-8 h-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-bold mb-2">No downloads yet</h3>
-              <p className="text-muted-foreground max-w-md">Paste a video link on the Downloader tab to get started. Supports YouTube, TikTok, Instagram, Twitter, and 1000+ other sites.</p>
+              <p className="text-muted-foreground max-w-md">
+                Paste a video link on the Downloader tab to get started. Supports YouTube, TikTok,
+                Instagram, Twitter, and 1000+ other sites.
+              </p>
             </div>
           )}
         </div>
@@ -1403,21 +1572,23 @@ interface SettingsPanelProps {
 function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelProps) {
   // PERFORMANCE: Cache for settings to avoid repeated API calls
   const [cachedSettings, setCachedSettings] = useState<any>(null);
-  
+
   // PERFORMANCE: Cache for video info to avoid repeated extractions
   const [videoInfoCache, setVideoInfoCache] = useState<Map<string, any>>(new Map());
-  
+
   // PERFORMANCE: Optimized debounced URL validation
   const [urlValidationCache, setUrlValidationCache] = useState<Map<string, boolean>>(new Map());
-  
+
   // ENHANCED ERROR HANDLING: Error boundary state
   const [errorBoundary, setErrorBoundary] = useState<{ error: Error; errorInfo: any } | null>(null);
-  
+
   // ENHANCED ERROR HANDLING: Retry state for failed operations
   const [retryAttempts, setRetryAttempts] = useState<Map<string, number>>(new Map());
-  
+
   // ENHANCED ERROR HANDLING: Timeout mechanism
-  const [operationTimeouts, setOperationTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map());
+  const [operationTimeouts, setOperationTimeouts] = useState<Map<string, NodeJS.Timeout>>(
+    new Map(),
+  );
   const [settings, setSettings] = useState<any>(null);
   const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -1443,20 +1614,22 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
   } | null>(null);
 
   // Binary updates state
-  const [binaryUpdates, setBinaryUpdates] = useState<Array<{
-    name: string;
-    installedVersion: string;
-    latestVersion: string;
-    needsUpdate: boolean;
-    downloadUrl: string;
-    updating?: boolean;
-  }>>([]);
+  const [binaryUpdates, setBinaryUpdates] = useState<
+    Array<{
+      name: string;
+      installedVersion: string;
+      latestVersion: string;
+      needsUpdate: boolean;
+      downloadUrl: string;
+      updating?: boolean;
+    }>
+  >([]);
 
   const loadBinaryUpdates = useCallback(async () => {
     if (!window.electronAPI) return;
     try {
       const updates = await window.electronAPI.checkAllBinaryUpdates();
-      setBinaryUpdates(updates.map(u => ({ ...u, updating: false })));
+      setBinaryUpdates(updates.map((u) => ({ ...u, updating: false })));
     } catch (error: any) {
       console.error('Failed to check binary updates:', error);
     }
@@ -1469,41 +1642,45 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
 
   const handleUpdateBinary = async (binaryName: string) => {
     if (!window.electronAPI) return;
-    
-    setBinaryUpdates(prev => 
-      prev.map(u => u.name === binaryName ? { ...u, updating: true } : u)
+
+    setBinaryUpdates((prev) =>
+      prev.map((u) => (u.name === binaryName ? { ...u, updating: true } : u)),
     );
-    
+
     try {
       const result = await window.electronAPI.updateBinary(binaryName);
       if (result.success) {
-        setBinaryUpdates(prev => 
-          prev.map(u => u.name === binaryName ? { 
-            ...u, 
-            installedVersion: result.newVersion, 
-            latestVersion: result.newVersion, 
-            needsUpdate: false, 
-            updating: false 
-          } : u)
+        setBinaryUpdates((prev) =>
+          prev.map((u) =>
+            u.name === binaryName
+              ? {
+                  ...u,
+                  installedVersion: result.newVersion,
+                  latestVersion: result.newVersion,
+                  needsUpdate: false,
+                  updating: false,
+                }
+              : u,
+          ),
         );
       }
     } catch (error: any) {
       console.error(`Failed to update ${binaryName}:`, error);
-      setBinaryUpdates(prev => 
-        prev.map(u => u.name === binaryName ? { ...u, updating: false } : u)
+      setBinaryUpdates((prev) =>
+        prev.map((u) => (u.name === binaryName ? { ...u, updating: false } : u)),
       );
     }
   };
 
   const handleUpdateAllBinaries = async () => {
     if (!window.electronAPI) return;
-    
-    setBinaryUpdates(prev => prev.map(u => ({ ...u, updating: true })));
-    
+
+    setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: true })));
+
     try {
       const updates = await window.electronAPI.checkAllBinaryUpdates();
-      const outdatedBinaries = updates.filter(u => u.needsUpdate);
-      
+      const outdatedBinaries = updates.filter((u) => u.needsUpdate);
+
       for (const binary of outdatedBinaries) {
         try {
           await window.electronAPI.updateBinary(binary.name);
@@ -1511,12 +1688,12 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
           console.error(`Failed to update ${binary.name}:`, error);
         }
       }
-      
+
       // Reload all updates after completion
       await loadBinaryUpdates();
     } catch (error: any) {
       console.error('Failed to update binaries:', error);
-      setBinaryUpdates(prev => prev.map(u => ({ ...u, updating: false })));
+      setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: false })));
     }
   };
 
@@ -1545,6 +1722,7 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
       try {
         defaultPath = await window.electronAPI.getDefaultDownloadPath();
       } catch (e) {
+        Object(e);
       }
 
       if (!s) {
@@ -1561,7 +1739,8 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
         detectPlaylists: Boolean(s.detect_playlists ?? s.detectPlaylists ?? true),
         playlistDownloadMode: s.playlist_download_mode || s.playlistDownloadMode || 'all',
         createPlaylistFolder: Boolean(s.create_playlist_folder ?? s.createPlaylistFolder ?? true),
-        eulaAgeAcknowledged: Number(s.eula_age_acknowledged ?? s.eulaAgeAcknowledged ?? 0) === 1 ? 1 : 0,
+        eulaAgeAcknowledged:
+          Number(s.eula_age_acknowledged ?? s.eulaAgeAcknowledged ?? 0) === 1 ? 1 : 0,
         cookiesFilePath: String(s.cookies_file_path ?? s.cookiesFilePath ?? ''),
         closeToTray: Boolean(s.close_to_tray ?? 1),
       });
@@ -1608,9 +1787,12 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
     });
 
     // Also eagerly fetch the installed version so it shows immediately
-    window.electronAPI.getYtDlpVersion?.().then((v) => {
-      if (v && v !== 'unknown') setYtDlpVersion(v);
-    }).catch(() => {});
+    window.electronAPI
+      .getYtDlpVersion?.()
+      .then((v) => {
+        if (v && v !== 'unknown') setYtDlpVersion(v);
+      })
+      .catch(() => {});
   }, []);
 
   const saveSetting = async (key: string, value: any) => {
@@ -1637,7 +1819,7 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
   };
   const handleReset = async () => {
     if (!window.electronAPI) return;
-    const confirmed = window.confirm("Reset all settings to their defaults?");
+    const confirmed = window.confirm('Reset all settings to their defaults?');
     if (!confirmed) return;
     setResetting(true);
     try {
@@ -1650,7 +1832,6 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
     }
   };
 
-  
   if (!settings) {
     return (
       <div className="flex items-center justify-center p-20">
@@ -1676,23 +1857,34 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
               disabled={resetting}
               className="text-muted-foreground hover:text-destructive border-border"
             >
-              {resetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+              {resetting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4 mr-2" />
+              )}
               Reset Defaults
             </Button>
           </div>
         </div>
 
         <CardContent className="p-6 md:p-8 space-y-8">
-
           {/* Save Location */}
           <div className="space-y-3">
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-primary" /> Save downloads to
             </h3>
-            <p className="text-sm text-muted-foreground">The folder on your computer where video files will be saved.</p>
+            <p className="text-sm text-muted-foreground">
+              The folder on your computer where video files will be saved.
+            </p>
             <div className="flex gap-4 max-w-md">
-              <Input value={settings.downloadPath} readOnly className="bg-muted border-border cursor-default" />
-              <Button onClick={handleBrowse} variant="secondary">Browse</Button>
+              <Input
+                value={settings.downloadPath}
+                readOnly
+                className="bg-muted border-border cursor-default"
+              />
+              <Button onClick={handleBrowse} variant="secondary">
+                Browse
+              </Button>
             </div>
           </div>
 
@@ -1702,8 +1894,8 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             </h3>
             <p className="text-sm text-muted-foreground">
               Some hosts only serve certain videos after you sign in there. yt-dlp can use a browser
-              cookie file you export (Netscape format). The app does not handle your password—only the
-              file you pick on this device.
+              cookie file you export (Netscape format). The app does not handle your password—only
+              the file you pick on this device.
             </p>
             <div className="flex items-center space-x-3">
               <Switch
@@ -1720,7 +1912,7 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
               className="text-sm text-primary underline-offset-4 hover:underline inline-flex items-center gap-1"
               onClick={() =>
                 window.electronAPI?.openExternal(
-                  'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt'
+                  'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt',
                 )
               }
             >
@@ -1749,8 +1941,8 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Export cookies while logged into the site (for example YouTube) using a trusted method;
-                keep the file private and clear it here when you no longer need it.
+                Export cookies while logged into the site (for example YouTube) using a trusted
+                method; keep the file private and clear it here when you no longer need it.
               </p>
             </div>
           </div>
@@ -1760,7 +1952,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Zap className="w-5 h-5 text-primary" /> Concurrent downloads
             </h3>
-            <p className="text-sm text-muted-foreground">How many videos should download at the same time.</p>
+            <p className="text-sm text-muted-foreground">
+              How many videos should download at the same time.
+            </p>
             <Select
               value={String(settings.maxConcurrentDownloads)}
               onValueChange={(v) => saveSetting('maxConcurrentDownloads', parseInt(v))}
@@ -1782,7 +1976,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-primary" /> Default video quality
             </h3>
-            <p className="text-sm text-muted-foreground">The quality automatically selected for new downloads.</p>
+            <p className="text-sm text-muted-foreground">
+              The quality automatically selected for new downloads.
+            </p>
             <Select
               value={settings.defaultQuality}
               onValueChange={(v) => saveSetting('defaultQuality', v)}
@@ -1804,7 +2000,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <FileVideo className="w-5 h-5 text-primary" /> Default format
             </h3>
-            <p className="text-sm text-muted-foreground">The file format used for video downloads.</p>
+            <p className="text-sm text-muted-foreground">
+              The file format used for video downloads.
+            </p>
             <Select
               value={settings.defaultFormat}
               onValueChange={(v) => saveSetting('defaultFormat', v)}
@@ -1824,7 +2022,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <List className="w-5 h-5 text-primary" /> Playlist Downloads
             </h3>
-            <p className="text-sm text-muted-foreground">Control what happens when you paste a playlist link.</p>
+            <p className="text-sm text-muted-foreground">
+              Control what happens when you paste a playlist link.
+            </p>
             <div className="flex items-center space-x-3">
               <Switch
                 id="playlist-detect"
@@ -1871,7 +2071,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             <h3 className="text-lg font-semibold flex items-center gap-2">
               <Settings className="w-5 h-5 text-primary" /> Application Behavior
             </h3>
-            <p className="text-sm text-muted-foreground">Control how the application behaves on your system.</p>
+            <p className="text-sm text-muted-foreground">
+              Control how the application behaves on your system.
+            </p>
             <div className="flex items-center space-x-3">
               <Switch
                 id="close-to-tray"
@@ -1886,21 +2088,35 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
 
           <div className="border-t border-border/50 pt-8 space-y-3">
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <RefreshCw className={cn("w-5 h-5 text-primary", binaryUpdates.some(u => u.updating) && "animate-spin")} /> Software updates
+              <RefreshCw
+                className={cn(
+                  'w-5 h-5 text-primary',
+                  binaryUpdates.some((u) => u.updating) && 'animate-spin',
+                )}
+              />{' '}
+              Software updates
             </h3>
-            <p className="text-sm text-muted-foreground">Keep all download engines up to date for best compatibility with all sites.</p>
+            <p className="text-sm text-muted-foreground">
+              Keep all download engines up to date for best compatibility with all sites.
+            </p>
 
             {/* Update All button */}
             <div className="mb-4">
               <Button
                 onClick={handleUpdateAllBinaries}
-                disabled={binaryUpdates.every(u => !u.needsUpdate) || binaryUpdates.some(u => u.updating)}
+                disabled={
+                  binaryUpdates.every((u) => !u.needsUpdate) ||
+                  binaryUpdates.some((u) => u.updating)
+                }
                 variant="default"
                 className="h-9"
               >
-                {binaryUpdates.some(u => u.updating) ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Updating All...</>
-                ) : binaryUpdates.some(u => u.needsUpdate) ? (
+                {binaryUpdates.some((u) => u.updating) ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Updating All...
+                  </>
+                ) : binaryUpdates.some((u) => u.needsUpdate) ? (
                   <>Update All</>
                 ) : (
                   <>All Up to Date</>
@@ -1911,7 +2127,10 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
             {/* Individual binary updates */}
             <div className="space-y-4">
               {binaryUpdates.map((binary) => (
-                <div key={binary.name} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div
+                  key={binary.name}
+                  className="flex items-center justify-between p-4 border border-border rounded-lg"
+                >
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="font-medium">{binary.name}</h4>
@@ -1919,22 +2138,26 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                         v{binary.installedVersion} installed
                       </span>
                     </div>
-                    
+
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Latest: v{binary.latestVersion}</span>
+                      <span className="text-sm text-muted-foreground">
+                        Latest: v{binary.latestVersion}
+                      </span>
                       {binary.needsUpdate && (
                         <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full ml-2">
                           Update available
                         </span>
                       )}
-                      {!binary.needsUpdate && binary.installedVersion !== 'Checking...' && binary.installedVersion !== 'Not installed' && (
-                        <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Up to date
-                        </span>
-                      )}
+                      {!binary.needsUpdate &&
+                        binary.installedVersion !== 'Checking...' &&
+                        binary.installedVersion !== 'Not installed' && (
+                          <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Up to date
+                          </span>
+                        )}
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     {binary.updating ? (
                       <div className="flex items-center gap-2">
@@ -1960,18 +2183,21 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
 
             {/* Status message */}
             {updateStatus && (
-              <p className={cn(
-                "text-sm flex items-center gap-1.5",
-                updateStatus.includes('failed') ? 'text-destructive' : 'text-green-500'
-              )}>
-                {updateStatus.includes('failed')
-                  ? <AlertCircle className="w-3.5 h-3.5" />
-                  : <CheckCircle2 className="w-3.5 h-3.5" />}
+              <p
+                className={cn(
+                  'text-sm flex items-center gap-1.5',
+                  updateStatus.includes('failed') ? 'text-destructive' : 'text-green-500',
+                )}
+              >
+                {updateStatus.includes('failed') ? (
+                  <AlertCircle className="w-3.5 h-3.5" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
                 {updateStatus}
               </p>
             )}
           </div>
-
         </CardContent>
       </Card>
 
@@ -1981,10 +2207,11 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
           <DialogHeader>
             <DialogTitle>Playlist Detected</DialogTitle>
             <DialogDescription>
-              This URL is a playlist with {playlistDetectedData?.count || 0} videos. How would you like to proceed?
+              This URL is a playlist with {playlistDetectedData?.count || 0} videos. How would you
+              like to proceed?
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             <div className="text-center">
               <h3 className="font-semibold text-lg">{playlistDetectedData?.title || 'Playlist'}</h3>
@@ -1997,8 +2224,8 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                 {playlistDetectedData?.entries?.slice(0, 12).map((entry, index) => (
                   <div key={index} className="relative group">
                     {entry.thumbnail ? (
-                      <img 
-                        src={entry.thumbnail} 
+                      <img
+                        src={entry.thumbnail}
                         alt={entry.title}
                         className="w-full h-20 object-cover rounded border"
                       />
@@ -2014,7 +2241,9 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                 ))}
                 {playlistDetectedData?.entries && playlistDetectedData.entries.length > 12 && (
                   <div className="w-full h-20 bg-muted rounded border flex items-center justify-center">
-                    <span className="text-muted-foreground text-sm">+{playlistDetectedData.entries.length - 12} more</span>
+                    <span className="text-muted-foreground text-sm">
+                      +{playlistDetectedData.entries.length - 12} more
+                    </span>
                   </div>
                 )}
               </div>
@@ -2028,11 +2257,14 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                     const settings = await window.electronAPI.getSettings();
                     await window.electronAPI.addPlaylistToQueue(playlistDetectedData.entries, {
                       savePath: settings?.download_path || settings?.downloadPath,
-                      createFolder: settings?.create_playlist_folder ?? settings?.createPlaylistFolder ?? true,
-                      playlistTitle: playlistDetectedData.title
+                      createFolder:
+                        settings?.create_playlist_folder ?? settings?.createPlaylistFolder ?? true,
+                      playlistTitle: playlistDetectedData.title,
                     });
                     setShowPlaylistDialog(false);
-                    setSuccessMsg(`Added ${playlistDetectedData.count} videos to queue! Switch to Queue & History to track progress.`);
+                    setSuccessMsg(
+                      `Added ${playlistDetectedData.count} videos to queue! Switch to Queue & History to track progress.`,
+                    );
                     onGoToQueue?.();
                   } catch (error: any) {
                     onError({ message: `Failed to add playlist to queue: ${error.message}` });
@@ -2043,7 +2275,7 @@ function SettingsPanel({ setSuccessMsg, onGoToQueue, onError }: SettingsPanelPro
                 <Download className="w-4 h-4 mr-2" />
                 Download All Videos
               </Button>
-              
+
               <Button
                 variant="outline"
                 onClick={() => {

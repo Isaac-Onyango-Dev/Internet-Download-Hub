@@ -24,32 +24,32 @@ Internet Download Hub is a free Windows desktop application that lets you downlo
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| **Framework** | [Electron](https://www.electronjs.org/) |
-| **Language** | [TypeScript](https://www.typescriptlang.org/) |
-| **Build Tool** | [Vite](https://vitejs.dev/) |
-| **Styling** | [Tailwind CSS](https://tailwindcss.com/) |
-| **Download Engines** | [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/), [streamlink](https://streamlink.github.io/), [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE) |
-| **Browser Automation** | [Playwright](https://playwright.dev/) |
+| Component              | Technology                                                                                                                                                                    |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Framework**          | [Electron](https://www.electronjs.org/)                                                                                                                                       |
+| **Language**           | [TypeScript](https://www.typescriptlang.org/)                                                                                                                                 |
+| **Build Tool**         | [Vite](https://vitejs.dev/)                                                                                                                                                   |
+| **Styling**            | [Tailwind CSS](https://tailwindcss.com/)                                                                                                                                      |
+| **Download Engines**   | [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/), [streamlink](https://streamlink.github.io/), [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE) |
+| **Browser Automation** | [Playwright](https://playwright.dev/)                                                                                                                                         |
 
 ## Supported Sites
 
 Internet Download Hub supports downloading from **1000+ websites**, including:
 
-| Category | Sites |
-|----------|-------|
-| **Video Platforms** | YouTube, TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Dailymotion, Bilibili, Odyspace |
-| **Live Streaming** | Twitch, Kick, Rumble, VK Live |
-| **Anime & Streaming** | Crunchyroll, Funimation, niconico |
-| **Image Boards** | Pixiv, DeviantArt, ArtStation, Flickr |
-| **Social Media** | Tumblr, Pinterest, Reddit |
-| **And many more...** | 1000+ sites supported via yt-dlp |
+| Category              | Sites                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| **Video Platforms**   | YouTube, TikTok, Instagram, Twitter/X, Facebook, Reddit, Vimeo, Dailymotion, Bilibili, Odyspace |
+| **Live Streaming**    | Twitch, Kick, Rumble, VK Live                                                                   |
+| **Anime & Streaming** | Crunchyroll, Funimation, niconico                                                               |
+| **Image Boards**      | Pixiv, DeviantArt, ArtStation, Flickr                                                           |
+| **Social Media**      | Tumblr, Pinterest, Reddit                                                                       |
+| **And many more...**  | 1000+ sites supported via yt-dlp                                                                |
 
 ## Screenshots
 
-| Downloader | Active Queue | Empty Queue | Settings |
-|:---:|:---:|:---:|:---:|
+|                   Downloader                   |                Active Queue                 |                 Empty Queue                 |                  Settings                  |
+| :--------------------------------------------: | :-----------------------------------------: | :-----------------------------------------: | :----------------------------------------: |
 | ![Downloader](docs/screenshots/downloader.jpg) | ![Active Queue](docs/screenshots/queue.jpg) | ![Empty Queue](docs/screenshots/queue2.jpg) | ![Settings](docs/screenshots/settings.jpg) |
 
 ## Features
@@ -130,6 +130,7 @@ npm run dev
 ```
 
 To build the Windows installer:
+
 ```cmd
 npm run build:win
 ```

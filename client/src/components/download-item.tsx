@@ -1,10 +1,26 @@
-import { formatDistanceToNow } from "date-fns";
-import { File, FileAudio, FileVideo, FileArchive, FileImage, FileText, Pause, Play, X, Clock, CheckCircle2, AlertCircle, RotateCcw, ShieldCheck, Layers } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
-import { useDeleteDownload, useRestartDownload, useCancelDownload } from "@/hooks/use-downloads";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatDistanceToNow } from 'date-fns';
+import {
+  File,
+  FileAudio,
+  FileVideo,
+  FileArchive,
+  FileImage,
+  FileText,
+  Pause,
+  Play,
+  X,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+  ShieldCheck,
+  Layers,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
+import { useDeleteDownload, useRestartDownload, useCancelDownload } from '@/hooks/use-downloads';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Download {
   id: number;
@@ -32,21 +48,30 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
   const deleteMutation = useDeleteDownload();
 
   const getFileIcon = (mimeType: string | null, filename: string) => {
-    if (mimeType?.includes("video") || filename.endsWith(".mp4") || filename.endsWith(".mkv")) return <FileVideo className="w-5 h-5 text-blue-500" />;
-    if (mimeType?.includes("audio") || filename.endsWith(".mp3") || filename.endsWith(".wav")) return <FileAudio className="w-5 h-5 text-purple-500" />;
-    if (mimeType?.includes("image") || filename.endsWith(".jpg") || filename.endsWith(".png")) return <FileImage className="w-5 h-5 text-green-500" />;
-    if (filename.endsWith(".zip") || filename.endsWith(".rar") || filename.endsWith(".exe")) return <FileArchive className="w-5 h-5 text-yellow-500" />;
-    if (mimeType?.includes("pdf")) return <FileText className="w-5 h-5 text-red-500" />;
+    if (mimeType?.includes('video') || filename.endsWith('.mp4') || filename.endsWith('.mkv'))
+      return <FileVideo className="w-5 h-5 text-blue-500" />;
+    if (mimeType?.includes('audio') || filename.endsWith('.mp3') || filename.endsWith('.wav'))
+      return <FileAudio className="w-5 h-5 text-purple-500" />;
+    if (mimeType?.includes('image') || filename.endsWith('.jpg') || filename.endsWith('.png'))
+      return <FileImage className="w-5 h-5 text-green-500" />;
+    if (filename.endsWith('.zip') || filename.endsWith('.rar') || filename.endsWith('.exe'))
+      return <FileArchive className="w-5 h-5 text-yellow-500" />;
+    if (mimeType?.includes('pdf')) return <FileText className="w-5 h-5 text-red-500" />;
     return <File className="w-5 h-5 text-gray-500" />;
   };
 
   const getStatusColor = (state: string) => {
     switch (state) {
-      case "downloading": return "text-primary";
-      case "completed": return "text-green-500";
-      case "error": return "text-destructive";
-      case "paused": return "text-yellow-500";
-      default: return "text-muted-foreground";
+      case 'downloading':
+        return 'text-primary';
+      case 'completed':
+        return 'text-green-500';
+      case 'error':
+        return 'text-destructive';
+      case 'paused':
+        return 'text-yellow-500';
+      default:
+        return 'text-muted-foreground';
     }
   };
 
@@ -59,9 +84,8 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
   };
 
   const totalBytes = download.totalBytes ?? 0;
-  const percent = totalBytes > 0
-    ? Math.round((download.receivedBytes || 0) / totalBytes * 100)
-    : 0;
+  const percent =
+    totalBytes > 0 ? Math.round(((download.receivedBytes || 0) / totalBytes) * 100) : 0;
 
   const handlePauseResume = () => {
     if (download.state === 'downloading') {
@@ -91,27 +115,42 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
               {download.filename}
             </h4>
             <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-              <span>{formatBytes(download.receivedBytes || 0)} / {formatBytes(download.totalBytes || 0)}</span>
-              <span className={cn("font-medium", getStatusColor(download.state))}>
+              <span>
+                {formatBytes(download.receivedBytes || 0)} / {formatBytes(download.totalBytes || 0)}
+              </span>
+              <span className={cn('font-medium', getStatusColor(download.state))}>
                 {download.state === 'downloading' ? `${percent}%` : download.state}
               </span>
             </div>
-            {download.state === 'downloading' && (
-              <Progress value={percent} className="h-1 mt-2" />
-            )}
+            {download.state === 'downloading' && <Progress value={percent} className="h-1 mt-2" />}
           </div>
           <div className="flex flex-col gap-1">
             {download.state === 'error' && (
-              <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" onClick={handleRetry} title="Retry">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 text-primary"
+                onClick={handleRetry}
+                title="Retry"
+              >
                 <RotateCcw className="w-3 h-3" />
               </Button>
             )}
             {(download.state === 'downloading' || download.state === 'paused') && (
               <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handlePauseResume}>
-                {download.state === 'downloading' ? <Pause className="w-3" /> : <Play className="w-3" />}
+                {download.state === 'downloading' ? (
+                  <Pause className="w-3" />
+                ) : (
+                  <Play className="w-3" />
+                )}
               </Button>
             )}
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={handleDelete}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              onClick={handleDelete}
+            >
               <X className="w-3 h-3" />
             </Button>
           </div>
@@ -144,7 +183,9 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p className="text-[10px]">Managed by Internet Download Hub: Continues even if browser closes</p>
+                  <p className="text-[10px]">
+                    Managed by Internet Download Hub: Continues even if browser closes
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -157,12 +198,16 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
             <h3 className="text-base font-semibold truncate" title={download.filename}>
               {download.filename}
             </h3>
-            <span className={cn(
-              "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border",
-              download.state === 'completed' ? "bg-green-500/10 text-green-600 border-green-500/20" :
-                download.state === 'error' ? "bg-red-500/10 text-red-600 border-red-500/20" :
-                  "bg-primary/10 text-primary border-primary/20"
-            )}>
+            <span
+              className={cn(
+                'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border',
+                download.state === 'completed'
+                  ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                  : download.state === 'error'
+                    ? 'bg-red-500/10 text-red-600 border-red-500/20'
+                    : 'bg-primary/10 text-primary border-primary/20',
+              )}
+            >
               {download.state}
             </span>
           </div>
@@ -174,7 +219,9 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
             </span>
             <span className="flex items-center gap-1.5">
               <Clock className="w-3 h-3" />
-              {download.createdAt ? formatDistanceToNow(new Date(download.createdAt), { addSuffix: true }) : 'Just now'}
+              {download.createdAt
+                ? formatDistanceToNow(new Date(download.createdAt), { addSuffix: true })
+                : 'Just now'}
             </span>
             {download.playlistIndex && download.playlistTotal && (
               <span className="flex items-center gap-1.5">
@@ -205,10 +252,12 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
             <div className="relative h-2 w-full bg-muted rounded-full overflow-hidden">
               <div
                 className={cn(
-                  "absolute top-0 left-0 h-full rounded-full transition-all duration-500",
-                  download.state === 'completed' ? "bg-green-500" :
-                    download.state === 'error' ? "bg-destructive" :
-                      "bg-primary animate-stripe bg-[length:1rem_1rem] bg-gradient-to-r from-primary via-primary/80 to-primary"
+                  'absolute top-0 left-0 h-full rounded-full transition-all duration-500',
+                  download.state === 'completed'
+                    ? 'bg-green-500'
+                    : download.state === 'error'
+                      ? 'bg-destructive'
+                      : 'bg-primary animate-stripe bg-[length:1rem_1rem] bg-gradient-to-r from-primary via-primary/80 to-primary',
                 )}
                 style={{ width: `${percent}%` }}
               />
@@ -235,7 +284,11 @@ export function DownloadItem({ download, compact = false }: DownloadItemProps) {
                 className="rounded-full w-8 h-8 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
                 onClick={handlePauseResume}
               >
-                {download.state === 'downloading' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                {download.state === 'downloading' ? (
+                  <Pause className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
               </Button>
             )}
 

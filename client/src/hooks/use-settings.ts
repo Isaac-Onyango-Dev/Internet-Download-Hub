@@ -1,7 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export type UpdateSettingsRequest = {
-  theme?: "light" | "dark" | "system";
+  theme?: 'light' | 'dark' | 'system';
   maxConcurrentDownloads?: number;
   autoCapture?: boolean;
   fileTypes?: string[];
@@ -10,7 +10,7 @@ export type UpdateSettingsRequest = {
   cookiesFilePath?: string;
 };
 
-const SETTINGS_KEY = ["/api/settings"];
+const SETTINGS_KEY = ['/api/settings'];
 
 // ============================================
 // SETTINGS HOOKS
@@ -30,7 +30,7 @@ export function useUpdateSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (updates: UpdateSettingsRequest) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.saveSettings(updates);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: SETTINGS_KEY }),

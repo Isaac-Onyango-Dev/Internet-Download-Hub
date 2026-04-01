@@ -1,7 +1,7 @@
-import { ReactNode } from "react";
-import { useHashLocation } from "wouter/use-hash-location";
-import { cn } from "@/lib/utils";
-import { Download, HardDrive, Settings, Heart } from "lucide-react";
+import { ReactNode } from 'react';
+import { useHashLocation } from 'wouter/use-hash-location';
+import { cn } from '@/lib/utils';
+import { Download, HardDrive, Settings, Heart } from 'lucide-react';
 
 interface LayoutShellProps {
   children: ReactNode;
@@ -11,10 +11,10 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const [location, navigate] = useHashLocation();
 
   const navItems = [
-    { href: "/", label: "Downloader", icon: Download },
-    { href: "/queue", label: "Queue & History", icon: HardDrive },
-    { href: "/settings", label: "Settings", icon: Settings },
-    { href: "/support", label: "Support", icon: Heart },
+    { href: '/', label: 'Downloader', icon: Download },
+    { href: '/queue', label: 'Queue & History', icon: HardDrive },
+    { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/support', label: 'Support', icon: Heart },
   ];
 
   return (
@@ -28,34 +28,37 @@ export function LayoutShell({ children }: LayoutShellProps) {
               alt="Internet Download Hub"
               className="w-6 h-6 object-contain"
               onError={(e) => {
-                e.currentTarget.style.display = "none";
+                e.currentTarget.style.display = 'none';
               }}
             />
           </div>
           <div>
-            <span className="font-bold text-base tracking-tight text-foreground block leading-none">Internet Download Hub</span>
+            <span className="font-bold text-base tracking-tight text-foreground block leading-none">
+              Internet Download Hub
+            </span>
           </div>
         </div>
 
         <nav className="flex-1 space-y-1 mt-4">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.href === "/"
-              ? (location === "/" || location === "")
-              : location.startsWith(item.href);
+            const isActive =
+              item.href === '/'
+                ? location === '/' || location === ''
+                : location.startsWith(item.href);
 
             return (
               <button
                 key={item.href}
                 onClick={() => navigate(item.href)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors font-medium cursor-pointer text-left",
+                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors font-medium cursor-pointer text-left',
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )}
               >
-                <Icon className={cn("w-5 h-5", isActive ? "text-primary" : "")} />
+                <Icon className={cn('w-5 h-5', isActive ? 'text-primary' : '')} />
                 <span>{item.label}</span>
               </button>
             );
@@ -65,9 +68,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
 
       {/* Only this scrolls */}
       <main className="flex-1 h-screen overflow-y-auto overflow-x-hidden">
-        <div className="w-full h-full p-4 md:p-8 max-w-5xl mx-auto">
-          {children}
-        </div>
+        <div className="w-full h-full p-4 md:p-8 max-w-5xl mx-auto">{children}</div>
       </main>
     </div>
   );

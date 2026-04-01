@@ -3,7 +3,7 @@
 // ============================================================================
 // This script runs in the renderer process and provides a secure bridge
 // between the frontend (React app) and the main Electron process.
-// 
+//
 // Security: Uses contextBridge to safely expose specific APIs to the renderer
 // without giving it direct access to Node.js or Electron modules.
 //
@@ -11,7 +11,7 @@
 // defined in main.ts. This file defines the frontend-facing API.
 // ============================================================================
 
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron';
 
 // Expose a secure API to the renderer process
 // This creates window.electronAPI that the React app can use
@@ -19,73 +19,67 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================================================
   // VIDEO INFORMATION EXTRACTION
   // ============================================================================
-  
+
   /**
    * Fetches metadata for a video URL (title, duration, formats, etc.)
    * @param url - Video URL to analyze
    * @returns Promise with video metadata
    */
-  fetchVideoInfo: (url: string) =>
-    ipcRenderer.invoke('fetch-video-info', url),
+  fetchVideoInfo: (url: string) => ipcRenderer.invoke('fetch-video-info', url),
 
   // ============================================================================
   // DOWNLOAD MANAGEMENT
   // ============================================================================
-  
+
   /**
    * Starts a new download with the specified options
    * @param options - Download configuration including URL, filename, format, etc.
    * @returns Promise with download ID
    */
   startDownload: (options: {
-    url: string;              // Video URL to download
-    filename: string;         // Output filename
-    formatId?: string;        // Video format (e.g., 'bestvideo+bestaudio')
-    savePath?: string;         // Where to save the file
-    thumbnail?: string;        // Video thumbnail URL
-    duration?: number;        // Video duration in seconds
-    uploader?: string;        // Video uploader/channel name
+    url: string; // Video URL to download
+    filename: string; // Output filename
+    formatId?: string; // Video format (e.g., 'bestvideo+bestaudio')
+    savePath?: string; // Where to save the file
+    thumbnail?: string; // Video thumbnail URL
+    duration?: number; // Video duration in seconds
+    uploader?: string; // Video uploader/channel name
   }) => ipcRenderer.invoke('start-download', options),
 
   /**
    * Cancels an active download and cleans up files
    * @param id - Download ID to cancel
    */
-  cancelDownload: (id: number) =>
-    ipcRenderer.invoke('cancel-download', id),
+  cancelDownload: (id: number) => ipcRenderer.invoke('cancel-download', id),
 
   /**
    * Deletes a download from history and removes the file
    * @param id - Download ID to delete
    */
-  deleteDownload: (id: number) =>
-    ipcRenderer.invoke('delete-download', id),
+  deleteDownload: (id: number) => ipcRenderer.invoke('delete-download', id),
 
   /**
    * Restarts a failed or cancelled download
    * @param id - Download ID to restart
    */
-  restartDownload: (id: number) =>
-    ipcRenderer.invoke('restart-download', id),
+  restartDownload: (id: number) => ipcRenderer.invoke('restart-download', id),
 
   /**
    * Pauses an active download
    * @param id - Download ID to pause
    */
-  pauseDownload: (id: number) =>
-    ipcRenderer.invoke('pause-download', id),
+  pauseDownload: (id: number) => ipcRenderer.invoke('pause-download', id),
 
   /**
    * Resumes a paused download
    * @param id - Download ID to resume
    */
-  resumeDownload: (id: number) =>
-    ipcRenderer.invoke('resume-download', id),
+  resumeDownload: (id: number) => ipcRenderer.invoke('resume-download', id),
 
   // ============================================================================
   // REAL-TIME EVENTS AND NOTIFICATIONS
   // ============================================================================
-  
+
   /**
    * Removes all download progress event listeners
    * Useful when unmounting components to prevent memory leaks
@@ -108,43 +102,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================================================
   // FILE SYSTEM OPERATIONS
   // ============================================================================
-  
+
   /**
    * Opens a folder selection dialog for choosing save location
    * @returns Promise with selected folder path or null if cancelled
    */
-  chooseSaveFolder: () =>
-    ipcRenderer.invoke('choose-save-folder'),
+  chooseSaveFolder: () => ipcRenderer.invoke('choose-save-folder'),
 
   /**
    * Opens a file selection dialog for choosing browser cookies file
    * Used for accessing age-restricted or private content
    * @returns Promise with selected file path or null if cancelled
    */
-  chooseCookiesFile: () =>
-    ipcRenderer.invoke('choose-cookies-file'),
+  chooseCookiesFile: () => ipcRenderer.invoke('choose-cookies-file'),
 
   /**
    * Opens a file using the system default application
    * @param filePath - Path to the file to open
    */
-  openFilePath: (filePath: string) =>
-    ipcRenderer.invoke('open-file-path', filePath),
+  openFilePath: (filePath: string) => ipcRenderer.invoke('open-file-path', filePath),
 
   /**
    * Opens a folder in the system file explorer
    * @param filePath - Path to the folder to open
    */
-  openFolder: (filePath: string) =>
-    ipcRenderer.invoke('open-folder', filePath),
-  
+  openFolder: (filePath: string) => ipcRenderer.invoke('open-folder', filePath),
+
   /**
    * Opens a URL in the system default browser
    * Only allows whitelisted domains for security
    * @param url - URL to open
    */
-  openExternal: (url: string) =>
-    ipcRenderer.invoke('open-external', url),
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
   /**
    * Checks available disk space for a given path
@@ -158,13 +147,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================================================
   // DOWNLOAD HISTORY MANAGEMENT
   // ============================================================================
-  
+
   /**
    * Retrieves the complete download history from the database
    * @returns Promise with array of download records
    */
-  getDownloadHistory: () =>
-    ipcRenderer.invoke('get-download-history'),
+  getDownloadHistory: () => ipcRenderer.invoke('get-download-history'),
 
   /**
    * Clears download history based on completion status
@@ -177,75 +165,66 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================================================
   // APPLICATION SETTINGS
   // ============================================================================
-  
+
   /**
    * Retrieves current application settings from database
    * @returns Promise with settings object
    */
-  getSettings: () =>
-    ipcRenderer.invoke('get-settings'),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
 
   /**
    * Saves application settings to database
    * @param settings - Settings object to save
    * @returns Promise when save completes
    */
-  saveSettings: (settings: any) =>
-    ipcRenderer.invoke('save-settings', settings),
+  saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
 
   /**
    * Resets all settings to their default values
    * @returns Promise when reset completes
    */
-  resetSettings: () =>
-    ipcRenderer.invoke('reset-settings'),
+  resetSettings: () => ipcRenderer.invoke('reset-settings'),
 
   // ============================================================================
   // SYSTEM INFORMATION AND UPDATES
   // ============================================================================
-  
+
   /**
    * Gets the system's default download directory
    * @returns Promise with default download path
    */
-  getDefaultDownloadPath: () =>
-    ipcRenderer.invoke('get-default-download-path'),
+  getDefaultDownloadPath: () => ipcRenderer.invoke('get-default-download-path'),
 
   /**
    * Gets the current application version
    * @returns Promise with version string
    */
-  getAppVersion: () =>
-    ipcRenderer.invoke('get-app-version'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   /**
    * Updates yt-dlp to the latest version
    * @returns Promise with update result
    */
-  updateYtDlp: () =>
-    ipcRenderer.invoke('update-ytdlp'),
+  updateYtDlp: () => ipcRenderer.invoke('update-ytdlp'),
 
   /**
    * Gets the current yt-dlp version
    * @returns Promise with version information
    */
-  getYtDlpVersion: () =>
-    ipcRenderer.invoke('get-ytdlp-version'),
+  getYtDlpVersion: () => ipcRenderer.invoke('get-ytdlp-version'),
 
   /**
    * Checks for updates to all binary tools
    * @returns Promise with update information for all tools
    */
-  checkAllBinaryUpdates: () =>
-    ipcRenderer.invoke('check-all-binary-updates'),
+  checkAllBinaryUpdates: () => ipcRenderer.invoke('check-all-binary-updates'),
 
   /**
    * Updates a specific binary tool
    * @param binaryName - Name of the binary to update
    * @returns Promise with update result
    */
-  updateBinary: (binaryName: string) =>
-    ipcRenderer.invoke('update-binary', { binaryName }),
+  updateBinary: (binaryName: string) => ipcRenderer.invoke('update-binary', { binaryName }),
 
   /**
    * Listens for yt-dlp version check results
@@ -268,7 +247,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ============================================================================
   // PLAYLIST DETECTION AND MANAGEMENT
   // ============================================================================
-  
+
   /**
    * Listens for playlist detection events
    * When a user pastes a playlist URL, this event fires with playlist info
@@ -285,22 +264,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @param options - Playlist download options (save path, folder creation, etc.)
    * @returns Promise with result (added count, skipped count)
    */
-  addPlaylistToQueue: (entries: Array<{
-    url: string;              // Video URL
-    title: string;            // Video title
-    thumbnail?: string;        // Video thumbnail URL
-    index: number;            // Position in playlist
-  }>, options: {
-    savePath?: string;         // Where to save the playlist
-    createFolder?: boolean;    // Whether to create a playlist folder
-    playlistTitle?: string;    // Playlist name for folder creation
-  }) => ipcRenderer.invoke('add-playlist-to-queue', { entries, options }),
+  addPlaylistToQueue: (
+    entries: Array<{
+      url: string; // Video URL
+      title: string; // Video title
+      thumbnail?: string; // Video thumbnail URL
+      index: number; // Position in playlist
+    }>,
+    options: {
+      savePath?: string; // Where to save the playlist
+      createFolder?: boolean; // Whether to create a playlist folder
+      playlistTitle?: string; // Playlist name for folder creation
+    },
+  ) => ipcRenderer.invoke('add-playlist-to-queue', { entries, options }),
 
   // ============================================================================
   // FFMPEG DOWNLOAD NOTIFICATIONS
   // ============================================================================
   // These events handle the on-demand FFmpeg download system
-  
+
   /**
    * Listens for FFmpeg download progress updates
    * Shows progress when FFmpeg is being downloaded automatically
@@ -319,4 +301,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('ffmpeg-download-notification');
     ipcRenderer.on('ffmpeg-download-notification', (_event, data) => callback(data));
   },
-})
+});

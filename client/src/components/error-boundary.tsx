@@ -11,7 +11,11 @@ interface ErrorBoundaryState {
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
-  fallback?: React.ComponentType<{ error?: Error; errorInfo?: React.ErrorInfo; onReset?: () => void }>;
+  fallback?: React.ComponentType<{
+    error?: Error;
+    errorInfo?: React.ErrorInfo;
+    onReset?: () => void;
+  }>;
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -37,9 +41,15 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       const { fallback: Fallback } = this.props;
-      
+
       if (Fallback) {
-        return <Fallback error={this.state.error} errorInfo={this.state.errorInfo} onReset={this.handleReset} />;
+        return (
+          <Fallback
+            error={this.state.error}
+            errorInfo={this.state.errorInfo}
+            onReset={this.handleReset}
+          />
+        );
       }
 
       return (
@@ -49,7 +59,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Something went wrong</AlertTitle>
               <AlertDescription>
-                An unexpected error occurred. Please try refreshing the page or contact support if the problem persists.
+                An unexpected error occurred. Please try refreshing the page or contact support if
+                the problem persists.
                 {process.env.NODE_ENV === 'development' && (
                   <div className="mt-4 p-3 bg-red-100 rounded border border-red-300 text-red-800">
                     <p className="font-semibold text-sm mb-2">Development Error Details:</p>
@@ -58,7 +69,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                     </pre>
                     {this.state.errorInfo?.componentStack && (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-sm font-mono">Component Stack</summary>
+                        <summary className="cursor-pointer text-sm font-mono">
+                          Component Stack
+                        </summary>
                         <pre className="text-xs whitespace-pre-wrap break-all">
                           {this.state.errorInfo.componentStack}
                         </pre>
@@ -68,7 +81,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 )}
               </AlertDescription>
             </Alert>
-            
+
             <div className="flex gap-2">
               <Button onClick={this.handleReset} variant="outline" className="flex-1">
                 <RefreshCw className="h-4 w-4 mr-2" />

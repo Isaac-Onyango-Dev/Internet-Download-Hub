@@ -14,5 +14,5 @@ export const logger = {
     if (process.env.NODE_ENV === 'development') {
       log.debug(message, ...args);
     }
-  }
+  },
 };

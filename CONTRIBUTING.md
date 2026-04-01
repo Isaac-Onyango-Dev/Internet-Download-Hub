@@ -43,6 +43,7 @@ npm install
 ```
 
 This will install all required packages including:
+
 - Electron and related dependencies
 - React and TypeScript
 - Tailwind CSS and build tools
@@ -55,6 +56,7 @@ npm run dev
 ```
 
 This will:
+
 1. Start the Vite dev server on port 5173
 2. Build the Electron main process
 3. Launch the Electron app with hot reloading
@@ -138,6 +140,7 @@ Internet-Download-Hub/
 - Add body text for complex changes
 
 Examples:
+
 ```
 Add playlist detection feature
 Fix binary update check failing on first launch
@@ -185,6 +188,7 @@ Before reporting an issue, please:
 3. **Provide detailed information** — Include OS version, app version, and exact steps to reproduce
 
 Use the issue templates:
+
 - [Bug Report](./.github/ISSUE_TEMPLATE/bug_report.md)
 - [Feature Request](./.github/ISSUE_TEMPLATE/feature_request.md)
 
@@ -195,6 +199,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](./
 ## Questions?
 
 Feel free to:
+
 - Open an issue for questions
 - Check the [FAQ](./README.md#faq) in the README
 - Review existing discussions

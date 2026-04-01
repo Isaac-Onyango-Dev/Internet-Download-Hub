@@ -1,6 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const DOWNLOADS_KEY = ["/api/downloads"];
+const DOWNLOADS_KEY = ['/api/downloads'];
 
 // ============================================
 // DOWNLOADS HOOKS
@@ -33,8 +33,14 @@ export function useDownloads() {
 export function useCreateDownload() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { url: string; filename: string; formatId?: string; savePath?: string; thumbnail?: string }) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+    mutationFn: async (data: {
+      url: string;
+      filename: string;
+      formatId?: string;
+      savePath?: string;
+      thumbnail?: string;
+    }) => {
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.startDownload(data);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -45,7 +51,7 @@ export function useDeleteDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.deleteDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -56,7 +62,7 @@ export function useCancelDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.cancelDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -67,7 +73,7 @@ export function useRestartDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.restartDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -78,7 +84,7 @@ export function usePauseDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.pauseDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -89,7 +95,7 @@ export function useResumeDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error("Electron API not available");
+      if (!window.electronAPI) throw new Error('Electron API not available');
       return await window.electronAPI.resumeDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),

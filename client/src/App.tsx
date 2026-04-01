@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
-import { Switch, Route, Router } from "wouter";
-import { useHashLocation } from "wouter/use-hash-location";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { ErrorBoundary } from "@/components/error-boundary";
-import Dashboard from "@/pages/Dashboard";
+import { useEffect, useState } from 'react';
+import { Switch, Route, Router } from 'wouter';
+import { useHashLocation } from 'wouter/use-hash-location';
+import { queryClient } from './lib/queryClient';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/toaster';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { ErrorBoundary } from '@/components/error-boundary';
+import Dashboard from '@/pages/Dashboard';
 import {
   Dialog,
   DialogContent,
@@ -14,18 +14,16 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { ExternalLink, Loader2 } from "lucide-react";
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { ExternalLink, Loader2 } from 'lucide-react';
 
-const EULA_URL =
-  "https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt";
+const EULA_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt';
 
 function NavigationRouter() {
   const [location] = useHashLocation();
-
 
   return (
     <Router hook={useHashLocation}>
@@ -36,7 +34,7 @@ function NavigationRouter() {
         <Route path="/support" component={Dashboard} />
         <Route>
           {() => {
-            window.location.hash = "#/";
+            window.location.hash = '#/';
             return null;
           }}
         </Route>
@@ -46,7 +44,7 @@ function NavigationRouter() {
 }
 
 function App() {
-  const [eulaGate, setEulaGate] = useState<"loading" | "show" | "done">("loading");
+  const [eulaGate, setEulaGate] = useState<'loading' | 'show' | 'done'>('loading');
   const [eulaChecked, setEulaChecked] = useState(false);
   const [eulaSaving, setEulaSaving] = useState(false);
 
@@ -54,16 +52,15 @@ function App() {
     let cancelled = false;
     (async () => {
       if (!window.electronAPI?.getSettings) {
-        if (!cancelled) setEulaGate("done");
+        if (!cancelled) setEulaGate('done');
         return;
       }
       try {
         const s = await window.electronAPI.getSettings();
-        const ok =
-          Number((s as { eula_age_acknowledged?: number }).eula_age_acknowledged) === 1;
-        if (!cancelled) setEulaGate(ok ? "done" : "show");
+        const ok = Number((s as { eula_age_acknowledged?: number }).eula_age_acknowledged) === 1;
+        if (!cancelled) setEulaGate(ok ? 'done' : 'show');
       } catch {
-        if (!cancelled) setEulaGate("done");
+        if (!cancelled) setEulaGate('done');
       }
     })();
     return () => {
@@ -76,7 +73,7 @@ function App() {
     setEulaSaving(true);
     try {
       await window.electronAPI.saveSettings({ eulaAgeAcknowledged: 1 });
-      setEulaGate("done");
+      setEulaGate('done');
     } finally {
       setEulaSaving(false);
     }
@@ -87,7 +84,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <Dialog open={eulaGate === "show"} onOpenChange={() => { }}>
+          <Dialog open={eulaGate === 'show'} onOpenChange={() => {}}>
             <DialogContent
               className="[&>button]:hidden sm:max-w-md"
               onPointerDownOutside={(e) => e.preventDefault()}
@@ -98,8 +95,8 @@ function App() {
                 <DialogTitle>Before you continue</DialogTitle>
                 <DialogDescription className="text-left space-y-3 pt-1">
                   <span className="block">
-                    This app is for adults only. By continuing you confirm you meet the minimum age in
-                    your region and accept the End User License Agreement.
+                    This app is for adults only. By continuing you confirm you meet the minimum age
+                    in your region and accept the End User License Agreement.
                   </span>
                   <button
                     type="button"
@@ -117,7 +114,10 @@ function App() {
                   checked={eulaChecked}
                   onCheckedChange={(v) => setEulaChecked(v === true)}
                 />
-                <Label htmlFor="eula-ack" className="text-sm font-normal leading-snug cursor-pointer">
+                <Label
+                  htmlFor="eula-ack"
+                  className="text-sm font-normal leading-snug cursor-pointer"
+                >
                   I am of legal age where I live and I agree to the EULA.
                 </Label>
               </div>
@@ -129,14 +129,14 @@ function App() {
                       Saving…
                     </>
                   ) : (
-                    "Continue"
+                    'Continue'
                   )}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          {eulaGate !== "loading" && <NavigationRouter />}
-          {eulaGate === "loading" && (
+          {eulaGate !== 'loading' && <NavigationRouter />}
+          {eulaGate === 'loading' && (
             <div className="min-h-[40vh] flex items-center justify-center text-muted-foreground text-sm">
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>

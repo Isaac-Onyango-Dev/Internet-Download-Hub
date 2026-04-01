@@ -1,7 +1,7 @@
 /** True when yt-dlp stderr suggests YouTube age-gating (narrow — avoids false positives). */
 export function isLikelyYoutubeAgeRestrictionError(raw: string): boolean {
-  const m = (raw || '').toLowerCase()
-  
+  const m = (raw || '').toLowerCase();
+
   // Strong indicators - these phrases are specific to age restriction
   if (
     m.includes('age-restricted') ||
@@ -14,21 +14,21 @@ export function isLikelyYoutubeAgeRestrictionError(raw: string): boolean {
     m.includes('restricted from embedding') ||
     m.includes('age_limit')
   ) {
-    return true
+    return true;
   }
-  
+
   // Check for specific age + sign-in combinations (more targeted)
   // Only match if "age" appears near "sign in" in the same context
-  const signInAgePattern = /(?:sign\s*in|login|log\s*in).*(?:age|age\s*restricted|18\+|adult)/i
-  const ageSignInPattern = /(?:age|age\s*restricted|18\+|adult).*(?:sign\s*in|login|log\s*in)/i
-  
-  return signInAgePattern.test(m) || ageSignInPattern.test(m)
+  const signInAgePattern = /(?:sign\s*in|login|log\s*in).*(?:age|age\s*restricted|18\+|adult)/i;
+  const ageSignInPattern = /(?:age|age\s*restricted|18\+|adult).*(?:sign\s*in|login|log\s*in)/i;
+
+  return signInAgePattern.test(m) || ageSignInPattern.test(m);
 }
 
 export function translateDownloadError(
   rawError: string,
   exitCode: number | null,
-  url: string
+  url: string,
 ): string {
   const msg = (rawError || '').toLowerCase();
   const domain = (() => {
@@ -90,7 +90,11 @@ export function translateDownloadError(
   }
 
   // Geographic restriction
-  if (msg.includes('not available in your country') || msg.includes('geo') || msg.includes('blocked in')) {
+  if (
+    msg.includes('not available in your country') ||
+    msg.includes('geo') ||
+    msg.includes('blocked in')
+  ) {
     return 'This video is not available in your region.';
   }
 
@@ -129,15 +133,16 @@ export function translateDownloadError(
   }
 
   // Format not available
-  if (
-    msg.includes('requested format is not available') ||
-    msg.includes('format not available')
-  ) {
+  if (msg.includes('requested format is not available') || msg.includes('format not available')) {
     return 'The selected quality is not available for this video. Please choose a different quality.';
   }
 
   // Disk space
-  if (msg.includes('no space left') || msg.includes('disk full') || msg.includes('not enough space')) {
+  if (
+    msg.includes('no space left') ||
+    msg.includes('disk full') ||
+    msg.includes('not enough space')
+  ) {
     return 'Not enough storage space. Please free up space and try again.';
   }
 
@@ -163,4 +168,3 @@ export function translateDownloadError(
   // Generic fallback — never show raw error
   return `Could not download from ${domain}. Please check your internet connection and try again. If the problem continues, try a different link or update yt-dlp in Settings.`;
 }
-

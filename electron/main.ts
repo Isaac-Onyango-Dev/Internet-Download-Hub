@@ -11,27 +11,43 @@
 // ============================================================================
 
 // Import core Electron modules for desktop app functionality
-import log from 'electron-log';                    // Logging utility
-import { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage, powerSaveBlocker, Notification } from 'electron';
-import path from 'path';                           // File path utilities
-import { spawn, ChildProcess } from 'child_process'; // Process spawning for downloads
-import execa from 'execa';                       // Better process execution
+import log from 'electron-log'; // Logging utility
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  shell,
+  Tray,
+  Menu,
+  nativeImage,
+  powerSaveBlocker,
+  Notification,
+} from 'electron';
+import path from 'path'; // File path utilities
+import { spawn, exec, execSync, ChildProcess } from 'child_process'; // Process spawning for downloads
+import execa from 'execa'; // Better process execution
 import { extractPlaylistInfo, extractVideoInfo } from './extractor'; // Video metadata extraction
-import fs from 'fs';                              // File system operations
-import os from 'os';                              // Operating system utilities
-import https from 'https';                        // HTTP requests for FFmpeg download
-import { promisify } from 'util';                 // Utility for promise conversion
-import zlib from 'zlib';                          // Compression for FFmpeg download
-import initSqlJs from 'sql.js';                   // In-memory database
+import fs from 'fs'; // File system operations
+import os from 'os'; // Operating system utilities
+import https from 'https'; // HTTP requests for FFmpeg download
+import { promisify } from 'util'; // Utility for promise conversion
+import zlib from 'zlib'; // Compression for FFmpeg download
+import initSqlJs from 'sql.js'; // In-memory database
 import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors'; // Error handling
-import { ytDlpCommonArgs, ytDlpCookiesArgs, isYouTubeUrl, type YoutubePlayerClient } from './ytdlp-args'; // yt-dlp configuration
+import {
+  ytDlpCommonArgs,
+  ytDlpCookiesArgs,
+  isYouTubeUrl,
+  type YoutubePlayerClient,
+} from './ytdlp-args'; // yt-dlp configuration
 
 // ============================================================================
 // LOGGING CONFIGURATION
 // ============================================================================
 // Configure electron-log for debugging and error tracking
-log.transports.file.level = 'debug';  // Log everything to file
-log.catchErrors();                    // Catch unhandled exceptions
+log.transports.file.level = 'debug'; // Log everything to file
+log.catchErrors(); // Catch unhandled exceptions
 
 try {
   const fileTransport = log.transports.file as { getFile?: () => { path?: string } };
@@ -52,20 +68,23 @@ let DB_PATH: string;
 process.env.VITE_ELECTRON = 'true';
 
 // Main application window and system tray references
-let mainWindow: any = null;    // Primary browser window
-let tray: any = null;          // System tray icon
-let db: any;                   // SQL.js database instance
+let mainWindow: any = null; // Primary browser window
+let tray: any = null; // System tray icon
+let db: any; // SQL.js database instance
 
 // Active download tasks management
 // Maps download ID to process information for tracking and control
-const activeTasks = new Map<number, {
-  process: ChildProcess;      // The actual download process
-  url: string;                // Download URL
-  formatArg: string;           // Video format argument (e.g., 'bestvideo+bestaudio')
-  outputTemplate: string;      // Output filename template
-  savePath: string;            // Where the file will be saved
-  filePath?: string;           // Full path to the downloaded file (when available)
-}>();
+const activeTasks = new Map<
+  number,
+  {
+    process: ChildProcess; // The actual download process
+    url: string; // Download URL
+    formatArg: string; // Video format argument (e.g., 'bestvideo+bestaudio')
+    outputTemplate: string; // Output filename template
+    savePath: string; // Where the file will be saved
+    filePath?: string; // Full path to the downloaded file (when available)
+  }
+>();
 
 // Track why tasks were stopped (for proper UI state management)
 const taskStopReasons = new Map<number, 'paused' | 'cancelled'>();
@@ -74,24 +93,27 @@ const taskStopReasons = new Map<number, 'paused' | 'cancelled'>();
 let powerSaveBlockerId: number | null = null;
 
 // UI behavior flag for close-to-tray functionality
-let minimizeToTray = false; // toggled by close event (always on for now)
+const minimizeToTray = false; // toggled by close event (always on for now)
+
+// Global promise lock for FFmpeg on-demand download to prevent race conditions
+let ffmpegDownloadPromise: Promise<void> | null = null;
 
 // ============================================================================
 // ENVIRONMENT AND PATH CONFIGURATION
 // ============================================================================
 
 // Environment detection flags
-let isDev: boolean;           // True when running in development mode
-let isTest: boolean;         // True when running tests
+let isDev: boolean; // True when running in development mode
+let isTest: boolean; // True when running tests
 
 // Binary tool paths (yt-dlp, ffmpeg, etc.)
-let binariesPath: string;    // Base path for all binary tools
-let ytDlpPath: string;       // Path to yt-dlp executable
-let ffmpegPath: string;      // Path to ffmpeg executable
-let ffprobePath: string;     // Path to ffprobe executable
-let streamlinkPath: string;  // Path to streamlink executable
-let n_m3u8dlPath: string;    // Path to N_m3u8DL-RE executable
-let galleryDlPath: string;   // Path to gallery-dl executable
+let binariesPath: string; // Base path for all binary tools
+let ytDlpPath: string; // Path to yt-dlp executable
+let ffmpegPath: string; // Path to ffmpeg executable
+let ffprobePath: string; // Path to ffprobe executable
+let streamlinkPath: string; // Path to streamlink executable
+let n_m3u8dlPath: string; // Path to N_m3u8DL-RE executable
+let galleryDlPath: string; // Path to gallery-dl executable
 
 // ============================================================================
 // SINGLE INSTANCE MANAGEMENT
@@ -114,7 +136,7 @@ function initializeSingleInstanceLock(): boolean {
       app.quit();
       return false; // Exit early
     }
-    
+
     // Handle second instance attempt by focusing existing window
     app.on('second-instance', () => {
       if (mainWindow) {
@@ -140,12 +162,12 @@ function initializeSingleInstanceLock(): boolean {
 function setupPaths() {
   isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
   isTest = process.env.NODE_ENV === 'test';
-  
+
   // Determine where to look for binaries based on environment
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
   binariesPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'binaries')  // Packaged app resources
-    : path.join(process.cwd(), 'binaries');         // Development local files
+    ? path.join(process.resourcesPath, 'binaries') // Packaged app resources
+    : path.join(process.cwd(), 'binaries'); // Development local files
 
   /**
    * Binary resolution helper: checks user data first, then packaged resources
@@ -183,12 +205,12 @@ function setupPaths() {
  */
 function checkBinaries() {
   setupPaths();
-  
+
   // List of all required binary tools with their display names and paths
   const binaries = [
-    { name: 'yt-dlp', path: ytDlpPath },        // Main video downloader
-    { name: 'ffmpeg', path: ffmpegPath },        // Video/audio processing
-    { name: 'ffprobe', path: ffprobePath },      // Media analysis
+    { name: 'yt-dlp', path: ytDlpPath }, // Main video downloader
+    { name: 'ffmpeg', path: ffmpegPath }, // Video/audio processing
+    { name: 'ffprobe', path: ffprobePath }, // Media analysis
     { name: 'streamlink', path: streamlinkPath }, // Live streaming
     { name: 'N_m3u8DL-RE', path: n_m3u8dlPath }, // HLS/DASH streams
     { name: 'gallery-dl', path: galleryDlPath }, // Image galleries
@@ -197,7 +219,7 @@ function checkBinaries() {
   log.info('[MAIN] === BINARY VERIFICATION ===');
   log.info('[MAIN] Binaries path:', binariesPath);
   log.info('[MAIN] App packaged:', app.isPackaged);
-  
+
   // Check each binary and report status
   let missingCount = 0;
   binaries.forEach(({ name, path }) => {
@@ -208,7 +230,7 @@ function checkBinaries() {
       missingCount++;
     }
   });
-  
+
   log.info('[MAIN] === END BINARY VERIFICATION ===');
   if (missingCount > 0) {
     log.warn(`[MAIN] ${missingCount} binaries missing. Some features may not work.`);
@@ -220,7 +242,7 @@ function checkBinaries() {
   log.info('[MAIN] Default save path:', app.getPath('downloads'));
 
   // User-friendly status display with emojis
-  binaries.forEach(bin => {
+  binaries.forEach((bin) => {
     if (fs.existsSync(bin.path)) {
       log.info(`✅ ${bin.name} found at: ${bin.path}`);
     } else {
@@ -244,135 +266,194 @@ function isFFmpegAvailable(): boolean {
   // Check if FFmpeg exists in userData binaries (user-installed)
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
   const userFFmpegPath = path.join(userDataBinariesPath, 'ffmpeg.exe');
-  
+
   // Check if FFmpeg exists in packaged resources
   const packagedFFmpegPath = path.join(process.resourcesPath, 'binaries', 'ffmpeg.exe');
-  
+
   const ffmpegAvailable = fs.existsSync(userFFmpegPath) || fs.existsSync(packagedFFmpegPath);
-  log.info(`[Main] FFmpeg availability check - userData: ${fs.existsSync(userFFmpegPath)}, packaged: ${fs.existsSync(packagedFFmpegPath)}`);
-  
+  log.info(
+    `[Main] FFmpeg availability check - userData: ${fs.existsSync(userFFmpegPath)}, packaged: ${fs.existsSync(packagedFFmpegPath)}`,
+  );
+
   return ffmpegAvailable;
 }
 
 async function downloadFFmpeg() {
-  const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
-  
-  // Check if FFmpeg is already available (bundled or previously downloaded)
-  if (ffmpegDownloaded || isFFmpegAvailable()) {
-    log.info('[Main] FFmpeg is available, skipping download');
-    // Update database flag if FFmpeg is available but flag is not set
-    if (!ffmpegDownloaded && isFFmpegAvailable()) {
-      db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
-      saveDatabase(db);
-    }
-    return;
-  }
+  if (ffmpegDownloadPromise) return ffmpegDownloadPromise;
 
-  try {
-    // Show one-time notification
-    if (mainWindow) {
-      mainWindow.webContents.send('ffmpeg-download-notification', {
-        title: 'Downloading FFmpeg',
-        body: 'FFmpeg is being downloaded (~80MB) for high-quality video merging. This only happens once.',
-        type: 'info'
-      });
+  ffmpegDownloadPromise = (async () => {
+    const ffmpegDownloaded =
+      getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
+
+    // Check if FFmpeg is already available (bundled or previously downloaded)
+    if (ffmpegDownloaded || isFFmpegAvailable()) {
+      log.info('[Main] FFmpeg is available, skipping download');
+      // Update database flag if FFmpeg is available but flag is not set
+      if (!ffmpegDownloaded && isFFmpegAvailable()) {
+        db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
+        saveDatabase(db);
+      }
+      return;
     }
 
-    // Start background download
-    const ffmpegUrl = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
-    const userDataPath = app.getPath('userData');
-    const binariesPath = path.join(userDataPath, 'binaries');
-    
-    // Ensure binaries directory exists
-    if (!fs.existsSync(binariesPath)) {
-      fs.mkdirSync(binariesPath, { recursive: true });
-    }
-
-    const zipPath = path.join(binariesPath, 'ffmpeg.zip');
-    
-    // Send progress updates to renderer
-    if (mainWindow) {
-      mainWindow.webContents.send('ffmpeg-download-progress', {
-        phase: 'downloading',
-        percent: 0
-      });
-    }
-
-    log.info('[Main] Starting FFmpeg download from:', ffmpegUrl);
-    
-    // Download the file using disk streaming to prevent memory hang
-    await downloadFile(ffmpegUrl, zipPath);
-    
-    // Extract only ffmpeg.exe from zip
-    const tempDir = path.join(binariesPath, 'temp_ffmpeg_extract');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    
-    // Extract the zip to temp directory
-    const { execSync } = require('child_process');
-    execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempDir}'"`, { cwd: binariesPath });
-    
-    // Find and copy ffmpeg.exe
-    const ffmpegSourcePath = path.join(tempDir, 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe');
-    if (fs.existsSync(ffmpegSourcePath)) {
-      fs.copyFileSync(ffmpegSourcePath, path.join(binariesPath, 'ffmpeg.exe'));
-    } else {
-      throw new Error('ffmpeg.exe not found in extracted archive');
-    }
-    
-    // Clean up temp directory
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    
-    // Clean up zip file
-    fs.unlinkSync(zipPath);
-    
-    // Update database
-    db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
-    saveDatabase(db);
-    
-    // Send completion notification
-    if (mainWindow) {
-      mainWindow.webContents.send('ffmpeg-download-progress', {
-        phase: 'completed',
-        percent: 100
-      });
-      
-      setTimeout(() => {
+    try {
+      // Show one-time notification
+      if (mainWindow) {
         mainWindow.webContents.send('ffmpeg-download-notification', {
-          title: 'FFmpeg Ready',
-          body: 'FFmpeg has been installed. You can now download videos in high quality.',
-          type: 'success'
+          title: 'Downloading FFmpeg',
+          body: 'FFmpeg is being downloaded (~80MB) for high-quality video merging. This only happens once.',
+          type: 'info',
         });
-      }, 1000);
+      }
+
+      const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
+      if (!fs.existsSync(userDataBinariesPath)) {
+        fs.mkdirSync(userDataBinariesPath, { recursive: true });
+      }
+
+      const zipPath = path.join(userDataBinariesPath, 'ffmpeg.zip');
+      const downloadUrl =
+        'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip';
+
+      log.info(`[Main] Starting FFmpeg download from: ${downloadUrl}`);
+
+      // Helper function to download file using streams
+      const downloadFile = (url: string, dest: string) => {
+        return new Promise((resolve, reject) => {
+          const file = fs.createWriteStream(dest);
+          https
+            .get(url, (response) => {
+              if (response.statusCode !== 200) {
+                reject(new Error(`Failed to download FFmpeg: ${response.statusCode}`));
+                return;
+              }
+              const totalSize = parseInt(response.headers['content-length'] || '0', 10);
+              let downloaded = 0;
+
+              response.on('data', (chunk) => {
+                downloaded += chunk.length;
+                if (mainWindow && totalSize > 0) {
+                  mainWindow.webContents.send('ffmpeg-download-progress', {
+                    phase: 'downloading',
+                    percent: (downloaded / totalSize) * 100,
+                  });
+                }
+              });
+
+              response.pipe(file);
+              file.on('finish', () => {
+                file.close();
+                resolve(true);
+              });
+            })
+            .on('error', (err) => {
+              fs.unlink(dest, () => {});
+              reject(err);
+            });
+        });
+      };
+
+      await downloadFile(downloadUrl, zipPath);
+      log.info('[Main] FFmpeg zip downloaded, extracting...');
+
+      if (mainWindow) {
+        mainWindow.webContents.send('ffmpeg-download-progress', {
+          phase: 'extracting',
+          percent: 50,
+        });
+      }
+
+      const tempDir = path.join(userDataBinariesPath, 'temp_ffmpeg_extract');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Use PowerShell to extract zip on Windows
+      const psCommand = `Expand-Archive -Path "${zipPath}" -DestinationPath "${tempDir}" -Force`;
+      await promisify(exec)(`powershell -Command "${psCommand}"`);
+
+      // Find ffmpeg.exe in extracted directory
+      const findFfmpeg = (dir: string): string | null => {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          const fullPath = path.join(dir, file);
+          if (fs.statSync(fullPath).isDirectory()) {
+            const found = findFfmpeg(fullPath);
+            if (found) return found;
+          } else if (file === 'ffmpeg.exe') {
+            return fullPath;
+          }
+        }
+        return null;
+      };
+
+      const extractedFfmpegPath = findFfmpeg(tempDir);
+      if (extractedFfmpegPath) {
+        // Move ffmpeg.exe and ffprobe.exe to the base binaries folder
+        const finalFfmpegPath = path.join(userDataBinariesPath, 'ffmpeg.exe');
+        const ffprobeSource = extractedFfmpegPath.replace('ffmpeg.exe', 'ffprobe.exe');
+        const finalFfprobePath = path.join(userDataBinariesPath, 'ffprobe.exe');
+
+        fs.copyFileSync(extractedFfmpegPath, finalFfmpegPath);
+        if (fs.existsSync(ffprobeSource)) {
+          fs.copyFileSync(ffprobeSource, finalFfprobePath);
+        }
+
+        // Clean up: delete zip and extracted folder
+        fs.unlinkSync(zipPath);
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
+        saveDatabase(db);
+        setupPaths(); // Refresh global paths to point to the new binaries in userData
+        log.info('[Main] FFmpeg installed successfully');
+
+        if (mainWindow) {
+          mainWindow.webContents.send('ffmpeg-download-progress', {
+            phase: 'completed',
+            percent: 100,
+          });
+          mainWindow.webContents.send('ffmpeg-download-notification', {
+            title: 'FFmpeg Ready',
+            body: 'FFmpeg has been installed and is ready for high-quality downloads.',
+            type: 'success',
+          });
+        }
+      } else {
+        throw new Error('ffmpeg.exe not found in extracted archive');
+      }
+    } catch (error: any) {
+      log.error('[Main] FFmpeg download failed:', error);
+      if (mainWindow) {
+        mainWindow.webContents.send('ffmpeg-download-progress', {
+          phase: 'error',
+          percent: 0,
+          error: error.message,
+        });
+
+        mainWindow.webContents.send('ffmpeg-download-notification', {
+          title: 'FFmpeg Download Failed',
+          body: `Failed to download FFmpeg: ${error.message}. Please try again later.`,
+          type: 'error',
+        });
+      }
+    } finally {
+      ffmpegDownloadPromise = null;
     }
-    
-    log.info('[Main] FFmpeg download completed successfully');
-    
-  } catch (error: any) {
-    log.error(`[Main] FFmpeg download failed: ${error.message}`);
-    
-    if (mainWindow) {
-      mainWindow.webContents.send('ffmpeg-download-progress', {
-        phase: 'error',
-        percent: 0,
-        error: error.message
-      });
-      
-      mainWindow.webContents.send('ffmpeg-download-notification', {
-        title: 'FFmpeg Download Failed',
-        body: `Failed to download FFmpeg: ${error.message}. Please try again later.`,
-        type: 'error'
-      });
-    }
-  }
+  })();
+
+  return ffmpegDownloadPromise;
 }
 
 // Check if FFmpeg is needed for a download
 function checkFFmpegRequired(formatId: string): boolean {
   if (!formatId) return false;
   // Only trigger for explicit merge/audio-extract scenarios, not every format containing 'audio'
-  return formatId === 'bestaudio' || formatId.includes('bestvideo+bestaudio') || formatId.includes('merge');
+  return (
+    formatId === 'bestaudio' ||
+    formatId.includes('bestvideo+bestaudio') ||
+    formatId.includes('merge')
+  );
 }
 
 // ── Filename Cleaning ────────────────────────────────────────────────────────
@@ -435,7 +516,7 @@ function getQuery(database: any, sql: string, params: any[] = []): any {
   if (result.length === 0) return null;
   const { columns, values } = result[0];
   const obj: any = {};
-  columns.forEach((col: string, i: number) => obj[col] = values[0][i]);
+  columns.forEach((col: string, i: number) => (obj[col] = values[0][i]));
   return obj;
 }
 
@@ -445,14 +526,20 @@ function allQuery(database: any, sql: string, params: any[] = []): any[] {
   const { columns, values } = result[0];
   return values.map((row: any[]) => {
     const obj: any = {};
-    columns.forEach((col: string, i: number) => obj[col] = row[i]);
+    columns.forEach((col: string, i: number) => (obj[col] = row[i]));
     return obj;
   });
 }
 
 /** sql.js must load sql-wasm.wasm from a real path; default resolution breaks inside asar / packaged apps. */
 function getSqlJsWasmDir(): string {
-  const unpackedDist = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'sql.js', 'dist');
+  const unpackedDist = path.join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    'sql.js',
+    'dist',
+  );
   const insideAsar = path.join(app.getAppPath(), 'node_modules', 'sql.js', 'dist');
   const devCwd = path.join(process.cwd(), 'node_modules', 'sql.js', 'dist');
   const nextToMain = path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist');
@@ -550,7 +637,11 @@ async function initDb() {
     `ALTER TABLE settings ADD COLUMN close_to_tray INTEGER NOT NULL DEFAULT 1`,
   ];
   for (const sql of migrations) {
-    try { db.run(sql); } catch (_) { /* column already exists */ }
+    try {
+      db.run(sql);
+    } catch (_) {
+      /* column already exists */
+    }
   }
 
   // Note: detect_playlists default is controlled by CREATE TABLE / INSERT OR IGNORE.
@@ -581,14 +672,18 @@ async function initDb() {
 
   for (const [key, value] of Object.entries(defaults)) {
     try {
-      db.run(`UPDATE settings SET ${key} = ? WHERE id = 1 AND (${key} IS NULL OR ${key} = '')`, [value]);
-    } catch (_) { /* ignore */ }
+      db.run(`UPDATE settings SET ${key} = ? WHERE id = 1 AND (${key} IS NULL OR ${key} = '')`, [
+        value,
+      ]);
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   // Reset any stranded active tasks to paused so user can resume them
   try {
     db.run("UPDATE downloads SET state = 'paused' WHERE state IN ('downloading', 'merging')");
-  } catch (_) { }
+  } catch (_) { Object(_); }
 
   saveDatabase(db);
 }
@@ -605,7 +700,6 @@ async function getFreeSpace(targetPath: string): Promise<number> {
       cmd = `df -b1 "${targetPath}" | tail -1 | awk '{print $4}'`;
     }
 
-    const { exec } = require('child_process');
     exec(cmd, (err: any, stdout: string) => {
       if (err) {
         log.error('Failed to get free space:', err);
@@ -622,7 +716,7 @@ function updateDownloadInDb(id: number, updates: any) {
   const fields: string[] = [];
   const values: any[] = [];
   for (const [key, val] of Object.entries(updates)) {
-    fields.push(`${key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)} = ?`);
+    fields.push(`${key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)} = ?`);
     values.push(val instanceof Date ? val.toISOString() : val);
   }
   if (fields.length > 0) {
@@ -678,11 +772,11 @@ function createTray() {
             mainWindow.show();
             mainWindow.focus();
           }
-        }
+        },
       },
       {
         label: activeCount > 0 ? `Active Downloads: ${activeCount}` : 'No active downloads',
-        enabled: false
+        enabled: false,
       },
       { type: 'separator' },
       {
@@ -692,22 +786,31 @@ function createTray() {
           activeTasks.forEach((job, id) => {
             job.process.kill('SIGTERM');
             updateDownloadInDb(id, { state: 'paused' });
-            if (mainWindow) mainWindow.webContents.send('download-progress', { jobId: String(id), id, phase: 'Paused', status: 'paused' });
+            if (mainWindow)
+              mainWindow.webContents.send('download-progress', {
+                jobId: String(id),
+                id,
+                phase: 'Paused',
+                status: 'paused',
+              });
           });
           activeTasks.clear();
           updatePowerSave();
           updateTaskbarProgress();
-        }
+        },
       },
       {
         label: 'Resume All Downloads',
         click: () => {
-          const paused = allQuery(db, "SELECT * FROM downloads WHERE state = 'paused' ORDER BY created_at ASC");
+          const paused = allQuery(
+            db,
+            "SELECT * FROM downloads WHERE state = 'paused' ORDER BY created_at ASC",
+          );
           for (const item of paused) {
             updateDownloadInDb(item.id, { state: 'queued', error: null });
           }
           processQueue();
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -715,8 +818,8 @@ function createTray() {
         click: () => {
           tray?.destroy();
           app.quit();
-        }
-      }
+        },
+      },
     ]);
     tray?.setContextMenu(contextMenu);
   };
@@ -741,12 +844,12 @@ function createTray() {
 const getPreloadPath = (): string => {
   if (app.isPackaged) {
     // In packaged app, preload is next to main.cjs in resources/app.asar
-    return path.join(__dirname, 'preload.cjs')
+    return path.join(__dirname, 'preload.cjs');
   } else {
     // In development, preload is in the electron/ folder
-    return path.join(process.cwd(), 'electron', 'preload.cjs')
+    return path.join(process.cwd(), 'electron', 'preload.cjs');
   }
-}
+};
 
 /**
  * Vite `outDir` is `dist/public` (see vite.config.ts). Some builds may use `dist/` only.
@@ -788,10 +891,10 @@ function createWindow() {
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    webPreferences: { 
+    webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
-    }
+      contextIsolation: true,
+    },
   });
 
   const splashPath = app.isPackaged
@@ -817,7 +920,7 @@ function createWindow() {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
     },
   });
 
@@ -825,46 +928,50 @@ function createWindow() {
     // Close splash and show main window
     splash.close();
     mainWindow?.show();
-    
+
     // Open DevTools in development for debugging
     if (isDev) {
       mainWindow.webContents.openDevTools();
     }
-    
+
     // Ensure FFmpeg database flag is synced with actual availability
-    const ffmpegDownloaded = getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
+    const ffmpegDownloaded =
+      getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
     const ffmpegAvailable = isFFmpegAvailable();
-    
+
     if (ffmpegAvailable && !ffmpegDownloaded) {
       log.info('[Main] FFmpeg is available (bundled), updating database flag');
       db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
       saveDatabase(db);
     }
-    
+
     if (!ffmpegAvailable) {
       log.info('[Main] FFmpeg not bundled, user will be notified when needed');
     }
   });
 
-  mainWindow.webContents.on('did-fail-load', (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string) => {
-    log.error('[MAIN] did-fail-load', { errorCode, errorDescription, validatedURL });
-    const msg = `Failed to load (${errorCode}): ${validatedURL}\n${errorDescription}`;
-    if (!(app as any).isPackaged) {
-      dialog.showErrorBox('Load Error', msg);
-    } else {
-      dialog.showErrorBox('Internet Download Hub — load error', `${msg}\n\nIf this persists, check the log file from Help or %APPDATA% logs.`);
-    }
-  });
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string) => {
+      log.error('[MAIN] did-fail-load', { errorCode, errorDescription, validatedURL });
+      const msg = `Failed to load (${errorCode}): ${validatedURL}\n${errorDescription}`;
+      if (!(app as any).isPackaged) {
+        dialog.showErrorBox('Load Error', msg);
+      } else {
+        dialog.showErrorBox(
+          'Internet Download Hub — load error',
+          `${msg}\n\nIf this persists, check the log file from Help or %APPDATA% logs.`,
+        );
+      }
+    },
+  );
 
   // Prevent in-app external navigation
   mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
     // Allow only whitelisted domains
-    const allowed = [
-      'https://github.com/Isaac-Onyango-Dev',
-      'https://isaac-onyango-dev.github.io'
-    ];
-    
-    if (allowed.some(prefix => url.startsWith(prefix))) {
+    const allowed = ['https://github.com/Isaac-Onyango-Dev', 'https://isaac-onyango-dev.github.io'];
+
+    if (allowed.some((prefix) => url.startsWith(prefix))) {
       shell.openExternal(url);
     } else {
       log.warn(`[MAIN] Blocked external navigation: ${url}`);
@@ -946,7 +1053,11 @@ function detectPlaylist(url: string): { isPlaylist: boolean } {
     }
 
     // Mix/radio-style: list param present but no v param.
-    if (!hasV && hasList && (list.startsWith('RD') || list.startsWith('FL') || list.startsWith('PL'))) {
+    if (
+      !hasV &&
+      hasList &&
+      (list.startsWith('RD') || list.startsWith('FL') || list.startsWith('PL'))
+    ) {
       return { isPlaylist: true };
     }
 
@@ -967,17 +1078,16 @@ let playwrightBrowser: any = null;
 async function getPlaywrightBrowser() {
   if (!playwrightBrowser) {
     try {
-      const playwrightCore = require('playwright-core');
+      const playwrightCore = await import('playwright-core');
       const browserPath = playwrightCore.chromium.executablePath();
       if (!fs.existsSync(browserPath)) {
         log.info('[MAIN] Playwright Chromium not found, installing...');
-        const { execSync } = require('child_process');
         execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 120000 });
         log.info('[MAIN] Playwright Chromium installed successfully');
       } else {
         log.info('[MAIN] Playwright Chromium found at:', browserPath);
       }
-      
+
       playwrightBrowser = await playwrightCore.chromium.launch({ headless: true });
       log.info('[MAIN] Playwright browser launched successfully');
     } catch (err: any) {
@@ -994,24 +1104,28 @@ async function getPlaywrightBrowser() {
 async function fetchJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const doGet = (target: string) => {
-      https.get(target, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
-        // Follow redirects
-        if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-          doGet(res.headers.location);
-          return;
-        }
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
-        res.on('end', () => {
-          try {
-            if (res.statusCode && res.statusCode >= 400) {
-              reject(new Error(`GitHub API returned HTTP ${res.statusCode}`));
-              return;
+      https
+        .get(target, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
+          // Follow redirects
+          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+            doGet(res.headers.location);
+            return;
+          }
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            try {
+              if (res.statusCode && res.statusCode >= 400) {
+                reject(new Error(`GitHub API returned HTTP ${res.statusCode}`));
+                return;
+              }
+              resolve(JSON.parse(data));
+            } catch {
+              reject(new Error('Failed to parse GitHub API response'));
             }
-            resolve(JSON.parse(data));
-          } catch { reject(new Error('Failed to parse GitHub API response')); }
-        });
-      }).on('error', reject);
+          });
+        })
+        .on('error', reject);
     };
     doGet(url);
   });
@@ -1021,20 +1135,25 @@ async function fetchJson(url: string): Promise<any> {
 async function downloadFile(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const doRequest = (redirectUrl: string) => {
-      https.get(redirectUrl, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          doRequest(res.headers.location!);
-          return;
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`Failed to download file (HTTP ${res.statusCode}): ${url}`));
-          return;
-        }
-        const file = fs.createWriteStream(dest);
-        res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
-        file.on('error', (err) => { fs.unlink(dest, () => {}); reject(err); });
-      }).on('error', reject);
+      https
+        .get(redirectUrl, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            doRequest(res.headers.location!);
+            return;
+          }
+          if (res.statusCode !== 200) {
+            reject(new Error(`Failed to download file (HTTP ${res.statusCode}): ${url}`));
+            return;
+          }
+          const file = fs.createWriteStream(dest);
+          res.pipe(file);
+          file.on('finish', () => file.close(() => resolve()));
+          file.on('error', (err) => {
+            fs.unlink(dest, () => {});
+            reject(err);
+          });
+        })
+        .on('error', reject);
     };
     doRequest(url);
   });
@@ -1077,32 +1196,36 @@ const BINARIES = [
   {
     name: 'yt-dlp',
     releaseApi: 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest',
-    downloadUrl: (tag: string) => `https://github.com/yt-dlp/yt-dlp/releases/download/${tag}/yt-dlp.exe`,
+    downloadUrl: (tag: string) =>
+      `https://github.com/yt-dlp/yt-dlp/releases/download/${tag}/yt-dlp.exe`,
     versionFlag: '--version',
-    fileName: 'yt-dlp.exe'
+    fileName: 'yt-dlp.exe',
   },
   {
     name: 'streamlink',
     releaseApi: 'https://api.github.com/repos/streamlink/streamlink/releases/latest',
-    downloadUrl: (tag: string) => `https://github.com/streamlink/streamlink/releases/download/${tag}/streamlink-${tag.replace('v','')}-py311-x86_64.exe`,
+    downloadUrl: (tag: string) =>
+      `https://github.com/streamlink/streamlink/releases/download/${tag}/streamlink-${tag.replace('v', '')}-py311-x86_64.exe`,
     versionFlag: '--version',
-    fileName: 'streamlink.exe'
+    fileName: 'streamlink.exe',
   },
   {
     name: 'gallery-dl',
     releaseApi: 'https://api.github.com/repos/mikf/gallery-dl/releases/latest',
-    downloadUrl: (tag: string) => `https://github.com/mikf/gallery-dl/releases/download/${tag}/gallery-dl.exe`,
+    downloadUrl: (tag: string) =>
+      `https://github.com/mikf/gallery-dl/releases/download/${tag}/gallery-dl.exe`,
     versionFlag: '--version',
-    fileName: 'gallery-dl.exe'
+    fileName: 'gallery-dl.exe',
   },
   {
     name: 'N_m3u8DL-RE',
     releaseApi: 'https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest',
-    downloadUrl: (tag: string) => `https://github.com/nilaoda/N_m3u8DL-RE/releases/download/${tag}/N_m3u8DL-RE_${tag.replace('v','')}_win-x64.zip`,
+    downloadUrl: (tag: string) =>
+      `https://github.com/nilaoda/N_m3u8DL-RE/releases/download/${tag}/N_m3u8DL-RE_${tag.replace('v', '')}_win-x64.zip`,
     versionFlag: '--version',
     fileName: 'N_m3u8DL-RE.exe',
-    isZip: true
-  }
+    isZip: true,
+  },
 ];
 
 /**
@@ -1138,21 +1261,30 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
 
   // Sanity-check the downloaded file
   const stats = fs.statSync(tempPath);
-  if (stats.size < 10 * 1024 * 1024) { // Increased to 10MB because yt-dlp is usually 15MB+
+  if (stats.size < 10 * 1024 * 1024) {
+    // Increased to 10MB because yt-dlp is usually 15MB+
     fs.unlinkSync(tempPath);
-    throw new Error(`Downloaded file is suspiciously small (${(stats.size / 1024 / 1024).toFixed(2)} MB) — aborting`);
+    throw new Error(
+      `Downloaded file is suspiciously small (${(stats.size / 1024 / 1024).toFixed(2)} MB) — aborting`,
+    );
   }
 
   // Backup existing binary in userData if it exists
   const backupPath = destPath + '.backup';
-  try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (_) {}
-  try { if (fs.existsSync(destPath)) fs.renameSync(destPath, backupPath); } catch (_) {}
+  try {
+    if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+  } catch (_) { Object(_); }
+  try {
+    if (fs.existsSync(destPath)) fs.renameSync(destPath, backupPath);
+  } catch (_) { Object(_); }
 
   try {
     // Replace the binary
     fs.renameSync(tempPath, destPath);
-    try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (_) {}
-    
+    try {
+      if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+    } catch (_) { Object(_); }
+
     // Switch to the new path immediately
     ytDlpPath = destPath;
     log.info(`[UPDATE] yt-dlp successfully updated to v${latestVersion} in userData`);
@@ -1163,14 +1295,16 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
       if (!fs.existsSync(destPath) && fs.existsSync(backupPath)) {
         fs.renameSync(backupPath, destPath);
       }
-    } catch (_) {}
-    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+    } catch (_) { Object(_); }
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (_) { Object(_); }
     throw new Error(`Failed to finalize update: ${err.message}`);
   }
 }
 
 // Keep old helper for backward compat (used in getLatestYtDlpRelease calls elsewhere)
-async function getLatestYtDlpRelease(): Promise<{ url: string, version: string }> {
+async function getLatestYtDlpRelease(): Promise<{ url: string; version: string }> {
   const release = await fetchJson('https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest');
   const asset = release.assets.find((a: any) => a.name === 'yt-dlp.exe');
   if (!asset) throw new Error('yt-dlp.exe asset not found in latest release');
@@ -1191,7 +1325,9 @@ async function runBackgroundVersionCheck() {
     const check = await checkYtDlpVersion();
     if (!mainWindow) return;
     if (check.updateAvailable) {
-      log.info(`[UPDATE] yt-dlp update available: ${check.currentVersion} -> ${check.latestVersion}`);
+      log.info(
+        `[UPDATE] yt-dlp update available: ${check.currentVersion} -> ${check.latestVersion}`,
+      );
       mainWindow.webContents.send('ytdlp-update-available', {
         currentVersion: check.currentVersion,
         latestVersion: check.latestVersion,
@@ -1211,7 +1347,7 @@ async function runBackgroundVersionCheck() {
 }
 
 // ── Queue Management ─────────────────────────────────────────────────────────
-function processQueue() {
+async function processQueue() {
   try {
     const settings = getQuery(db, 'SELECT max_concurrent_downloads FROM settings WHERE id = 1');
     const maxConcurrent = settings?.max_concurrent_downloads || 3;
@@ -1220,9 +1356,29 @@ function processQueue() {
     if (activeCount >= maxConcurrent) return;
 
     const toStart = maxConcurrent - activeCount;
-    const queuedItems = allQuery(db, "SELECT * FROM downloads WHERE state = 'queued' ORDER BY created_at ASC LIMIT ?", [toStart]);
+    // Get ALL queued items sorted by priority, not just the first 'toStart' ones.
+    // This allows us to skip items needing FFmpeg (if it's downloading) and start others.
+    const queuedItems = allQuery(
+      db,
+      "SELECT * FROM downloads WHERE state = 'queued' ORDER BY created_at ASC",
+    );
 
+    let startedThisLoop = 0;
     for (const item of queuedItems) {
+      if (startedThisLoop >= toStart) break;
+
+      // Check if this specific item requires FFmpeg but it isn't available yet
+      if (checkFFmpegRequired(item.format_id) && !isFFmpegAvailable()) {
+        log.info(`[Queue] Item ${item.id} requires FFmpeg but it's not available. Triggering background fetch.`);
+        // Initiate background download (locked)
+        downloadFFmpeg().catch((err: any) =>
+          log.error(`[Queue] Auto-FFmpeg download failed for job ${item.id}:`, err),
+        );
+        // Skip this item for now, it stays 'queued' until FFmpeg is ready
+        continue;
+      }
+
+      startedThisLoop++;
       updateDownloadInDb(item.id, { state: 'downloading', error: null });
       spawnDownload(item.id, item.url, item.save_path, item.format_id, !!item.received_bytes);
       if (mainWindow) {
@@ -1230,7 +1386,7 @@ function processQueue() {
           jobId: String(item.id),
           id: item.id,
           phase: 'Starting download...',
-          status: 'downloading'
+          status: 'downloading',
         });
       }
     }
@@ -1260,7 +1416,6 @@ function killProcessTree(pid: number | undefined) {
   if (!pid) return;
   try {
     if (process.platform === 'win32') {
-      const { execSync } = require('child_process');
       execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' });
     } else {
       process.kill(-pid, 'SIGKILL');
@@ -1280,7 +1435,10 @@ function setupIpcHandlers() {
     try {
       new URL(rawUrl);
     } catch {
-      return { success: false, error: 'That doesn\'t look like a valid URL. Please paste a full video link.' };
+      return {
+        success: false,
+        error: "That doesn't look like a valid URL. Please paste a full video link.",
+      };
     }
 
     try {
@@ -1332,8 +1490,8 @@ function setupIpcHandlers() {
               url: video.url,
               title: video.title,
               thumbnail: video.thumbnail,
-              index: index + 1
-            }))
+              index: index + 1,
+            })),
           });
         }
 
@@ -1381,55 +1539,51 @@ function setupIpcHandlers() {
 
   // ── start-download ────────────────────────────────────────────────────────
   ipcMain.handle('start-download', async (_: any, options: any) => {
-    log.info('[DOWNLOAD] Received start-download request:', options)
+    log.info('[DOWNLOAD] Received start-download request:', options);
 
     if (!options) {
-      throw new Error('No download options provided')
+      throw new Error('No download options provided');
     }
 
-    const url =
-      typeof options.url === 'string' && options.url.trim()
-        ? options.url.trim()
-        : null
+    const url = typeof options.url === 'string' && options.url.trim() ? options.url.trim() : null;
 
     const filename =
       typeof options.filename === 'string' && options.filename.trim()
         ? options.filename.trim()
-        : null
+        : null;
 
     // Validate required fields to prevent SQLite binding errors (undefined).
-    if (!url) throw new Error('Invalid or missing URL')
-    if (!filename) throw new Error('Invalid or missing filename')
+    if (!url) throw new Error('Invalid or missing URL');
+    if (!filename) throw new Error('Invalid or missing filename');
 
     const formatId =
       typeof options.formatId === 'string' && options.formatId.trim()
         ? options.formatId.trim()
-        : null
+        : null;
 
-    // Check if FFmpeg is needed and download if required
-    if (checkFFmpegRequired(formatId)) {
-      await downloadFFmpeg();
-    }
+    // FFmpeg is now handled asynchronously within processQueue.
+    // The download starts instantly in the background if needed,
+    // allowing this IPC handler to return a response to the UI in <10ms.
 
     const optionsSavePath =
       typeof options.savePath === 'string' && options.savePath.trim()
         ? options.savePath.trim()
-        : undefined
+        : undefined;
 
     const thumbnail =
       typeof options.thumbnail === 'string' && options.thumbnail.trim()
         ? options.thumbnail.trim()
-        : null
+        : null;
 
     const uploader =
       typeof options.uploader === 'string' && options.uploader.trim()
         ? options.uploader.trim()
-        : null
+        : null;
 
     const duration =
       typeof options.duration === 'number' && Number.isFinite(options.duration)
         ? options.duration
-        : null
+        : null;
 
     const saveFolder = optionsSavePath || getDefaultSavePath();
     const outputPath = path.join(saveFolder, filename);
@@ -1441,7 +1595,11 @@ function setupIpcHandlers() {
     }
 
     // Duplicate URL detection — warn if same URL is already downloading
-    const existing = allQuery(db, "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')", [url]);
+    const existing = allQuery(
+      db,
+      "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')",
+      [url],
+    );
     if (existing.length > 0) {
       throw new Error('This video is already in your download queue.');
     }
@@ -1452,10 +1610,21 @@ function setupIpcHandlers() {
       throw new Error('Insufficient disk space. Please free up some space before downloading.');
     }
 
-    db.run(`
+    db.run(
+      `
       INSERT INTO downloads (url, filename, thumbnail, duration, uploader, format_id, state, save_path)
       VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
-    `, [url, filename, thumbnail ?? null, duration ?? null, uploader ?? null, formatId ?? null, outputPath]);
+    `,
+      [
+        url,
+        filename,
+        thumbnail ?? null,
+        duration ?? null,
+        uploader ?? null,
+        formatId ?? null,
+        outputPath,
+      ],
+    );
     saveDatabase(db);
 
     const info = getQuery(db, 'SELECT last_insert_rowid() as id');
@@ -1465,7 +1634,6 @@ function setupIpcHandlers() {
     return { id: downloadId };
   });
 
-  
   // ── restart-download ──────────────────────────────────────────────────────
 
   ipcMain.handle('restart-download', async (_: any, id: number) => {
@@ -1497,13 +1665,13 @@ function setupIpcHandlers() {
       killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
-      
+
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
           jobId: String(numericId),
           id: numericId,
           phase: 'Paused',
-          status: 'paused'
+          status: 'paused',
         });
       }
     } else {
@@ -1574,7 +1742,7 @@ function setupIpcHandlers() {
         id: numericId,
         percent: 0,
         phase: 'Cancelled',
-        status: 'cancelled'
+        status: 'cancelled',
       });
     }
     updateTaskbarProgress();
@@ -1617,7 +1785,7 @@ function setupIpcHandlers() {
   ipcMain.handle('open-folder', async (_: any, targetPath: string) => {
     try {
       log.info('[Main] open-folder called with:', targetPath);
-      
+
       // If path doesn't exist, open the default Downloads folder
       if (!targetPath || typeof targetPath !== 'string') {
         log.warn('[Main] No path provided, opening Downloads folder');
@@ -1639,7 +1807,7 @@ function setupIpcHandlers() {
         log.info('[Main] Showing item in folder:', targetPath);
         shell.showItemInFolder(targetPath);
       }
-      
+
       return { success: true };
     } catch (error: any) {
       log.error('[Main] Failed to open folder:', error);
@@ -1652,7 +1820,7 @@ function setupIpcHandlers() {
   // ── choose-save-folder ────────────────────────────────────────────────────
   ipcMain.handle('choose-save-folder', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
-      properties: ['openDirectory']
+      properties: ['openDirectory'],
     });
     if (!result.canceled) {
       return result.filePaths[0];
@@ -1676,19 +1844,26 @@ function setupIpcHandlers() {
   });
 
   // ── check-disk-space ──────────────────────────────────────────────────────
-  ipcMain.handle('check-disk-space', async (_: any, { path: targetPath, requiredBytes }: { path: string, requiredBytes: number }) => {
-    const freeSpace = await getFreeSpace(targetPath || getDefaultSavePath());
-    const estimatedBytes = (requiredBytes <= 0 || requiredBytes > 10 * 1024 * 1024 * 1024)
-      ? 500 * 1024 * 1024
-      : requiredBytes;
+  ipcMain.handle(
+    'check-disk-space',
+    async (
+      _: any,
+      { path: targetPath, requiredBytes }: { path: string; requiredBytes: number },
+    ) => {
+      const freeSpace = await getFreeSpace(targetPath || getDefaultSavePath());
+      const estimatedBytes =
+        requiredBytes <= 0 || requiredBytes > 10 * 1024 * 1024 * 1024
+          ? 500 * 1024 * 1024
+          : requiredBytes;
 
-    const buffer = 100 * 1024 * 1024; // 100MB buffer
-    return {
-      isEnough: freeSpace > (estimatedBytes + buffer),
-      freeSpace,
-      required: estimatedBytes + buffer
-    };
-  });
+      const buffer = 100 * 1024 * 1024; // 100MB buffer
+      return {
+        isEnough: freeSpace > estimatedBytes + buffer,
+        freeSpace,
+        required: estimatedBytes + buffer,
+      };
+    },
+  );
 
   // ── get-download-history ──────────────────────────────────────────────────
   ipcMain.handle('get-download-history', async () => {
@@ -1722,10 +1897,12 @@ function setupIpcHandlers() {
   ipcMain.handle('save-settings', async (_: any, settings: any) => {
     log.info('[IPC] save-settings called with:', settings);
     try {
-      const fields = Object.keys(settings).map(k => {
-        const snakeKey = k.replace(/[A-Z]/g, l => `_${l.toLowerCase()}`);
-        return `${snakeKey} = ?`;
-      }).join(', ');
+      const fields = Object.keys(settings)
+        .map((k) => {
+          const snakeKey = k.replace(/[A-Z]/g, (l) => `_${l.toLowerCase()}`);
+          return `${snakeKey} = ?`;
+        })
+        .join(', ');
       const values = Object.values(settings);
 
       db.run(`UPDATE settings SET ${fields} WHERE id = 1`, values);
@@ -1743,10 +1920,10 @@ function setupIpcHandlers() {
       // Whitelist allowed domains for security
       const allowed = [
         'https://github.com/Isaac-Onyango-Dev',
-        'https://isaac-onyango-dev.github.io'
+        'https://isaac-onyango-dev.github.io',
       ];
-      
-      if (allowed.some(prefix => url.startsWith(prefix))) {
+
+      if (allowed.some((prefix) => url.startsWith(prefix))) {
         await shell.openExternal(url);
         return { success: true };
       } else {
@@ -1767,7 +1944,8 @@ function setupIpcHandlers() {
   // ── reset-settings ────────────────────────────────────────────────────────
   ipcMain.handle('reset-settings', async () => {
     const defaultPath = app.getPath('downloads').replace(/\\/g, '/');
-    db.run(`
+    db.run(
+      `
       UPDATE settings SET
         theme = 'system',
         max_concurrent_downloads = 3,
@@ -1783,7 +1961,9 @@ function setupIpcHandlers() {
         cookies_file_path = '',
         close_to_tray = 1
       WHERE id = 1
-    `, [defaultPath]);
+    `,
+      [defaultPath],
+    );
     saveDatabase(db);
     return getQuery(db, 'SELECT * FROM settings WHERE id = 1');
   });
@@ -1812,20 +1992,20 @@ function setupIpcHandlers() {
   ipcMain.handle('check-all-binary-updates', async () => {
     try {
       const results = [];
-      
+
       for (const binary of BINARIES) {
         const installedVersion = await getBinaryVersion(binary);
         const latestVersion = await getLatestBinaryVersion(binary);
-        
+
         results.push({
           name: binary.name,
           installedVersion,
           latestVersion,
           needsUpdate: installedVersion !== latestVersion,
-          downloadUrl: binary.downloadUrl(latestVersion)
+          downloadUrl: binary.downloadUrl(latestVersion),
         });
       }
-      
+
       return results;
     } catch (error: any) {
       log.error(`[IPC Error] check-all-binary-updates failed: ${error.message}`);
@@ -1836,11 +2016,11 @@ function setupIpcHandlers() {
   // ── update-binary ───────────────────────────────────────────────────────────
   ipcMain.handle('update-binary', async (_: any, { binaryName }: { binaryName: string }) => {
     try {
-      const binary = BINARIES.find(b => b.name === binaryName);
+      const binary = BINARIES.find((b) => b.name === binaryName);
       if (!binary) {
         throw new Error(`Unknown binary: ${binaryName}`);
       }
-      
+
       log.info(`[IPC] Updating ${binaryName}...`);
       const result = await performBinaryUpdate(binary);
       return result;
@@ -1851,7 +2031,7 @@ function setupIpcHandlers() {
   });
 
   // ── get-binary-version ───────────────────────────────────────────────────────
-  async function getBinaryVersion(binary: typeof BINARIES[0]): Promise<string> {
+  async function getBinaryVersion(binary: (typeof BINARIES)[0]): Promise<string> {
     try {
       // Check userData first (updated binaries go here), then packaged resources
       const userDataBin = path.join(app.getPath('userData'), 'binaries', binary.fileName);
@@ -1860,8 +2040,7 @@ function setupIpcHandlers() {
       if (!fs.existsSync(binaryPath)) {
         return 'Not installed';
       }
-      
-      const { execSync } = require('child_process');
+
       const output = execSync(`"${binaryPath}" ${binary.versionFlag}`, { encoding: 'utf8' });
       const version = output.split('\n')[0].trim();
       return version;
@@ -1871,7 +2050,7 @@ function setupIpcHandlers() {
     }
   }
 
-  async function getLatestBinaryVersion(binary: typeof BINARIES[0]): Promise<string> {
+  async function getLatestBinaryVersion(binary: (typeof BINARIES)[0]): Promise<string> {
     try {
       const release = await fetchJson(binary.releaseApi);
       return release.tag_name;
@@ -1881,61 +2060,65 @@ function setupIpcHandlers() {
     }
   }
 
-  async function performBinaryUpdate(binary: typeof BINARIES[0]): Promise<{ success: boolean; newVersion: string }> {
+  async function performBinaryUpdate(
+    binary: (typeof BINARIES)[0],
+  ): Promise<{ success: boolean; newVersion: string }> {
     try {
       const release = await fetchJson(binary.releaseApi);
       const latestVersion = release.tag_name;
-      
+
       const downloadUrl = binary.downloadUrl(latestVersion);
       const tempPath = path.join(app.getPath('temp'), `${binary.fileName}.tmp`);
-      
+
       // Destination: userData/binaries (always writable, even in Program Files installs)
       const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
       if (!fs.existsSync(userDataBinariesPath)) {
         fs.mkdirSync(userDataBinariesPath, { recursive: true });
       }
       const destPath = path.join(userDataBinariesPath, binary.fileName);
-      
+
       // Download to temp
       const response = await fetch(downloadUrl);
       if (!response.ok) {
         throw new Error(`Failed to download ${binary.name}: ${response.statusText}`);
       }
-      
+
       const buffer = await response.arrayBuffer();
       fs.writeFileSync(tempPath, Buffer.from(buffer));
-      
+
       // Handle zip files
       if (binary.isZip) {
         const tempDir = path.join(app.getPath('temp'), `${binary.name}_extract`);
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
-        
+
         // Extract using PowerShell (built-in)
-        const { execSync } = require('child_process');
-        execSync(`powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`, { cwd: app.getPath('temp') });
-        
+        execSync(
+          `powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`,
+          { cwd: app.getPath('temp') },
+        );
+
         // Find the .exe in extracted files
         const extractedFiles = fs.readdirSync(tempDir);
-        const exeFile = extractedFiles.find(f => f.endsWith('.exe'));
+        const exeFile = extractedFiles.find((f) => f.endsWith('.exe'));
         if (!exeFile) {
           throw new Error(`Could not find ${binary.fileName} in extracted archive`);
         }
-        
+
         const finalPath = path.join(tempDir, exeFile);
         fs.copyFileSync(finalPath, destPath);
-        
+
         // Clean up
         fs.rmSync(tempDir, { recursive: true, force: true });
       } else {
         // Direct copy for .exe files
         fs.copyFileSync(tempPath, destPath);
       }
-      
+
       // Clean up temp file
       fs.unlinkSync(tempPath);
-      
+
       log.info(`[UPDATE] ${binary.name} successfully updated to ${latestVersion} in userData`);
       return { success: true, newVersion: latestVersion };
     } catch (error: any) {
@@ -1950,115 +2133,131 @@ function setupIpcHandlers() {
   });
 
   // ── add-playlist-to-queue ───────────────────────────────────────────────────
-  ipcMain.handle('add-playlist-to-queue', async (_: any, { entries, options }: { 
-    entries: Array<{
-      url: string;
-      title: string;
-      thumbnail?: string;
-      index: number;
-    }>;
-    options: {
-      savePath?: string;
-      createFolder?: boolean;
-      playlistTitle?: string;
-    };
-  }) => {
-    log.info(`[IPC] add-playlist-to-queue called with ${entries.length} entries`);
-    
-    try {
-      const settings = getQuery(db, 'SELECT * FROM settings WHERE id = 1');
-      const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
-      const createFolder = options.createFolder ?? true;
-      
-      let playlistFolderPath = baseSavePath;
-      if (createFolder && options.playlistTitle) {
-        const playlistFolderName = options.playlistTitle
-          .replace(/[<>:"/\\|?*]/g, '')
-          .trim()
-          .slice(0, 100);
-        playlistFolderPath = path.join(baseSavePath, playlistFolderName || 'Playlist');
-        
-        // Ensure playlist folder exists
-        if (!fs.existsSync(playlistFolderPath)) {
-          fs.mkdirSync(playlistFolderPath, { recursive: true });
-        }
-      }
+  ipcMain.handle(
+    'add-playlist-to-queue',
+    async (
+      _: any,
+      {
+        entries,
+        options,
+      }: {
+        entries: Array<{
+          url: string;
+          title: string;
+          thumbnail?: string;
+          index: number;
+        }>;
+        options: {
+          savePath?: string;
+          createFolder?: boolean;
+          playlistTitle?: string;
+        };
+      },
+    ) => {
+      log.info(`[IPC] add-playlist-to-queue called with ${entries.length} entries`);
 
-      let addedCount = 0;
-      for (const entry of entries) {
-        try {
-          // Get video info for this entry to determine formats
-          const videoInfo = await extractVideoInfo(entry.url, {
-            ytDlp: ytDlpPath,
-            ffmpeg: ffmpegPath,
-            streamlink: streamlinkPath,
-            nm3u8dl: n_m3u8dlPath,
-            galleryDl: galleryDlPath,
-            cookiesFile: getResolvedCookiesPath(),
-          });
+      try {
+        const settings = getQuery(db, 'SELECT * FROM settings WHERE id = 1');
+        const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
+        const createFolder = options.createFolder ?? true;
 
-          const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
-          
-          // Determine format based on settings
-          const prefQuality = settings?.default_quality || 'best';
-          const prefFormat = settings?.default_format || 'mp4';
-          let formatId = 'bestvideo+bestaudio';
-          
-          if (prefFormat === 'mp3') {
-            formatId = 'bestaudio';
-          } else if (prefQuality !== 'best') {
-            const targetQuality = prefQuality + 'p';
-            const match = video.formats?.find((f: any) => f.quality === targetQuality);
-            formatId = match ? match.formatId : 'bestvideo+bestaudio';
+        let playlistFolderPath = baseSavePath;
+        if (createFolder && options.playlistTitle) {
+          const playlistFolderName = options.playlistTitle
+            .replace(/[<>:"/\\|?*]/g, '')
+            .trim()
+            .slice(0, 100);
+          playlistFolderPath = path.join(baseSavePath, playlistFolderName || 'Playlist');
+
+          // Ensure playlist folder exists
+          if (!fs.existsSync(playlistFolderPath)) {
+            fs.mkdirSync(playlistFolderPath, { recursive: true });
           }
+        }
 
-          const cleanTitle = entry.title ? entry.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
-          const isAudioOnly = formatId === 'bestaudio';
-          const ext = isAudioOnly ? "mp3" : (video.formats?.find((f: any) => f.formatId === formatId)?.ext || "mp4");
-          
-          // For playlist downloads, include playlist index in filename
-          const filename = createFolder 
-            ? `${entry.index.toString().padStart(2, '0')} - ${cleanTitle}.${ext}`
-            : `${cleanTitle}.${ext}`;
+        let addedCount = 0;
+        for (const entry of entries) {
+          try {
+            // Get video info for this entry to determine formats
+            const videoInfo = await extractVideoInfo(entry.url, {
+              ytDlp: ytDlpPath,
+              ffmpeg: ffmpegPath,
+              streamlink: streamlinkPath,
+              nm3u8dl: n_m3u8dlPath,
+              galleryDl: galleryDlPath,
+              cookiesFile: getResolvedCookiesPath(),
+            });
 
-          // Create download entry directly in database
-          const outputPath = path.join(playlistFolderPath, filename);
-          db.run(`
+            const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
+
+            // Determine format based on settings
+            const prefQuality = settings?.default_quality || 'best';
+            const prefFormat = settings?.default_format || 'mp4';
+            let formatId = 'bestvideo+bestaudio';
+
+            if (prefFormat === 'mp3') {
+              formatId = 'bestaudio';
+            } else if (prefQuality !== 'best') {
+              const targetQuality = prefQuality + 'p';
+              const match = video.formats?.find((f: any) => f.quality === targetQuality);
+              formatId = match ? match.formatId : 'bestvideo+bestaudio';
+            }
+
+            const cleanTitle = entry.title
+              ? entry.title.replace(/[^a-z0-9]/gi, '_').slice(0, 50)
+              : 'video';
+            const isAudioOnly = formatId === 'bestaudio';
+            const ext = isAudioOnly
+              ? 'mp3'
+              : video.formats?.find((f: any) => f.formatId === formatId)?.ext || 'mp4';
+
+            // For playlist downloads, include playlist index in filename
+            const filename = createFolder
+              ? `${entry.index.toString().padStart(2, '0')} - ${cleanTitle}.${ext}`
+              : `${cleanTitle}.${ext}`;
+
+            // Create download entry directly in database
+            const outputPath = path.join(playlistFolderPath, filename);
+            db.run(
+              `
             INSERT INTO downloads (
               url, filename, format_id, save_path, thumbnail, duration, uploader, 
               state, created_at, playlist_title, playlist_index, playlist_total
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', datetime('now'), ?, ?, ?)
-          `, [
-            entry.url,
-            filename,
-            formatId,
-            outputPath,
-            entry.thumbnail ?? null,
-            video.duration ?? null,
-            video.uploader ?? null,
-            options.playlistTitle ?? null,
-            entry.index,
-            entries.length
-          ]);
-          saveDatabase(db);
-          const insertInfo = getQuery(db, 'SELECT last_insert_rowid() as id');
-          const downloadId = insertInfo.id;
+          `,
+              [
+                entry.url,
+                filename,
+                formatId,
+                outputPath,
+                entry.thumbnail ?? null,
+                video.duration ?? null,
+                video.uploader ?? null,
+                options.playlistTitle ?? null,
+                entry.index,
+                entries.length,
+              ],
+            );
+            saveDatabase(db);
+            const insertInfo = getQuery(db, 'SELECT last_insert_rowid() as id');
+            const downloadId = insertInfo.id;
 
-          // Start the download process
-          spawnDownload(downloadId, entry.url, outputPath, formatId, false);
-          
-          addedCount++;
-        } catch (error: any) {
-          log.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+            // Start the download process
+            spawnDownload(downloadId, entry.url, outputPath, formatId, false);
+
+            addedCount++;
+          } catch (error: any) {
+            log.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+          }
         }
-      }
 
-      return { success: true, addedCount };
-    } catch (error: any) {
-      log.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
-      throw new Error(`Failed to add playlist to queue: ${error.message}`);
-    }
-  });
+        return { success: true, addedCount };
+      } catch (error: any) {
+        log.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
+        throw new Error(`Failed to add playlist to queue: ${error.message}`);
+      }
+    },
+  );
 }
 
 // Store incomplete lines between data chunks
@@ -2071,7 +2270,7 @@ function spawnDownload(
   outputPath: string,
   formatId?: string | null,
   isResume: boolean = false,
-  youtubePlayerClient?: YoutubePlayerClient
+  youtubePlayerClient?: YoutubePlayerClient,
 ): { id: number } {
   taskStopReasons.delete(downloadId);
   // Used for translating yt-dlp failures reliably (close handler only gives the exit code).
@@ -2079,11 +2278,12 @@ function spawnDownload(
   let aggregatedStderr = '';
   let actualFilePath = outputPath;
   let cleanedFilePathCandidate: string | null = null;
-  const formatArg = formatId === 'bestvideo+bestaudio' || !formatId
-    ? 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
-    : formatId === 'bestaudio'
-    ? 'bestaudio/best'
-    : `${formatId}+bestaudio/best`;
+  const formatArg =
+    formatId === 'bestvideo+bestaudio' || !formatId
+      ? 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+      : formatId === 'bestaudio'
+        ? 'bestaudio/best'
+        : `${formatId}+bestaudio/best`;
 
   const saveFolder = path.dirname(outputPath);
   const outputTemplate = path.join(saveFolder, '%(title)s.%(ext)s');
@@ -2101,13 +2301,18 @@ function spawnDownload(
     }),
     ...ytDlpCookiesArgs(cookiesPath),
     '--windows-filenames',
-    '--trim-filenames', '200',
-    '-f', formatArg,
-    '--merge-output-format', 'mp4',
-    '--ffmpeg-location', ffmpegPath,
-    '-o', outputTemplate,
+    '--trim-filenames',
+    '200',
+    '-f',
+    formatArg,
+    '--merge-output-format',
+    'mp4',
+    '--ffmpeg-location',
+    ffmpegPath,
+    '-o',
+    outputTemplate,
     '--',
-    url
+    url,
   ];
 
   if (isResume) {
@@ -2118,7 +2323,7 @@ function spawnDownload(
   log.info('[PROGRESS-AUDIT] yt-dlp command:', ytDlpPath, ytDlpArgs.join(' '));
 
   const ytDlpProcess = spawn(ytDlpPath, ytDlpArgs);
-  
+
   activeTasks.set(downloadId, {
     process: ytDlpProcess,
     url,
@@ -2126,7 +2331,7 @@ function spawnDownload(
     outputTemplate,
     savePath: saveFolder,
     // Helps cleanup/correct open-folder paths if we capture it.
-    filePath: actualFilePath as any
+    filePath: actualFilePath as any,
   });
   updatePowerSave();
 
@@ -2146,7 +2351,7 @@ function spawnDownload(
       if (!trimmed) continue;
 
       const progressMatch = trimmed.match(
-        /\[download\]\s+([\d.]+)%(?:\s+of\s+(?:~?\s*)?([\w.\s]+?))?(?:(?:\s+in\s+[\w:]+)?\s+at\s+([\w.\s\/]+?))?(?:\s+ETA\s+([\w:]+))?(?:\s+\(frag.*?\))?\s*$/i
+        /\[download\]\s+([\d.]+)%(?:\s+of\s+(?:~?\s*)?([\w.\s]+?))?(?:(?:\s+in\s+[\w:]+)?\s+at\s+([\w.\s/]+?))?(?:\s+ETA\s+([\w:]+))?(?:\s+\(frag.*?\))?\s*$/i,
       );
 
       if (progressMatch) {
@@ -2163,15 +2368,17 @@ function spawnDownload(
           speed: speedStr === 'Unknown' ? '' : speedStr,
           eta: formatEta(etaRaw),
           phase: 'Downloading',
-          status: 'downloading'
+          status: 'downloading',
         };
 
-        log.info(`[PROGRESS] ${jobId}: ${percent}% of ${totalSizeStr} at ${speedStr} ETA ${etaRaw}`);
+        log.info(
+          `[PROGRESS] ${jobId}: ${percent}% of ${totalSizeStr} at ${speedStr} ETA ${etaRaw}`,
+        );
         if (mainWindow) {
           mainWindow.webContents.send('download-progress', progressData);
           mainWindow.setProgressBar(progressData.percent / 100);
         }
-        
+
         const parseSize = (s: string): number => {
           const num = parseFloat(s);
           const su = s.toLowerCase();
@@ -2223,7 +2430,14 @@ function spawnDownload(
       }
 
       if (trimmed.includes('has already been downloaded')) {
-        if (mainWindow) mainWindow.webContents.send('download-progress', { jobId: String(jobId), id: jobId, percent: 100, phase: 'Already downloaded', status: 'completed' });
+        if (mainWindow)
+          mainWindow.webContents.send('download-progress', {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 100,
+            phase: 'Already downloaded',
+            status: 'completed',
+          });
         continue;
       }
 
@@ -2232,12 +2446,26 @@ function spawnDownload(
         trimmed.includes('Merging formats into') ||
         trimmed.includes('[ffmpeg]')
       ) {
-        if (mainWindow) mainWindow.webContents.send('download-progress', { jobId: String(jobId), id: jobId, percent: 99, phase: 'Merging audio and video...', status: 'merging' });
+        if (mainWindow)
+          mainWindow.webContents.send('download-progress', {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 99,
+            phase: 'Merging audio and video...',
+            status: 'merging',
+          });
         continue;
       }
 
       if (trimmed.includes('[ExtractAudio]')) {
-        if (mainWindow) mainWindow.webContents.send('download-progress', { jobId: String(jobId), id: jobId, percent: 99, phase: 'Extracting audio...', status: 'merging' });
+        if (mainWindow)
+          mainWindow.webContents.send('download-progress', {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 99,
+            phase: 'Extracting audio...',
+            status: 'merging',
+          });
         continue;
       }
 
@@ -2324,7 +2552,11 @@ function spawnDownload(
     if (code === 0) {
       log.info(`[PROGRESS] Job ${downloadId} completed successfully`);
       // Final attempt to clean filenames now that the file should exist.
-      if (cleanedFilePathCandidate && fs.existsSync(actualFilePath) && cleanedFilePathCandidate !== actualFilePath) {
+      if (
+        cleanedFilePathCandidate &&
+        fs.existsSync(actualFilePath) &&
+        cleanedFilePathCandidate !== actualFilePath
+      ) {
         try {
           if (!fs.existsSync(cleanedFilePathCandidate)) {
             fs.renameSync(actualFilePath, cleanedFilePathCandidate);
@@ -2355,9 +2587,9 @@ function spawnDownload(
           const dl = getQuery(db, 'SELECT filename FROM downloads WHERE id = ?', [downloadId]);
           new Notification({
             title: 'Download Complete',
-            body: dl ? dl.filename : 'Your file has been saved.'
+            body: dl ? dl.filename : 'Your file has been saved.',
           }).show();
-        } catch (_) {}
+        } catch (_) { Object(_); }
       }
     } else if (code !== null) {
       if (
@@ -2365,13 +2597,19 @@ function spawnDownload(
         isYouTubeUrl(url) &&
         isLikelyYoutubeAgeRestrictionError(aggregatedStderr)
       ) {
-        log.info(`[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`);
+        log.info(
+          `[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`,
+        );
         spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded');
         processQueue();
         return;
       }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = translateDownloadError(aggregatedStderr || lastStderrOutput, code, url);
+      const userFriendlyError = translateDownloadError(
+        aggregatedStderr || lastStderrOutput,
+        code,
+        url,
+      );
       updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
@@ -2380,12 +2618,12 @@ function spawnDownload(
           percent: 0,
           phase: userFriendlyError,
           status: 'failed',
-          error: userFriendlyError
+          error: userFriendlyError,
         });
         mainWindow.setProgressBar(-1);
       }
     }
-    
+
     processQueue();
   });
 
@@ -2396,7 +2634,13 @@ function spawnDownload(
     const userFriendlyError = translateDownloadError(err?.message || String(err), null, url);
     updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
     if (mainWindow) {
-      mainWindow.webContents.send('download-progress', { jobId: String(downloadId), id: downloadId, state: 'failed', status: 'failed', error: userFriendlyError });
+      mainWindow.webContents.send('download-progress', {
+        jobId: String(downloadId),
+        id: downloadId,
+        state: 'failed',
+        status: 'failed',
+        error: userFriendlyError,
+      });
     }
     processQueue();
   });
@@ -2433,49 +2677,52 @@ if (app) {
     (app as any).isQuitting = true;
   });
 
-  app.whenReady().then(async () => {
-    try {
-      // Check single instance lock first - exit early if another instance is running
-      if (!initializeSingleInstanceLock()) {
-        return; // Exit early, app.quit() was called in the function
-      }
-      
-      log.info('[Main] App ready — startup sequence begin');
-      checkBinaries();
-      await initDb();
-      setupIpcHandlers();
-      createWindow();
-      createTray();
-
-      processQueue();
-
-      setTimeout(() => runBackgroundVersionCheck(), 5000);
-
+  app
+    .whenReady()
+    .then(async () => {
       try {
-        await execa(ytDlpPath, ['--version'], { timeout: 5000 });
-        log.info('[Main] yt-dlp pre-warmed successfully');
-      } catch (err: any) {
-        log.warn('[Main] yt-dlp pre-warm failed:', err?.message || err);
-        log.warn('[Main] yt-dlp pre-warm stderr:', err?.stderr || 'No stderr');
-        // Do NOT crash the app - pre-warm failure is not critical
+        // Check single instance lock first - exit early if another instance is running
+        if (!initializeSingleInstanceLock()) {
+          return; // Exit early, app.quit() was called in the function
+        }
+
+        log.info('[Main] App ready — startup sequence begin');
+        checkBinaries();
+        await initDb();
+        setupIpcHandlers();
+        createWindow();
+        createTray();
+
+        processQueue();
+
+        setTimeout(() => runBackgroundVersionCheck(), 5000);
+
+        try {
+          await execa(ytDlpPath, ['--version'], { timeout: 5000 });
+          log.info('[Main] yt-dlp pre-warmed successfully');
+        } catch (err: any) {
+          log.warn('[Main] yt-dlp pre-warm failed:', err?.message || err);
+          log.warn('[Main] yt-dlp pre-warm stderr:', err?.stderr || 'No stderr');
+          // Do NOT crash the app - pre-warm failure is not critical
+        }
+      } catch (err: unknown) {
+        log.error('[Main] Startup error:', err);
+        const text = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
+        try {
+          dialog.showErrorBox(
+            'Internet Download Hub — startup failed',
+            `${text}\n\nDetails were written to the log file.`,
+          );
+        } catch {
+          /* dialog may be unavailable in headless edge cases */
+        }
+        app.quit();
       }
-    } catch (err: unknown) {
-      log.error('[Main] Startup error:', err);
-      const text = err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err);
-      try {
-        dialog.showErrorBox(
-          'Internet Download Hub — startup failed',
-          `${text}\n\nDetails were written to the log file.`
-        );
-      } catch {
-        /* dialog may be unavailable in headless edge cases */
-      }
+    })
+    .catch((err: unknown) => {
+      log.error('[Main] app.whenReady() rejected:', err);
       app.quit();
-    }
-  }).catch((err: unknown) => {
-    log.error('[Main] app.whenReady() rejected:', err);
-    app.quit();
-  });
+    });
 }
 
 app.on('window-all-closed', () => {

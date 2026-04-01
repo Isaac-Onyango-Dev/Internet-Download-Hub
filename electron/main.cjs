@@ -1501,9 +1501,9 @@ var require_get_stream = __commonJS({
     "use strict";
     var { constants: BufferConstants } = require("buffer");
     var stream = require("stream");
-    var { promisify } = require("util");
+    var { promisify: promisify2 } = require("util");
     var bufferStream = require_buffer_stream();
-    var streamPipelinePromisified = promisify(stream.pipeline);
+    var streamPipelinePromisified = promisify2(stream.pipeline);
     var MaxBufferError = class extends Error {
       constructor() {
         super("maxBuffer exceeded");
@@ -2245,6 +2245,8 @@ function buildYtDlpJsonArgs(url, cookiesFile, youtubeClient) {
     }),
     ...ytDlpCookiesArgs(cookiesFile),
     // Add cookies if available
+    "--",
+    // Prevent parameter injection
     url
     // Target URL
   ];
@@ -2261,7 +2263,9 @@ function parseYtDlpJsonStdout(stdout, pageUrl) {
 async function runYtDlp(url, ytDlpPath2, cookiesFile) {
   if (!import_fs2.default.existsSync(ytDlpPath2)) throw new Error("yt-dlp not found");
   try {
-    const result = await (0, import_execa.default)(ytDlpPath2, buildYtDlpJsonArgs(url, cookiesFile), { timeout: 12e4 });
+    const result = await (0, import_execa.default)(ytDlpPath2, buildYtDlpJsonArgs(url, cookiesFile), {
+      timeout: 12e4
+    });
     return parseYtDlpJsonStdout(result.stdout, url);
   } catch (err) {
     const stderr = String(err.stderr ?? err.message ?? "");
@@ -2277,7 +2281,7 @@ async function runYtDlp(url, ytDlpPath2, cookiesFile) {
 }
 async function runStreamlink(url, streamlinkPath2) {
   if (!import_fs2.default.existsSync(streamlinkPath2)) throw new Error("streamlink not found");
-  const result = await (0, import_execa.default)(streamlinkPath2, [url, "--json"], { timeout: 3e4 });
+  const result = await (0, import_execa.default)(streamlinkPath2, ["--json", "--", url], { timeout: 3e4 });
   const info = JSON.parse(result.stdout);
   if (info.error) throw new Error(info.error);
   const streams = info.streams || {};
@@ -2291,15 +2295,17 @@ async function runStreamlink(url, streamlinkPath2) {
     // Live streams have no duration
     uploader: info.metadata?.author || new URL(url).hostname,
     extractionMethod: "streamlink",
-    formats: [{
-      formatId: "best",
-      label: "Live Stream (Best)",
-      quality: "best",
-      ext: "ts",
-      // Typical live stream format
-      filesize: null,
-      height: null
-    }]
+    formats: [
+      {
+        formatId: "best",
+        label: "Live Stream (Best)",
+        quality: "best",
+        ext: "ts",
+        // Typical live stream format
+        filesize: null,
+        height: null
+      }
+    ]
   };
 }
 async function runNm3u8dl(url, nm3u8dlPath) {
@@ -2308,7 +2314,7 @@ async function runNm3u8dl(url, nm3u8dlPath) {
 }
 async function runGalleryDl(url, galleryDlPath2) {
   if (!import_fs2.default.existsSync(galleryDlPath2)) throw new Error("gallery-dl not found");
-  const result = await (0, import_execa.default)(galleryDlPath2, ["-j", url], { timeout: 3e4 });
+  const result = await (0, import_execa.default)(galleryDlPath2, ["-j", "--", url], { timeout: 3e4 });
   const info = JSON.parse(result.stdout);
   return {
     url,
@@ -2318,15 +2324,17 @@ async function runGalleryDl(url, galleryDlPath2) {
     // Images have no duration
     uploader: new URL(url).hostname,
     extractionMethod: "gallery-dl",
-    formats: [{
-      formatId: "best",
-      label: "Full Quality Gallery",
-      quality: "best",
-      ext: "zip",
-      // Typically downloaded as archive
-      filesize: null,
-      height: null
-    }]
+    formats: [
+      {
+        formatId: "best",
+        label: "Full Quality Gallery",
+        quality: "best",
+        ext: "zip",
+        // Typically downloaded as archive
+        filesize: null,
+        height: null
+      }
+    ]
   };
 }
 async function execYtDlpPlaylistJson(ytDlpPath2, pageUrl, opts) {
@@ -2346,7 +2354,7 @@ async function execYtDlpPlaylistJson(ytDlpPath2, pageUrl, opts) {
   if (opts.playlistItemLimit && Number.isFinite(opts.playlistItemLimit)) {
     args.push("--playlist-items", String(opts.playlistItemLimit));
   }
-  args.push(pageUrl);
+  args.push("--", pageUrl);
   return (0, import_execa.default)(ytDlpPath2, args, { timeout: 12e4 });
 }
 async function extractPlaylistInfo(url, paths, opts) {
@@ -2446,7 +2454,8 @@ async function extractWithPlaywright(pageUrl, ytDlpPath2, cookiesFile) {
         console.log("[Playwright] Clicked play button:", selector);
         await page.waitForTimeout(3e3);
         break;
-      } catch {
+      } catch (err) {
+        console.debug("[Playwright] Failed to click " + selector);
       }
     }
     const metadata = await page.evaluate(() => ({
@@ -2459,18 +2468,25 @@ async function extractWithPlaywright(pageUrl, ytDlpPath2, cookiesFile) {
     }));
     await browser.close();
     if (capturedUrls.length === 0) {
-      throw new Error("Could not find any video stream on this page. The site may require login or use DRM protection.");
+      throw new Error(
+        "Could not find any video stream on this page. The site may require login or use DRM protection."
+      );
     }
     const bestUrl = capturedUrls.find((u) => u.includes(".m3u8")) || capturedUrls.find((u) => u.includes(".mpd")) || capturedUrls[0];
     console.log("[Playwright] Best extracted URL:", bestUrl);
     try {
-      const result = await (0, import_execa.default)(ytDlpPath2, [
-        "--dump-json",
-        "--no-warnings",
-        ...ytDlpCommonArgs(bestUrl, { noPlaylist: true }),
-        ...ytDlpCookiesArgs(cookiesFile),
-        bestUrl
-      ], { timeout: 15e3 });
+      const result = await (0, import_execa.default)(
+        ytDlpPath2,
+        [
+          "--dump-json",
+          "--no-warnings",
+          ...ytDlpCommonArgs(bestUrl, { noPlaylist: true }),
+          ...ytDlpCookiesArgs(cookiesFile),
+          "--",
+          bestUrl
+        ],
+        { timeout: 15e3 }
+      );
       const info = JSON.parse(result.stdout);
       return {
         ...parseYtDlpInfo(info, bestUrl),
@@ -2529,9 +2545,23 @@ function parseYtDlpInfo(info, fallbackUrl) {
     uploader: info.uploader || info.channel || "",
     extractionMethod: "yt-dlp",
     formats: [
-      { formatId: "bestvideo+bestaudio", label: "Best Quality (Recommended)", quality: "best", ext: "mp4", filesize: null, height: null },
+      {
+        formatId: "bestvideo+bestaudio",
+        label: "Best Quality (Recommended)",
+        quality: "best",
+        ext: "mp4",
+        filesize: null,
+        height: null
+      },
       ...uniqueFormats,
-      { formatId: "bestaudio", label: "Audio Only (MP3)", quality: "audio", ext: "mp3", filesize: null, height: null }
+      {
+        formatId: "bestaudio",
+        label: "Audio Only (MP3)",
+        quality: "audio",
+        ext: "mp3",
+        filesize: null,
+        height: null
+      }
     ]
   };
 }
@@ -2546,6 +2576,7 @@ function formatBytes(bytes) {
 var import_fs3 = __toESM(require("fs"), 1);
 var import_os = __toESM(require("os"), 1);
 var import_https = __toESM(require("https"), 1);
+var import_util = require("util");
 var import_sql = __toESM(require("sql.js"), 1);
 import_electron_log2.default.transports.file.level = "debug";
 import_electron_log2.default.catchErrors();
@@ -2564,6 +2595,7 @@ var db;
 var activeTasks = /* @__PURE__ */ new Map();
 var taskStopReasons = /* @__PURE__ */ new Map();
 var powerSaveBlockerId = null;
+var ffmpegDownloadPromise = null;
 var isDev;
 var isTest;
 var binariesPath;
@@ -2665,87 +2697,144 @@ function isFFmpegAvailable() {
   const userFFmpegPath = import_path.default.join(userDataBinariesPath, "ffmpeg.exe");
   const packagedFFmpegPath = import_path.default.join(process.resourcesPath, "binaries", "ffmpeg.exe");
   const ffmpegAvailable = import_fs3.default.existsSync(userFFmpegPath) || import_fs3.default.existsSync(packagedFFmpegPath);
-  import_electron_log2.default.info(`[Main] FFmpeg availability check - userData: ${import_fs3.default.existsSync(userFFmpegPath)}, packaged: ${import_fs3.default.existsSync(packagedFFmpegPath)}`);
+  import_electron_log2.default.info(
+    `[Main] FFmpeg availability check - userData: ${import_fs3.default.existsSync(userFFmpegPath)}, packaged: ${import_fs3.default.existsSync(packagedFFmpegPath)}`
+  );
   return ffmpegAvailable;
 }
 async function downloadFFmpeg() {
-  const ffmpegDownloaded = getQuery(db, "SELECT ffmpeg_downloaded FROM settings WHERE id = 1")?.ffmpeg_downloaded === 1;
-  if (ffmpegDownloaded || isFFmpegAvailable()) {
-    import_electron_log2.default.info("[Main] FFmpeg is available, skipping download");
-    if (!ffmpegDownloaded && isFFmpegAvailable()) {
-      db.run("UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1");
-      saveDatabase(db);
+  if (ffmpegDownloadPromise) return ffmpegDownloadPromise;
+  ffmpegDownloadPromise = (async () => {
+    const ffmpegDownloaded = getQuery(db, "SELECT ffmpeg_downloaded FROM settings WHERE id = 1")?.ffmpeg_downloaded === 1;
+    if (ffmpegDownloaded || isFFmpegAvailable()) {
+      import_electron_log2.default.info("[Main] FFmpeg is available, skipping download");
+      if (!ffmpegDownloaded && isFFmpegAvailable()) {
+        db.run("UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1");
+        saveDatabase(db);
+      }
+      return;
     }
-    return;
-  }
-  try {
-    if (mainWindow) {
-      mainWindow.webContents.send("ffmpeg-download-notification", {
-        title: "Downloading FFmpeg",
-        body: "FFmpeg is being downloaded (~80MB) for high-quality video merging. This only happens once.",
-        type: "info"
-      });
-    }
-    const ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
-    const userDataPath = import_electron.app.getPath("userData");
-    const binariesPath2 = import_path.default.join(userDataPath, "binaries");
-    if (!import_fs3.default.existsSync(binariesPath2)) {
-      import_fs3.default.mkdirSync(binariesPath2, { recursive: true });
-    }
-    const zipPath = import_path.default.join(binariesPath2, "ffmpeg.zip");
-    if (mainWindow) {
-      mainWindow.webContents.send("ffmpeg-download-progress", {
-        phase: "downloading",
-        percent: 0
-      });
-    }
-    import_electron_log2.default.info("[Main] Starting FFmpeg download from:", ffmpegUrl);
-    await downloadFile(ffmpegUrl, zipPath);
-    const tempDir = import_path.default.join(binariesPath2, "temp_ffmpeg_extract");
-    if (!import_fs3.default.existsSync(tempDir)) {
-      import_fs3.default.mkdirSync(tempDir, { recursive: true });
-    }
-    const { execSync } = require("child_process");
-    execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${tempDir}'"`, { cwd: binariesPath2 });
-    const ffmpegSourcePath = import_path.default.join(tempDir, "ffmpeg-master-latest-win64-gpl", "bin", "ffmpeg.exe");
-    if (import_fs3.default.existsSync(ffmpegSourcePath)) {
-      import_fs3.default.copyFileSync(ffmpegSourcePath, import_path.default.join(binariesPath2, "ffmpeg.exe"));
-    } else {
-      throw new Error("ffmpeg.exe not found in extracted archive");
-    }
-    import_fs3.default.rmSync(tempDir, { recursive: true, force: true });
-    import_fs3.default.unlinkSync(zipPath);
-    db.run("UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1");
-    saveDatabase(db);
-    if (mainWindow) {
-      mainWindow.webContents.send("ffmpeg-download-progress", {
-        phase: "completed",
-        percent: 100
-      });
-      setTimeout(() => {
+    try {
+      if (mainWindow) {
         mainWindow.webContents.send("ffmpeg-download-notification", {
-          title: "FFmpeg Ready",
-          body: "FFmpeg has been installed. You can now download videos in high quality.",
-          type: "success"
+          title: "Downloading FFmpeg",
+          body: "FFmpeg is being downloaded (~80MB) for high-quality video merging. This only happens once.",
+          type: "info"
         });
-      }, 1e3);
+      }
+      const userDataBinariesPath = import_path.default.join(import_electron.app.getPath("userData"), "binaries");
+      if (!import_fs3.default.existsSync(userDataBinariesPath)) {
+        import_fs3.default.mkdirSync(userDataBinariesPath, { recursive: true });
+      }
+      const zipPath = import_path.default.join(userDataBinariesPath, "ffmpeg.zip");
+      const downloadUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
+      import_electron_log2.default.info(`[Main] Starting FFmpeg download from: ${downloadUrl}`);
+      const downloadFile2 = (url, dest) => {
+        return new Promise((resolve, reject) => {
+          const file = import_fs3.default.createWriteStream(dest);
+          import_https.default.get(url, (response) => {
+            if (response.statusCode !== 200) {
+              reject(new Error(`Failed to download FFmpeg: ${response.statusCode}`));
+              return;
+            }
+            const totalSize = parseInt(response.headers["content-length"] || "0", 10);
+            let downloaded = 0;
+            response.on("data", (chunk) => {
+              downloaded += chunk.length;
+              if (mainWindow && totalSize > 0) {
+                mainWindow.webContents.send("ffmpeg-download-progress", {
+                  phase: "downloading",
+                  percent: downloaded / totalSize * 100
+                });
+              }
+            });
+            response.pipe(file);
+            file.on("finish", () => {
+              file.close();
+              resolve(true);
+            });
+          }).on("error", (err) => {
+            import_fs3.default.unlink(dest, () => {
+            });
+            reject(err);
+          });
+        });
+      };
+      await downloadFile2(downloadUrl, zipPath);
+      import_electron_log2.default.info("[Main] FFmpeg zip downloaded, extracting...");
+      if (mainWindow) {
+        mainWindow.webContents.send("ffmpeg-download-progress", {
+          phase: "extracting",
+          percent: 50
+        });
+      }
+      const tempDir = import_path.default.join(userDataBinariesPath, "temp_ffmpeg_extract");
+      if (!import_fs3.default.existsSync(tempDir)) {
+        import_fs3.default.mkdirSync(tempDir, { recursive: true });
+      }
+      const psCommand = `Expand-Archive -Path "${zipPath}" -DestinationPath "${tempDir}" -Force`;
+      await (0, import_util.promisify)(import_child_process.exec)(`powershell -Command "${psCommand}"`);
+      const findFfmpeg = (dir) => {
+        const files = import_fs3.default.readdirSync(dir);
+        for (const file of files) {
+          const fullPath = import_path.default.join(dir, file);
+          if (import_fs3.default.statSync(fullPath).isDirectory()) {
+            const found = findFfmpeg(fullPath);
+            if (found) return found;
+          } else if (file === "ffmpeg.exe") {
+            return fullPath;
+          }
+        }
+        return null;
+      };
+      const extractedFfmpegPath = findFfmpeg(tempDir);
+      if (extractedFfmpegPath) {
+        const finalFfmpegPath = import_path.default.join(userDataBinariesPath, "ffmpeg.exe");
+        const ffprobeSource = extractedFfmpegPath.replace("ffmpeg.exe", "ffprobe.exe");
+        const finalFfprobePath = import_path.default.join(userDataBinariesPath, "ffprobe.exe");
+        import_fs3.default.copyFileSync(extractedFfmpegPath, finalFfmpegPath);
+        if (import_fs3.default.existsSync(ffprobeSource)) {
+          import_fs3.default.copyFileSync(ffprobeSource, finalFfprobePath);
+        }
+        import_fs3.default.unlinkSync(zipPath);
+        import_fs3.default.rmSync(tempDir, { recursive: true, force: true });
+        db.run("UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1");
+        saveDatabase(db);
+        setupPaths();
+        import_electron_log2.default.info("[Main] FFmpeg installed successfully");
+        if (mainWindow) {
+          mainWindow.webContents.send("ffmpeg-download-progress", {
+            phase: "completed",
+            percent: 100
+          });
+          mainWindow.webContents.send("ffmpeg-download-notification", {
+            title: "FFmpeg Ready",
+            body: "FFmpeg has been installed and is ready for high-quality downloads.",
+            type: "success"
+          });
+        }
+      } else {
+        throw new Error("ffmpeg.exe not found in extracted archive");
+      }
+    } catch (error) {
+      import_electron_log2.default.error("[Main] FFmpeg download failed:", error);
+      if (mainWindow) {
+        mainWindow.webContents.send("ffmpeg-download-progress", {
+          phase: "error",
+          percent: 0,
+          error: error.message
+        });
+        mainWindow.webContents.send("ffmpeg-download-notification", {
+          title: "FFmpeg Download Failed",
+          body: `Failed to download FFmpeg: ${error.message}. Please try again later.`,
+          type: "error"
+        });
+      }
+    } finally {
+      ffmpegDownloadPromise = null;
     }
-    import_electron_log2.default.info("[Main] FFmpeg download completed successfully");
-  } catch (error) {
-    import_electron_log2.default.error(`[Main] FFmpeg download failed: ${error.message}`);
-    if (mainWindow) {
-      mainWindow.webContents.send("ffmpeg-download-progress", {
-        phase: "error",
-        percent: 0,
-        error: error.message
-      });
-      mainWindow.webContents.send("ffmpeg-download-notification", {
-        title: "FFmpeg Download Failed",
-        body: `Failed to download FFmpeg: ${error.message}. Please try again later.`,
-        type: "error"
-      });
-    }
-  }
+  })();
+  return ffmpegDownloadPromise;
 }
 function checkFFmpegRequired(formatId) {
   if (!formatId) return false;
@@ -2808,7 +2897,13 @@ function allQuery(database, sql, params = []) {
   });
 }
 function getSqlJsWasmDir() {
-  const unpackedDist = import_path.default.join(process.resourcesPath, "app.asar.unpacked", "node_modules", "sql.js", "dist");
+  const unpackedDist = import_path.default.join(
+    process.resourcesPath,
+    "app.asar.unpacked",
+    "node_modules",
+    "sql.js",
+    "dist"
+  );
   const insideAsar = import_path.default.join(import_electron.app.getAppPath(), "node_modules", "sql.js", "dist");
   const devCwd = import_path.default.join(process.cwd(), "node_modules", "sql.js", "dist");
   const nextToMain = import_path.default.join(__dirname, "..", "node_modules", "sql.js", "dist");
@@ -2920,13 +3015,16 @@ async function initDb() {
   };
   for (const [key, value] of Object.entries(defaults)) {
     try {
-      db.run(`UPDATE settings SET ${key} = ? WHERE id = 1 AND (${key} IS NULL OR ${key} = '')`, [value]);
+      db.run(`UPDATE settings SET ${key} = ? WHERE id = 1 AND (${key} IS NULL OR ${key} = '')`, [
+        value
+      ]);
     } catch (_) {
     }
   }
   try {
     db.run("UPDATE downloads SET state = 'paused' WHERE state IN ('downloading', 'merging')");
   } catch (_) {
+    Object(_);
   }
   saveDatabase(db);
 }
@@ -2939,8 +3037,7 @@ async function getFreeSpace(targetPath) {
     } else {
       cmd = `df -b1 "${targetPath}" | tail -1 | awk '{print $4}'`;
     }
-    const { exec } = require("child_process");
-    exec(cmd, (err, stdout) => {
+    (0, import_child_process.exec)(cmd, (err, stdout) => {
       if (err) {
         import_electron_log2.default.error("Failed to get free space:", err);
         resolve(Number.MAX_SAFE_INTEGER);
@@ -3015,7 +3112,13 @@ function createTray() {
           activeTasks.forEach((job, id) => {
             job.process.kill("SIGTERM");
             updateDownloadInDb(id, { state: "paused" });
-            if (mainWindow) mainWindow.webContents.send("download-progress", { jobId: String(id), id, phase: "Paused", status: "paused" });
+            if (mainWindow)
+              mainWindow.webContents.send("download-progress", {
+                jobId: String(id),
+                id,
+                phase: "Paused",
+                status: "paused"
+              });
           });
           activeTasks.clear();
           updatePowerSave();
@@ -3025,7 +3128,10 @@ function createTray() {
       {
         label: "Resume All Downloads",
         click: () => {
-          const paused = allQuery(db, "SELECT * FROM downloads WHERE state = 'paused' ORDER BY created_at ASC");
+          const paused = allQuery(
+            db,
+            "SELECT * FROM downloads WHERE state = 'paused' ORDER BY created_at ASC"
+          );
           for (const item of paused) {
             updateDownloadInDb(item.id, { state: "queued", error: null });
           }
@@ -3135,23 +3241,26 @@ function createWindow() {
       import_electron_log2.default.info("[Main] FFmpeg not bundled, user will be notified when needed");
     }
   });
-  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    import_electron_log2.default.error("[MAIN] did-fail-load", { errorCode, errorDescription, validatedURL });
-    const msg = `Failed to load (${errorCode}): ${validatedURL}
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL) => {
+      import_electron_log2.default.error("[MAIN] did-fail-load", { errorCode, errorDescription, validatedURL });
+      const msg = `Failed to load (${errorCode}): ${validatedURL}
 ${errorDescription}`;
-    if (!import_electron.app.isPackaged) {
-      import_electron.dialog.showErrorBox("Load Error", msg);
-    } else {
-      import_electron.dialog.showErrorBox("Internet Download Hub \u2014 load error", `${msg}
+      if (!import_electron.app.isPackaged) {
+        import_electron.dialog.showErrorBox("Load Error", msg);
+      } else {
+        import_electron.dialog.showErrorBox(
+          "Internet Download Hub \u2014 load error",
+          `${msg}
 
-If this persists, check the log file from Help or %APPDATA% logs.`);
+If this persists, check the log file from Help or %APPDATA% logs.`
+        );
+      }
     }
-  });
+  );
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const allowed = [
-      "https://github.com/Isaac-Onyango-Dev",
-      "https://isaac-onyango-dev.github.io"
-    ];
+    const allowed = ["https://github.com/Isaac-Onyango-Dev", "https://isaac-onyango-dev.github.io"];
     if (allowed.some((prefix) => url.startsWith(prefix))) {
       import_electron.shell.openExternal(url);
     } else {
@@ -3343,22 +3452,27 @@ async function performYtDlpUpdate() {
   const stats = import_fs3.default.statSync(tempPath);
   if (stats.size < 10 * 1024 * 1024) {
     import_fs3.default.unlinkSync(tempPath);
-    throw new Error(`Downloaded file is suspiciously small (${(stats.size / 1024 / 1024).toFixed(2)} MB) \u2014 aborting`);
+    throw new Error(
+      `Downloaded file is suspiciously small (${(stats.size / 1024 / 1024).toFixed(2)} MB) \u2014 aborting`
+    );
   }
   const backupPath = destPath + ".backup";
   try {
     if (import_fs3.default.existsSync(backupPath)) import_fs3.default.unlinkSync(backupPath);
   } catch (_) {
+    Object(_);
   }
   try {
     if (import_fs3.default.existsSync(destPath)) import_fs3.default.renameSync(destPath, backupPath);
   } catch (_) {
+    Object(_);
   }
   try {
     import_fs3.default.renameSync(tempPath, destPath);
     try {
       if (import_fs3.default.existsSync(backupPath)) import_fs3.default.unlinkSync(backupPath);
     } catch (_) {
+      Object(_);
     }
     ytDlpPath = destPath;
     import_electron_log2.default.info(`[UPDATE] yt-dlp successfully updated to v${latestVersion} in userData`);
@@ -3369,10 +3483,12 @@ async function performYtDlpUpdate() {
         import_fs3.default.renameSync(backupPath, destPath);
       }
     } catch (_) {
+      Object(_);
     }
     try {
       if (import_fs3.default.existsSync(tempPath)) import_fs3.default.unlinkSync(tempPath);
     } catch (_) {
+      Object(_);
     }
     throw new Error(`Failed to finalize update: ${err.message}`);
   }
@@ -3382,7 +3498,9 @@ async function runBackgroundVersionCheck() {
     const check = await checkYtDlpVersion();
     if (!mainWindow) return;
     if (check.updateAvailable) {
-      import_electron_log2.default.info(`[UPDATE] yt-dlp update available: ${check.currentVersion} -> ${check.latestVersion}`);
+      import_electron_log2.default.info(
+        `[UPDATE] yt-dlp update available: ${check.currentVersion} -> ${check.latestVersion}`
+      );
       mainWindow.webContents.send("ytdlp-update-available", {
         currentVersion: check.currentVersion,
         latestVersion: check.latestVersion
@@ -3400,15 +3518,28 @@ async function runBackgroundVersionCheck() {
     import_electron_log2.default.warn("[UPDATE] Background version check failed (silently ignored):", err.message);
   }
 }
-function processQueue() {
+async function processQueue() {
   try {
     const settings = getQuery(db, "SELECT max_concurrent_downloads FROM settings WHERE id = 1");
     const maxConcurrent = settings?.max_concurrent_downloads || 3;
     const activeCount = activeTasks.size;
     if (activeCount >= maxConcurrent) return;
     const toStart = maxConcurrent - activeCount;
-    const queuedItems = allQuery(db, "SELECT * FROM downloads WHERE state = 'queued' ORDER BY created_at ASC LIMIT ?", [toStart]);
+    const queuedItems = allQuery(
+      db,
+      "SELECT * FROM downloads WHERE state = 'queued' ORDER BY created_at ASC"
+    );
+    let startedThisLoop = 0;
     for (const item of queuedItems) {
+      if (startedThisLoop >= toStart) break;
+      if (checkFFmpegRequired(item.format_id) && !isFFmpegAvailable()) {
+        import_electron_log2.default.info(`[Queue] Item ${item.id} requires FFmpeg but it's not available. Triggering background fetch.`);
+        downloadFFmpeg().catch(
+          (err) => import_electron_log2.default.error(`[Queue] Auto-FFmpeg download failed for job ${item.id}:`, err)
+        );
+        continue;
+      }
+      startedThisLoop++;
       updateDownloadInDb(item.id, { state: "downloading", error: null });
       spawnDownload(item.id, item.url, item.save_path, item.format_id, !!item.received_bytes);
       if (mainWindow) {
@@ -3443,8 +3574,7 @@ function killProcessTree(pid) {
   if (!pid) return;
   try {
     if (process.platform === "win32") {
-      const { execSync } = require("child_process");
-      execSync(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
+      (0, import_child_process.execSync)(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
     } else {
       process.kill(-pid, "SIGKILL");
     }
@@ -3458,7 +3588,10 @@ function setupIpcHandlers() {
     try {
       new URL(rawUrl);
     } catch {
-      return { success: false, error: "That doesn't look like a valid URL. Please paste a full video link." };
+      return {
+        success: false,
+        error: "That doesn't look like a valid URL. Please paste a full video link."
+      };
     }
     try {
       const settings = getQuery(db, "SELECT detect_playlists FROM settings WHERE id = 1");
@@ -3553,9 +3686,6 @@ function setupIpcHandlers() {
     if (!url) throw new Error("Invalid or missing URL");
     if (!filename) throw new Error("Invalid or missing filename");
     const formatId = typeof options.formatId === "string" && options.formatId.trim() ? options.formatId.trim() : null;
-    if (checkFFmpegRequired(formatId)) {
-      await downloadFFmpeg();
-    }
     const optionsSavePath = typeof options.savePath === "string" && options.savePath.trim() ? options.savePath.trim() : void 0;
     const thumbnail = typeof options.thumbnail === "string" && options.thumbnail.trim() ? options.thumbnail.trim() : null;
     const uploader = typeof options.uploader === "string" && options.uploader.trim() ? options.uploader.trim() : null;
@@ -3566,14 +3696,33 @@ function setupIpcHandlers() {
     if (!import_fs3.default.existsSync(saveFolder)) {
       import_fs3.default.mkdirSync(saveFolder, { recursive: true });
     }
-    const existing = allQuery(db, "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')", [url]);
+    const existing = allQuery(
+      db,
+      "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')",
+      [url]
+    );
     if (existing.length > 0) {
       throw new Error("This video is already in your download queue.");
     }
-    db.run(`
+    const freeSpace = await getFreeSpace(saveFolder);
+    if (freeSpace < 50 * 1024 * 1024) {
+      throw new Error("Insufficient disk space. Please free up some space before downloading.");
+    }
+    db.run(
+      `
       INSERT INTO downloads (url, filename, thumbnail, duration, uploader, format_id, state, save_path)
       VALUES (?, ?, ?, ?, ?, ?, 'queued', ?)
-    `, [url, filename, thumbnail ?? null, duration ?? null, uploader ?? null, formatId ?? null, outputPath]);
+    `,
+      [
+        url,
+        filename,
+        thumbnail ?? null,
+        duration ?? null,
+        uploader ?? null,
+        formatId ?? null,
+        outputPath
+      ]
+    );
     saveDatabase(db);
     const info = getQuery(db, "SELECT last_insert_rowid() as id");
     const downloadId = info.id;
@@ -3750,16 +3899,19 @@ function setupIpcHandlers() {
     }
     return null;
   });
-  import_electron.ipcMain.handle("check-disk-space", async (_, { path: targetPath, requiredBytes }) => {
-    const freeSpace = await getFreeSpace(targetPath || getDefaultSavePath());
-    const estimatedBytes = requiredBytes <= 0 || requiredBytes > 10 * 1024 * 1024 * 1024 ? 500 * 1024 * 1024 : requiredBytes;
-    const buffer = 100 * 1024 * 1024;
-    return {
-      isEnough: freeSpace > estimatedBytes + buffer,
-      freeSpace,
-      required: estimatedBytes + buffer
-    };
-  });
+  import_electron.ipcMain.handle(
+    "check-disk-space",
+    async (_, { path: targetPath, requiredBytes }) => {
+      const freeSpace = await getFreeSpace(targetPath || getDefaultSavePath());
+      const estimatedBytes = requiredBytes <= 0 || requiredBytes > 10 * 1024 * 1024 * 1024 ? 500 * 1024 * 1024 : requiredBytes;
+      const buffer = 100 * 1024 * 1024;
+      return {
+        isEnough: freeSpace > estimatedBytes + buffer,
+        freeSpace,
+        required: estimatedBytes + buffer
+      };
+    }
+  );
   import_electron.ipcMain.handle("get-download-history", async () => {
     return allQuery(db, "SELECT * FROM downloads ORDER BY created_at DESC");
   });
@@ -3821,7 +3973,8 @@ function setupIpcHandlers() {
   });
   import_electron.ipcMain.handle("reset-settings", async () => {
     const defaultPath = import_electron.app.getPath("downloads").replace(/\\/g, "/");
-    db.run(`
+    db.run(
+      `
       UPDATE settings SET
         theme = 'system',
         max_concurrent_downloads = 3,
@@ -3837,7 +3990,9 @@ function setupIpcHandlers() {
         cookies_file_path = '',
         close_to_tray = 1
       WHERE id = 1
-    `, [defaultPath]);
+    `,
+      [defaultPath]
+    );
     saveDatabase(db);
     return getQuery(db, "SELECT * FROM settings WHERE id = 1");
   });
@@ -3897,8 +4052,7 @@ function setupIpcHandlers() {
       if (!import_fs3.default.existsSync(binaryPath)) {
         return "Not installed";
       }
-      const { execSync } = require("child_process");
-      const output = execSync(`"${binaryPath}" ${binary.versionFlag}`, { encoding: "utf8" });
+      const output = (0, import_child_process.execSync)(`"${binaryPath}" ${binary.versionFlag}`, { encoding: "utf8" });
       const version = output.split("\n")[0].trim();
       return version;
     } catch (error) {
@@ -3937,8 +4091,10 @@ function setupIpcHandlers() {
         if (!import_fs3.default.existsSync(tempDir)) {
           import_fs3.default.mkdirSync(tempDir, { recursive: true });
         }
-        const { execSync } = require("child_process");
-        execSync(`powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`, { cwd: import_electron.app.getPath("temp") });
+        (0, import_child_process.execSync)(
+          `powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`,
+          { cwd: import_electron.app.getPath("temp") }
+        );
         const extractedFiles = import_fs3.default.readdirSync(tempDir);
         const exeFile = extractedFiles.find((f) => f.endsWith(".exe"));
         if (!exeFile) {
@@ -3961,79 +4117,88 @@ function setupIpcHandlers() {
   import_electron.ipcMain.handle("check-ytdlp-version", async () => {
     return await checkYtDlpVersion();
   });
-  import_electron.ipcMain.handle("add-playlist-to-queue", async (_, { entries, options }) => {
-    import_electron_log2.default.info(`[IPC] add-playlist-to-queue called with ${entries.length} entries`);
-    try {
-      const settings = getQuery(db, "SELECT * FROM settings WHERE id = 1");
-      const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
-      const createFolder = options.createFolder ?? true;
-      let playlistFolderPath = baseSavePath;
-      if (createFolder && options.playlistTitle) {
-        const playlistFolderName = options.playlistTitle.replace(/[<>:"/\\|?*]/g, "").trim().slice(0, 100);
-        playlistFolderPath = import_path.default.join(baseSavePath, playlistFolderName || "Playlist");
-        if (!import_fs3.default.existsSync(playlistFolderPath)) {
-          import_fs3.default.mkdirSync(playlistFolderPath, { recursive: true });
-        }
-      }
-      let addedCount = 0;
-      for (const entry of entries) {
-        try {
-          const videoInfo = await extractVideoInfo(entry.url, {
-            ytDlp: ytDlpPath,
-            ffmpeg: ffmpegPath,
-            streamlink: streamlinkPath,
-            nm3u8dl: n_m3u8dlPath,
-            galleryDl: galleryDlPath,
-            cookiesFile: getResolvedCookiesPath()
-          });
-          const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
-          const prefQuality = settings?.default_quality || "best";
-          const prefFormat = settings?.default_format || "mp4";
-          let formatId = "bestvideo+bestaudio";
-          if (prefFormat === "mp3") {
-            formatId = "bestaudio";
-          } else if (prefQuality !== "best") {
-            const targetQuality = prefQuality + "p";
-            const match = video.formats?.find((f) => f.quality === targetQuality);
-            formatId = match ? match.formatId : "bestvideo+bestaudio";
+  import_electron.ipcMain.handle(
+    "add-playlist-to-queue",
+    async (_, {
+      entries,
+      options
+    }) => {
+      import_electron_log2.default.info(`[IPC] add-playlist-to-queue called with ${entries.length} entries`);
+      try {
+        const settings = getQuery(db, "SELECT * FROM settings WHERE id = 1");
+        const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
+        const createFolder = options.createFolder ?? true;
+        let playlistFolderPath = baseSavePath;
+        if (createFolder && options.playlistTitle) {
+          const playlistFolderName = options.playlistTitle.replace(/[<>:"/\\|?*]/g, "").trim().slice(0, 100);
+          playlistFolderPath = import_path.default.join(baseSavePath, playlistFolderName || "Playlist");
+          if (!import_fs3.default.existsSync(playlistFolderPath)) {
+            import_fs3.default.mkdirSync(playlistFolderPath, { recursive: true });
           }
-          const cleanTitle = entry.title ? entry.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
-          const isAudioOnly = formatId === "bestaudio";
-          const ext = isAudioOnly ? "mp3" : video.formats?.find((f) => f.formatId === formatId)?.ext || "mp4";
-          const filename = createFolder ? `${entry.index.toString().padStart(2, "0")} - ${cleanTitle}.${ext}` : `${cleanTitle}.${ext}`;
-          const outputPath = import_path.default.join(playlistFolderPath, filename);
-          db.run(`
+        }
+        let addedCount = 0;
+        for (const entry of entries) {
+          try {
+            const videoInfo = await extractVideoInfo(entry.url, {
+              ytDlp: ytDlpPath,
+              ffmpeg: ffmpegPath,
+              streamlink: streamlinkPath,
+              nm3u8dl: n_m3u8dlPath,
+              galleryDl: galleryDlPath,
+              cookiesFile: getResolvedCookiesPath()
+            });
+            const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
+            const prefQuality = settings?.default_quality || "best";
+            const prefFormat = settings?.default_format || "mp4";
+            let formatId = "bestvideo+bestaudio";
+            if (prefFormat === "mp3") {
+              formatId = "bestaudio";
+            } else if (prefQuality !== "best") {
+              const targetQuality = prefQuality + "p";
+              const match = video.formats?.find((f) => f.quality === targetQuality);
+              formatId = match ? match.formatId : "bestvideo+bestaudio";
+            }
+            const cleanTitle = entry.title ? entry.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
+            const isAudioOnly = formatId === "bestaudio";
+            const ext = isAudioOnly ? "mp3" : video.formats?.find((f) => f.formatId === formatId)?.ext || "mp4";
+            const filename = createFolder ? `${entry.index.toString().padStart(2, "0")} - ${cleanTitle}.${ext}` : `${cleanTitle}.${ext}`;
+            const outputPath = import_path.default.join(playlistFolderPath, filename);
+            db.run(
+              `
             INSERT INTO downloads (
               url, filename, format_id, save_path, thumbnail, duration, uploader, 
               state, created_at, playlist_title, playlist_index, playlist_total
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', datetime('now'), ?, ?, ?)
-          `, [
-            entry.url,
-            filename,
-            formatId,
-            outputPath,
-            entry.thumbnail ?? null,
-            video.duration ?? null,
-            video.uploader ?? null,
-            options.playlistTitle ?? null,
-            entry.index,
-            entries.length
-          ]);
-          saveDatabase(db);
-          const insertInfo = getQuery(db, "SELECT last_insert_rowid() as id");
-          const downloadId = insertInfo.id;
-          spawnDownload(downloadId, entry.url, outputPath, formatId, false);
-          addedCount++;
-        } catch (error) {
-          import_electron_log2.default.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+          `,
+              [
+                entry.url,
+                filename,
+                formatId,
+                outputPath,
+                entry.thumbnail ?? null,
+                video.duration ?? null,
+                video.uploader ?? null,
+                options.playlistTitle ?? null,
+                entry.index,
+                entries.length
+              ]
+            );
+            saveDatabase(db);
+            const insertInfo = getQuery(db, "SELECT last_insert_rowid() as id");
+            const downloadId = insertInfo.id;
+            spawnDownload(downloadId, entry.url, outputPath, formatId, false);
+            addedCount++;
+          } catch (error) {
+            import_electron_log2.default.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+          }
         }
+        return { success: true, addedCount };
+      } catch (error) {
+        import_electron_log2.default.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
+        throw new Error(`Failed to add playlist to queue: ${error.message}`);
       }
-      return { success: true, addedCount };
-    } catch (error) {
-      import_electron_log2.default.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
-      throw new Error(`Failed to add playlist to queue: ${error.message}`);
     }
-  });
+  );
 }
 var lineBuffers = /* @__PURE__ */ new Map();
 function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, youtubePlayerClient) {
@@ -4067,6 +4232,7 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
     ffmpegPath,
     "-o",
     outputTemplate,
+    "--",
     url
   ];
   if (isResume) {
@@ -4095,7 +4261,7 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
       const trimmed = line.trim();
       if (!trimmed) continue;
       const progressMatch = trimmed.match(
-        /\[download\]\s+([\d.]+)%(?:\s+of\s+(?:~?\s*)?([\w.\s]+?))?(?:(?:\s+in\s+[\w:]+)?\s+at\s+([\w.\s\/]+?))?(?:\s+ETA\s+([\w:]+))?(?:\s+\(frag.*?\))?\s*$/i
+        /\[download\]\s+([\d.]+)%(?:\s+of\s+(?:~?\s*)?([\w.\s]+?))?(?:(?:\s+in\s+[\w:]+)?\s+at\s+([\w.\s/]+?))?(?:\s+ETA\s+([\w:]+))?(?:\s+\(frag.*?\))?\s*$/i
       );
       if (progressMatch) {
         const percent = parseFloat(progressMatch[1]);
@@ -4112,7 +4278,9 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
           phase: "Downloading",
           status: "downloading"
         };
-        import_electron_log2.default.info(`[PROGRESS] ${jobId}: ${percent}% of ${totalSizeStr} at ${speedStr} ETA ${etaRaw}`);
+        import_electron_log2.default.info(
+          `[PROGRESS] ${jobId}: ${percent}% of ${totalSizeStr} at ${speedStr} ETA ${etaRaw}`
+        );
         if (mainWindow) {
           mainWindow.webContents.send("download-progress", progressData);
           mainWindow.setProgressBar(progressData.percent / 100);
@@ -4161,15 +4329,36 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
         continue;
       }
       if (trimmed.includes("has already been downloaded")) {
-        if (mainWindow) mainWindow.webContents.send("download-progress", { jobId: String(jobId), id: jobId, percent: 100, phase: "Already downloaded", status: "completed" });
+        if (mainWindow)
+          mainWindow.webContents.send("download-progress", {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 100,
+            phase: "Already downloaded",
+            status: "completed"
+          });
         continue;
       }
       if (trimmed.includes("[Merger]") || trimmed.includes("Merging formats into") || trimmed.includes("[ffmpeg]")) {
-        if (mainWindow) mainWindow.webContents.send("download-progress", { jobId: String(jobId), id: jobId, percent: 99, phase: "Merging audio and video...", status: "merging" });
+        if (mainWindow)
+          mainWindow.webContents.send("download-progress", {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 99,
+            phase: "Merging audio and video...",
+            status: "merging"
+          });
         continue;
       }
       if (trimmed.includes("[ExtractAudio]")) {
-        if (mainWindow) mainWindow.webContents.send("download-progress", { jobId: String(jobId), id: jobId, percent: 99, phase: "Extracting audio...", status: "merging" });
+        if (mainWindow)
+          mainWindow.webContents.send("download-progress", {
+            jobId: String(jobId),
+            id: jobId,
+            percent: 99,
+            phase: "Extracting audio...",
+            status: "merging"
+          });
         continue;
       }
       if (trimmed.includes("ERROR:") || trimmed.includes("error:") || trimmed.includes("Unable to download") || trimmed.includes("This video is unavailable")) {
@@ -4270,17 +4459,24 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
             body: dl ? dl.filename : "Your file has been saved."
           }).show();
         } catch (_) {
+          Object(_);
         }
       }
     } else if (code !== null) {
       if (youtubePlayerClient !== "tv_embedded" && isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(aggregatedStderr)) {
-        import_electron_log2.default.info(`[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`);
+        import_electron_log2.default.info(
+          `[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`
+        );
         spawnDownload(downloadId, url, outputPath, formatId, isResume, "tv_embedded");
         processQueue();
         return;
       }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = translateDownloadError(aggregatedStderr || lastStderrOutput, code, url);
+      const userFriendlyError = translateDownloadError(
+        aggregatedStderr || lastStderrOutput,
+        code,
+        url
+      );
       updateDownloadInDb(downloadId, { state: "failed", error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send("download-progress", {
@@ -4303,7 +4499,13 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
     const userFriendlyError = translateDownloadError(err?.message || String(err), null, url);
     updateDownloadInDb(downloadId, { state: "failed", error: userFriendlyError });
     if (mainWindow) {
-      mainWindow.webContents.send("download-progress", { jobId: String(downloadId), id: downloadId, state: "failed", status: "failed", error: userFriendlyError });
+      mainWindow.webContents.send("download-progress", {
+        jobId: String(downloadId),
+        id: downloadId,
+        state: "failed",
+        status: "failed",
+        error: userFriendlyError
+      });
     }
     processQueue();
   });

@@ -5,21 +5,25 @@ This document explains the purpose and functionality of each script in `package.
 ## Development Scripts
 
 ### `postinstall`
+
 - **Purpose**: Installs Playwright browser for web scraping functionality
 - **When**: Runs automatically after `npm install`
 - **Command**: `npx playwright install chromium`
 
 ### `generate:icons`
+
 - **Purpose**: Generates application icons in various sizes from source image
 - **Used for**: Windows .ico, macOS .icns, and Linux .png files
 - **Command**: `tsx scripts/generate-icons.ts`
 
 ### `dev:main`
+
 - **Purpose**: Builds only the main Electron process (TypeScript to CommonJS)
 - **Used for**: Faster iteration during development
 - **Command**: `npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:electron-updater --external:sql.js --external:playwright-core`
 
 ### `dev`
+
 - **Purpose**: Full development environment with hot reload
 - **Steps**:
   1. Kills existing processes on ports 5173 and 5005
@@ -32,6 +36,7 @@ This document explains the purpose and functionality of each script in `package.
 ## Build Scripts
 
 ### `build`
+
 - **Purpose**: Full production build pipeline
 - **Steps**:
   1. Builds React frontend with Vite
@@ -40,21 +45,25 @@ This document explains the purpose and functionality of each script in `package.
 - **Command**: `tsx scripts/build.ts && electron-builder build`
 
 ### `setup:binaries`
+
 - **Purpose**: Downloads required binary tools (yt-dlp, ffmpeg, etc.)
 - **Source**: Downloads from official GitHub releases
 - **Command**: `tsx scripts/download-binaries.ts`
 
 ### `setup:binaries:force`
+
 - **Purpose**: Force re-download of all binary tools
 - **Behavior**: Ignores existing files and downloads fresh copies
 - **Command**: `tsx scripts/download-binaries.ts --force`
 
 ### `build:electron`
+
 - **Purpose**: Builds Electron processes (main and preload) for production
 - **Process**: Converts TypeScript to CommonJS with bundling and minification
 - **Command**: `npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron`
 
 ### `prebuild:win`
+
 - **Purpose**: Pre-build setup for Windows production builds
 - **Steps**:
   1. Builds Vite frontend
@@ -63,6 +72,7 @@ This document explains the purpose and functionality of each script in `package.
 - **Command**: `vite build && npx esbuild electron/main.ts --bundle --platform=node --format=cjs --define:import.meta.url=undefined --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --define:import.meta.url=undefined --outfile=electron/preload.cjs --external:electron`
 
 ### `build:win`
+
 - **Purpose**: Complete Windows build pipeline
 - **Steps**:
   1. Downloads required binaries
@@ -73,11 +83,13 @@ This document explains the purpose and functionality of each script in `package.
 - **Command**: `npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --win`
 
 ### `build:mac`
+
 - **Purpose**: Complete macOS build pipeline
 - **Result**: Creates .dmg installer for macOS
 - **Command**: `npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --mac`
 
 ### `build:linux`
+
 - **Purpose**: Complete Linux build pipeline
 - **Result**: Creates .AppImage for Linux
 - **Command**: `npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --linux`
@@ -85,6 +97,7 @@ This document explains the purpose and functionality of each script in `package.
 ## Utilities
 
 ### `check`
+
 - **Purpose**: TypeScript type checking without compilation
 - **Function**: Verifies type correctness across the codebase
 - **Command**: `tsc`
@@ -92,6 +105,7 @@ This document explains the purpose and functionality of each script in `package.
 ## Usage Examples
 
 ### Development
+
 ```bash
 # Start development server with hot reload
 npm run dev
@@ -101,6 +115,7 @@ npm run dev:main
 ```
 
 ### Production Build
+
 ```bash
 # Build for current platform
 npm run build
@@ -112,6 +127,7 @@ npm run build:linux  # Linux
 ```
 
 ### Setup
+
 ```bash
 # Download required binaries
 npm run setup:binaries
@@ -124,6 +140,7 @@ npm run generate:icons
 ```
 
 ### Quality Check
+
 ```bash
 # Type checking
 npm run check
