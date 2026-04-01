@@ -30,6 +30,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify binaries exist
+        shell: pwsh
+        run: |
+          if (!(Test-Path binaries/ffmpeg.exe)) { throw "Critical Error: ffmpeg.exe is missing after setup" }
+          if (!(Test-Path binaries/yt-dlp.exe)) { throw "Critical Error: yt-dlp.exe is missing after setup" }
+          Write-Host "All core binaries verified."
+
       - name: Generate icons
         run: npm run generate:icons
 

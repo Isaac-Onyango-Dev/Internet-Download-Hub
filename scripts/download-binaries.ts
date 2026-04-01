@@ -1,4 +1,5 @@
-import { exec } from 'node:child_process';
+import { exec as execCallback } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
   createWriteStream,
   existsSync,
@@ -11,6 +12,7 @@ import {
 import { join, basename, dirname } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
+const exec = promisify(execCallback);
 const BINARIES_DIR = 'binaries';
 
 const BINARIES = [
@@ -53,9 +55,13 @@ const BINARIES = [
 
 async function downloadFile(url: string, dest: string): Promise<void> {
   console.log(`Downloading ${url} -> ${dest}...`);
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    },
+  });
   if (!response.ok) {
-    throw new Error(`Failed to download ${url}: ${response.statusText}`);
+    throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
   }
 
   const writeStream = createWriteStream(dest);
@@ -78,15 +84,12 @@ function findFile(dir: string, fileName: string): string | null {
 
 async function extractZip(zipPath: string, extractTo: string): Promise<void> {
   console.log(`Extracting ${zipPath}...`);
-  return new Promise((resolve, reject) => {
-    exec(
-      `powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractTo}' -Force"`,
-      (error) => {
-        if (error) reject(error);
-        else resolve();
-      },
-    );
-  });
+  try {
+    await exec(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractTo}' -Force"`);
+  } catch (err) {
+    console.error(`Failed to extract ${zipPath}:`, (err as Error).message);
+    throw err;
+  }
 }
 
 async function main() {
@@ -134,6 +137,21 @@ async function main() {
     } catch (err) {
       console.error(`Failed to setup ${binary.name}:`, (err as Error).message);
     }
+  }
+
+  console.log('Validating binaries...');
+  let missing = false;
+  for (const binary of BINARIES) {
+    const finalPath = join(BINARIES_DIR, binary.name);
+    if (!existsSync(finalPath)) {
+      console.error(`ERROR: Required binary ${binary.name} was not created!`);
+      missing = true;
+    }
+  }
+
+  if (missing) {
+    console.error('Binary setup failed. Exiting with error.');
+    process.exit(1);
   }
 
   console.log('Done.');
