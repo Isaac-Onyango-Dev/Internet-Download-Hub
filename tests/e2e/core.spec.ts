@@ -12,7 +12,7 @@ let window: Page;
 test.beforeAll(async () => {
   delete process.env.ELECTRON_RUN_AS_NODE; // Fix execution bugs internally
   // Launch the application from the root build folder.
-  const appPath = path.join(__dirname, '../../');
+  const appPath = path.resolve(__dirname, '../..');
   electronApp = await electron.launch({ 
     args: [appPath],
     env: { ...process.env, CI: 'true' },
