@@ -12,10 +12,26 @@ let window: Page;
 test.beforeAll(async () => {
   delete process.env.ELECTRON_RUN_AS_NODE; // Fix execution bugs internally
   // Launch the application from the root build folder.
-  // Make sure to run `npm run build:electron` or `npm run dev` beforehand.
   const appPath = path.join(__dirname, '../../');
-  electronApp = await electron.launch({ args: [appPath] });
-  window = await electronApp.firstWindow();
+  electronApp = await electron.launch({ 
+    args: [appPath],
+    env: { ...process.env, CI: 'true' },
+    timeout: 60000 
+  });
+
+  // Wait for the main window - skip the splash screen (which may be the firstWindow)
+  // We identify it because it has a specific title or we wait for a certain duration
+  const windows = await electronApp.windows();
+  if (windows.length > 1) {
+    // If multiple windows exist, pick the one that is NOT the splash (if possible)
+    // Or just pick the last one opened which is usually the main window
+    window = windows[windows.length - 1];
+  } else {
+    window = await electronApp.firstWindow();
+  }
+  
+  // Ensure we wait for the page to be ready
+  await window.waitForLoadState('domcontentloaded');
 });
 
 test.afterAll(async () => {

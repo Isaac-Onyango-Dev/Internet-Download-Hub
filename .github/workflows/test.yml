@@ -33,6 +33,9 @@ jobs:
       - name: TypeScript Compilation Check
         run: npm run check
 
+      - name: Build Frontend Assets
+        run: npx vite build
+
       - name: Build Electron Pre-requisites
         run: npm run build:electron
 

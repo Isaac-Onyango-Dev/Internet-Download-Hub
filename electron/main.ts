@@ -997,8 +997,10 @@ function createWindow() {
     mainWindow = null;
   });
 
-  const isDevRenderer = !app.isPackaged;
-  if (isDevRenderer) {
+  const isDevRenderer = !app.isPackaged && process.env.CI !== 'true';
+  const forceBuilt = process.env.CI === 'true';
+  
+  if (isDevRenderer && !forceBuilt) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
     mainWindow.loadFile(getPackagedIndexHtmlPath());
