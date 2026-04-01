@@ -33,9 +33,12 @@ jobs:
       - name: Verify binaries exist
         shell: pwsh
         run: |
-          if (!(Test-Path binaries/ffmpeg.exe)) { throw "Critical Error: ffmpeg.exe is missing after setup" }
-          if (!(Test-Path binaries/yt-dlp.exe)) { throw "Critical Error: yt-dlp.exe is missing after setup" }
-          Write-Host "All core binaries verified."
+          $engines = @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe", "gallery-dl.exe", "streamlink.exe", "N_m3u8DL-RE.exe")
+          foreach ($engine in $engines) {
+            if (!(Test-Path "binaries/$engine")) { throw "Critical Error: $engine is missing after setup. Build aborted!" }
+            Write-Host "Verified: $engine"
+          }
+          Write-Host "All download engines successfully verified."
 
       - name: Generate icons
         run: npm run generate:icons
