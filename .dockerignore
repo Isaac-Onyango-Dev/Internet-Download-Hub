@@ -1,0 +1,13 @@
+node_modules
+dist
+release
+binaries
+*.exe
+*.dmg
+.git
+.github
+docs
+assets/*.ico
+assets/*.icns
+playwright_test_log.txt
+fix.mjs
