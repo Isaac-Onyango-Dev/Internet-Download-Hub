@@ -95,4 +95,6 @@ coverage/
 # ===========================
 .cache/
 .parcel-cache/
-/screenshots/fix.mjs
+fix.mjs
+playwright_test_log.txt
+server.log
