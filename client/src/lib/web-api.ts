@@ -13,8 +13,11 @@
 // Primary and fallback community instances with CORS enabled.
 // Replace these if the current ones go offline — check https://instances.cobalt.best/
 
-const COBALT_PRIMARY = 'https://cobalt.tat.moe';
-const COBALT_FALLBACK = 'https://api.cobalt.tools';
+const COBALT_INSTANCES = [
+  'https://cobalt-backend.canine.tools',
+  'https://cobalt-api.meowing.de',
+  'https://api.cobalt.tools',
+];
 
 // ── Cobalt fetch with automatic fallback ─────────────────────────────────────
 
@@ -35,34 +38,49 @@ interface CobaltResponse {
 }
 
 async function cobaltPost(instance: string, body: CobaltRequestBody): Promise<CobaltResponse> {
-  const resp = await fetch(`${instance}/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    throw new Error(`Cobalt instance ${instance} returned ${resp.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+  try {
+    const resp = await fetch(`${instance}/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      throw new Error(`Cobalt instance ${instance} returned ${resp.status}`);
+    }
+    return resp.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-  return resp.json();
 }
 
 async function cobaltFetch(body: CobaltRequestBody): Promise<CobaltResponse> {
-  try {
-    return await cobaltPost(COBALT_PRIMARY, body);
-  } catch (primaryErr) {
-    console.warn('[Cobalt] Primary instance failed, trying fallback:', primaryErr);
+  let lastError: unknown = null;
+
+  for (const instance of COBALT_INSTANCES) {
     try {
-      return await cobaltPost(COBALT_FALLBACK, body);
-    } catch (fallbackErr) {
-      console.error('[Cobalt] Both instances failed:', fallbackErr);
-      throw new Error(
-        'Could not reach any Cobalt download service. Please check your internet connection and try again.',
-      );
+      return await cobaltPost(instance, body);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Cobalt] Instance ${instance} failed: ${errMsg}`);
+      lastError = err;
     }
   }
+
+  const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
+  console.error(`[Cobalt] All instances failed. Last error: ${finalMsg}`);
+  throw new Error(
+    'Could not reach any Cobalt download service. Please check your internet connection and try again.',
+  );
 }
 
 // ── Local settings helpers ────────────────────────────────────────────────────
