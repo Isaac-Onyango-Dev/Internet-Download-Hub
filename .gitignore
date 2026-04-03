@@ -95,4 +95,4 @@ coverage/
 # ===========================
 .cache/
 .parcel-cache/
-/screenshots/
+/screenshots/fix.mjs

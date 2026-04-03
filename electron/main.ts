@@ -57,6 +57,51 @@ try {
 }
 
 // ============================================================================
+// SITE DETECTION & ERROR HANDLING
+// ============================================================================
+
+interface SiteInfo {
+  name: string;
+  engine: 'ytdlp' | 'gallery-dl' | 'streamlink' | 'nm3u8dlre';
+  engineBinary: string;
+  isLikelyPlaylist: boolean;
+}
+
+function detectSite(url: string): SiteInfo {
+  let hostname = '';
+  try { hostname = new URL(url).hostname.replace('www.', ''); } catch { hostname = url; }
+
+  if (/twitch\.tv|kick\.com|dailymotion\.com|youtu\.be|youtube\.com/.test(hostname)) {
+    return { name: hostname, engine: 'ytdlp', engineBinary: 'yt-dlp.exe',
+      isLikelyPlaylist: /list=|(\/c\/)|(\/channel\/)|(\/user\/)/.test(url) };
+  }
+  if (/tiktok\.com|instagram\.com|facebook\.com|fb\.watch|twitter\.com|x\.com|reddit\.com|vimeo\.com/.test(hostname)) {
+    return { name: hostname, engine: 'ytdlp', engineBinary: 'yt-dlp.exe', isLikelyPlaylist: false };
+  }
+  if (/pixiv\.net|deviantart\.com|flickr\.com|artstation\.com|imgur\.com/.test(hostname)) {
+    return { name: hostname, engine: 'gallery-dl', engineBinary: 'gallery-dl.exe', isLikelyPlaylist: true };
+  }
+  if (/m3u8/.test(url)) {
+    return { name: 'HLS Stream', engine: 'nm3u8dlre', engineBinary: 'N_m3u8DL-RE.exe', isLikelyPlaylist: false };
+  }
+  // Default: try yt-dlp first (it supports 1000+ sites)
+  return { name: hostname || 'unknown site', engine: 'ytdlp', engineBinary: 'yt-dlp.exe', isLikelyPlaylist: false };
+}
+
+function buildErrorMessage(siteName: string, stderr: string): string {
+  const s = stderr.toLowerCase();
+  if (s.includes('private') || s.includes('login required') || s.includes('sign in'))
+    return `This ${siteName} video is private or requires an account login.`;
+  if (s.includes('not available') || s.includes('unavailable'))
+    return `This ${siteName} video is unavailable or has been removed.`;
+  if (s.includes('geo') || s.includes('country') || s.includes('region'))
+    return `This ${siteName} video is geo-restricted and not available in your region.`;
+  if (s.includes('rate') || s.includes('too many'))
+    return `Too many requests to ${siteName}. Please wait a moment and try again.`;
+  return `Failed to download from ${siteName}. The site may have changed or this content is restricted.`;
+}
+
+// ============================================================================
 // GLOBAL STATE VARIABLES
 // ============================================================================
 
@@ -682,7 +727,7 @@ async function initDb() {
   // Reset any stranded active tasks to paused so user can resume them
   try {
     db.run("UPDATE downloads SET state = 'paused' WHERE state IN ('downloading', 'merging')");
-  } catch (_) { Object(_); }
+  } catch (_) { /* intentional: cleanup failure is non-critical */ }
 
   saveDatabase(db);
 }
@@ -1079,6 +1124,7 @@ let playwrightBrowser: any = null;
 async function getPlaywrightBrowser() {
   if (!playwrightBrowser) {
     try {
+      // @ts-expect-error — playwright-core is an optional peer dependency, loaded dynamically
       const playwrightCore = await import('playwright-core');
       const browserPath = playwrightCore.chromium.executablePath();
       if (!fs.existsSync(browserPath)) {
@@ -1274,17 +1320,17 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
   const backupPath = destPath + '.backup';
   try {
     if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
-  } catch (_) { Object(_); }
+  } catch (err: any) { log.error('Operation failed:', err?.message || err); }
   try {
     if (fs.existsSync(destPath)) fs.renameSync(destPath, backupPath);
-  } catch (_) { Object(_); }
+  } catch (err: any) { log.error('Operation failed:', err?.message || err); }
 
   try {
     // Replace the binary
     fs.renameSync(tempPath, destPath);
     try {
       if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
-    } catch (_) { Object(_); }
+    } catch (err: any) { log.error('Operation failed:', err?.message || err); }
 
     // Switch to the new path immediately
     ytDlpPath = destPath;
@@ -1296,10 +1342,10 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
       if (!fs.existsSync(destPath) && fs.existsSync(backupPath)) {
         fs.renameSync(backupPath, destPath);
       }
-    } catch (_) { Object(_); }
+    } catch (err: any) { log.error('Operation failed:', err?.message || err); }
     try {
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch (_) { Object(_); }
+    } catch (err: any) { log.error('Operation failed:', err?.message || err); }
     throw new Error(`Failed to finalize update: ${err.message}`);
   }
 }
@@ -1489,7 +1535,7 @@ function setupIpcHandlers() {
               });
             }
           },
-          (metadata: { title: string; uploader: string; count: number }) => {
+          (metadata: { title: string; uploader: string; videoCount: number }) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('playlist-detection-complete', metadata);
             }
@@ -2283,42 +2329,56 @@ function spawnDownload(
 
   const cookiesPath = getResolvedCookiesPath();
 
-  const ytDlpArgs = [
-    '--newline',
-    '--progress',
-    '--no-colors',
-    '--no-warnings',
-    ...ytDlpCommonArgs(url, {
-      noPlaylist: true,
-      ...(youtubePlayerClient !== undefined ? { youtubePlayerClient } : {}),
-    }),
-    ...ytDlpCookiesArgs(cookiesPath),
-    '--windows-filenames',
-    '--trim-filenames',
-    '200',
-    '-f',
-    formatArg,
-    '--merge-output-format',
-    'mp4',
-    '--ffmpeg-location',
-    ffmpegPath,
-    '-o',
-    outputTemplate,
-    '--',
-    url,
-  ];
+  const siteInfo = detectSite(url);
+  let binaryPath = ytDlpPath;
+  if (siteInfo.engine === 'gallery-dl') binaryPath = galleryDlPath;
+  else if (siteInfo.engine === 'streamlink') binaryPath = streamlinkPath;
+  else if (siteInfo.engine === 'nm3u8dlre') binaryPath = n_m3u8dlPath;
 
-  if (isResume) {
-    ytDlpArgs.unshift('--continue');
+  let downloadArgs: string[] = [];
+
+  if (siteInfo.engine === 'ytdlp') {
+    downloadArgs = [
+      '--newline',
+      '--progress',
+      '--no-colors',
+      '--no-warnings',
+      ...ytDlpCommonArgs(url, {
+        noPlaylist: true,
+        ...(youtubePlayerClient !== undefined ? { youtubePlayerClient } : {}),
+      }),
+      ...ytDlpCookiesArgs(cookiesPath),
+      '--windows-filenames',
+      '--trim-filenames',
+      '200',
+      '-f',
+      formatArg,
+      '--merge-output-format',
+      'mp4',
+      '--ffmpeg-location',
+      ffmpegPath,
+      '-o',
+      outputTemplate,
+    ];
+    if (isResume) {
+      downloadArgs.unshift('--continue');
+    }
+    downloadArgs.push('--', url);
+  } else if (siteInfo.engine === 'gallery-dl') {
+    downloadArgs = ['-d', saveFolder, url];
+  } else if (siteInfo.engine === 'streamlink') {
+    downloadArgs = ['--hls-live-restart', '-o', outputTemplate.replace('%(title)s.%(ext)s', 'stream.mp4'), url, 'best'];
+  } else if (siteInfo.engine === 'nm3u8dlre') {
+    downloadArgs = ['--save-dir', saveFolder, url];
   }
 
   log.info('[PROGRESS-AUDIT] Download started for jobId:', downloadId);
-  log.info('[PROGRESS-AUDIT] yt-dlp command:', ytDlpPath, ytDlpArgs.join(' '));
+  log.info('[PROGRESS-AUDIT] Download command:', binaryPath, downloadArgs.join(' '));
 
-  const ytDlpProcess = spawn(ytDlpPath, ytDlpArgs);
+  const downloadProcess = spawn(binaryPath, downloadArgs);
 
   activeTasks.set(downloadId, {
-    process: ytDlpProcess,
+    process: downloadProcess,
     url,
     formatArg,
     outputTemplate,
@@ -2503,12 +2563,12 @@ function spawnDownload(
     }
   };
 
-  ytDlpProcess.stdout.on('data', (data: Buffer) => {
+  downloadProcess.stdout.on('data', (data: Buffer) => {
     log.info('[PROGRESS-AUDIT] STDOUT received:', data.toString());
     parseYtDlpOutput(data.toString(), downloadId);
   });
 
-  ytDlpProcess.stderr.on('data', (data: Buffer) => {
+  downloadProcess.stderr.on('data', (data: Buffer) => {
     const text = data.toString();
     aggregatedStderr += text;
     log.info('[PROGRESS-AUDIT] STDERR received:', text);
@@ -2516,7 +2576,7 @@ function spawnDownload(
     parseYtDlpOutput(text, downloadId);
   });
 
-  ytDlpProcess.on('close', (code: number | null) => {
+  downloadProcess.on('close', (code: number | null) => {
     log.info('[PROGRESS-AUDIT] Process closed with code:', code);
     lineBuffers.delete(downloadId);
     activeTasks.delete(downloadId);
@@ -2582,7 +2642,7 @@ function spawnDownload(
             title: 'Download Complete',
             body: dl ? dl.filename : 'Your file has been saved.',
           }).show();
-        } catch (_) { Object(_); }
+        } catch (_) { /* intentional: cleanup failure is non-critical */ }
       }
     } else if (code !== null) {
       if (
@@ -2598,11 +2658,7 @@ function spawnDownload(
         return;
       }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = translateDownloadError(
-        aggregatedStderr || lastStderrOutput,
-        code,
-        url,
-      );
+      const userFriendlyError = buildErrorMessage(siteInfo.name, aggregatedStderr || lastStderrOutput);
       updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
@@ -2620,11 +2676,11 @@ function spawnDownload(
     processQueue();
   });
 
-  ytDlpProcess.on('error', (err: any) => {
+  downloadProcess.on('error', (err: any) => {
     activeTasks.delete(downloadId);
     updatePowerSave();
     log.error(`[Spawn Error] downloadId=${downloadId}: ${err.message}`);
-    const userFriendlyError = translateDownloadError(err?.message || String(err), null, url);
+    const userFriendlyError = buildErrorMessage(siteInfo.name, err?.message || String(err));
     updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
     if (mainWindow) {
       mainWindow.webContents.send('download-progress', {
