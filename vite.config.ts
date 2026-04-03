@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  base: process.env.VITE_APP_BASE || './',
+  // GitHub Pages path: https://isaac-onyango-dev.github.io/Internet-Download-Hub/web/
+  base: '/Internet-Download-Hub/web/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -14,17 +15,13 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname, 'client'),
   build: {
-    outDir: path.resolve(import.meta.dirname, 'docs/app'),
+    // Output into docs/web — served by GitHub Pages alongside docs/index.html
+    outDir: path.resolve(import.meta.dirname, 'docs/web'),
     emptyOutDir: true,
   },
   server: {
     port: 5173,
     host: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
+    // No proxy needed — Cobalt calls go directly from the browser
   },
 });

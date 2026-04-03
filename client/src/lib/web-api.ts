@@ -1,14 +1,75 @@
 /**
  * Web API — a browser-compatible replacement for window.electronAPI.
  *
- * When running in a browser (not Electron), this module provides the same
- * interface as the Electron preload bridge by routing calls to the
- * Express backend at /api/*.
+ * Video info and download are powered by the Cobalt open-source API.
+ * Cobalt docs: https://github.com/imputnet/cobalt/blob/main/docs/api.md
+ * Instance list: https://instances.cobalt.best/
+ *
+ * All other methods (settings, history, etc.) use localStorage so the app
+ * works as a fully static site with zero backend requirements.
  */
+
+// ── Cobalt instance config ────────────────────────────────────────────────────
+// Primary and fallback community instances with CORS enabled.
+// Replace these if the current ones go offline — check https://instances.cobalt.best/
+
+const COBALT_PRIMARY = 'https://cobalt.tat.moe';
+const COBALT_FALLBACK = 'https://api.cobalt.tools';
+
+// ── Cobalt fetch with automatic fallback ─────────────────────────────────────
+
+interface CobaltRequestBody {
+  url: string;
+  videoQuality?: string;
+  audioFormat?: string;
+  downloadMode?: 'auto' | 'audio' | 'mute';
+  filenameStyle?: 'classic' | 'pretty' | 'basic' | 'nerdy';
+}
+
+interface CobaltResponse {
+  status: 'redirect' | 'tunnel' | 'picker' | 'error';
+  url?: string;
+  filename?: string;
+  error?: { code: string };
+  picker?: Array<{ type: string; url: string; thumb?: string }>;
+}
+
+async function cobaltPost(instance: string, body: CobaltRequestBody): Promise<CobaltResponse> {
+  const resp = await fetch(`${instance}/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    throw new Error(`Cobalt instance ${instance} returned ${resp.status}`);
+  }
+  return resp.json();
+}
+
+async function cobaltFetch(body: CobaltRequestBody): Promise<CobaltResponse> {
+  try {
+    return await cobaltPost(COBALT_PRIMARY, body);
+  } catch (primaryErr) {
+    console.warn('[Cobalt] Primary instance failed, trying fallback:', primaryErr);
+    try {
+      return await cobaltPost(COBALT_FALLBACK, body);
+    } catch (fallbackErr) {
+      console.error('[Cobalt] Both instances failed:', fallbackErr);
+      throw new Error(
+        'Could not reach any Cobalt download service. Please check your internet connection and try again.',
+      );
+    }
+  }
+}
+
+// ── Local settings helpers ────────────────────────────────────────────────────
 
 const SETTINGS_KEY = 'idh_settings';
 
-function loadSettings(): Record<string, any> {
+function loadSettings(): Record<string, unknown> {
   try {
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
   } catch {
@@ -16,38 +77,114 @@ function loadSettings(): Record<string, any> {
   }
 }
 
-function saveSettingsToStorage(updates: Record<string, any>) {
+function saveSettingsToStorage(updates: Record<string, unknown>) {
   const current = loadSettings();
   localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...current, ...updates }));
 }
+
+// ── Trigger browser file download ─────────────────────────────────────────────
 
 function triggerBrowserDownload(url: string, filename: string) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   setTimeout(() => document.body.removeChild(a), 1000);
 }
 
-// Determine the API base URL.
-// In web mode, we default to relative paths (/api/*).
-// This allows the app to work behind a reverse proxy or when hosted on the same domain as the server.
-const getApiBase = () => {
-  if (typeof window === 'undefined') return '';
-  // @ts-ignore - VITE_API_URL might be defined via env
-  return import.meta.env.VITE_API_URL || '';
-};
+// ── Map a Cobalt response to the app's VideoInfo shape ───────────────────────
 
-const API_BASE = getApiBase();
+function cobaltResponseToVideoInfo(cobaltResp: CobaltResponse, originalUrl: string) {
+  // Cobalt returns a direct stream URL or a picker (for multi-track content).
+  // We normalise both into a single "video" entry the UI can handle.
+  const downloadUrl =
+    cobaltResp.url ||
+    cobaltResp.picker?.[0]?.url ||
+    originalUrl;
+
+  const thumbnail = cobaltResp.picker?.[0]?.thumb || '';
+
+  return {
+    url: originalUrl,
+    extractedUrl: downloadUrl,
+    title: cobaltResp.filename || 'Video',
+    thumbnail,
+    duration: 0,
+    uploader: '',
+    extractionMethod: 'cobalt',
+    formats: [
+      {
+        formatId: 'best-video',
+        label: 'Best Video (1080p)',
+        quality: '1080p',
+        ext: 'mp4',
+        filesize: null,
+        height: 1080,
+      },
+      {
+        formatId: 'best-720',
+        label: 'Standard Quality (720p)',
+        quality: '720p',
+        ext: 'mp4',
+        filesize: null,
+        height: 720,
+      },
+      {
+        formatId: 'audio-only',
+        label: 'Audio Only (MP3)',
+        quality: 'audio',
+        ext: 'mp3',
+        filesize: null,
+        height: null,
+      },
+    ],
+    // Store the resolved CDN URL so startDownload can use it directly
+    _cobaltDownloadUrl: downloadUrl,
+    // Whether Cobalt returned a picker (multi-track, e.g. TikTok slideshow)
+    _isPicker: cobaltResp.status === 'picker',
+  };
+}
+
+// ── Map quality selection to Cobalt videoQuality param ───────────────────────
+
+function formatIdToQuality(formatId: string): { videoQuality: string; downloadMode: 'auto' | 'audio' } {
+  if (formatId === 'audio-only' || formatId === 'bestaudio') {
+    return { videoQuality: '720', downloadMode: 'audio' };
+  }
+  if (formatId === 'best-720') return { videoQuality: '720', downloadMode: 'auto' };
+  return { videoQuality: '1080', downloadMode: 'auto' };
+}
+
+// ── Public webAPI object ──────────────────────────────────────────────────────
 
 export const webAPI = {
   // ── Video info ──────────────────────────────────────────────────────────────
   fetchVideoInfo: async (url: string) => {
-    const resp = await fetch(`${API_BASE}/api/video-info?url=${encodeURIComponent(url)}`);
-    const json = await resp.json();
-    return json;
+    const cobaltResp = await cobaltFetch({ url, videoQuality: '1080' });
+
+    if (cobaltResp.status === 'error') {
+      throw new Error(
+        cobaltResp.error?.code === 'error.api.content.unavailable'
+          ? 'This URL is not supported. Try a link from YouTube, TikTok, Twitter, or another popular site.'
+          : `Could not fetch video info: ${cobaltResp.error?.code || 'unknown error'}`,
+      );
+    }
+
+    const videoInfo = cobaltResponseToVideoInfo(cobaltResp, url);
+
+    return {
+      success: true,
+      data: videoInfo,
+      meta: {
+        playlistDetected: false,
+        detectPlaylistsEnabled: false,
+        collapsedToSingle: false,
+      },
+    };
   },
 
   // ── Downloads ───────────────────────────────────────────────────────────────
@@ -60,15 +197,19 @@ export const webAPI = {
     duration?: number;
     uploader?: string;
   }) => {
-    const { url, filename, formatId = 'bestvideo+bestaudio' } = options;
-    const downloadUrl =
-      `${API_BASE}/api/download?` +
-      `url=${encodeURIComponent(url)}` +
-      `&formatId=${encodeURIComponent(formatId)}` +
-      `&filename=${encodeURIComponent(filename)}`;
+    const { url, filename, formatId = 'best-video' } = options;
+    const { videoQuality, downloadMode } = formatIdToQuality(formatId);
+
+    const cobaltResp = await cobaltFetch({ url, videoQuality, downloadMode });
+
+    if (cobaltResp.status === 'error') {
+      throw new Error(`Download failed: ${cobaltResp.error?.code || 'unknown error'}`);
+    }
+
+    const downloadUrl = cobaltResp.url || cobaltResp.picker?.[0]?.url;
+    if (!downloadUrl) throw new Error('Cobalt did not return a download URL.');
 
     triggerBrowserDownload(downloadUrl, filename);
-
     return { id: Date.now(), success: true };
   },
 
@@ -86,27 +227,27 @@ export const webAPI = {
 
   // ── Settings ─────────────────────────────────────────────────────────────────
   getSettings: async () => {
-    const s = loadSettings();
+    const s = loadSettings() as Record<string, unknown>;
     return {
-      theme: s.theme || 'dark',
-      download_path: s.downloadPath || '',
-      downloadPath: s.downloadPath || '',
-      default_quality: s.default_quality || 'best',
-      default_format: s.default_format || 'mp4',
-      max_concurrent_downloads: s.max_concurrent_downloads || 3,
-      maxConcurrentDownloads: s.max_concurrent_downloads || 3,
-      detect_playlists: s.detect_playlists ?? 0,
-      create_playlist_folder: s.create_playlist_folder ?? 1,
-      createPlaylistFolder: s.create_playlist_folder ?? 1,
-      playlist_download_mode: s.playlist_download_mode || 'all',
-      playlistDownloadMode: s.playlist_download_mode || 'all',
+      theme: (s.theme as string) || 'dark',
+      download_path: (s.downloadPath as string) || '',
+      downloadPath: (s.downloadPath as string) || '',
+      default_quality: (s.default_quality as string) || 'best',
+      default_format: (s.default_format as string) || 'mp4',
+      max_concurrent_downloads: (s.max_concurrent_downloads as number) || 3,
+      maxConcurrentDownloads: (s.max_concurrent_downloads as number) || 3,
+      detect_playlists: (s.detect_playlists as number) ?? 0,
+      create_playlist_folder: (s.create_playlist_folder as number) ?? 1,
+      createPlaylistFolder: (s.create_playlist_folder as number) ?? 1,
+      playlist_download_mode: (s.playlist_download_mode as string) || 'all',
+      playlistDownloadMode: (s.playlist_download_mode as string) || 'all',
       eula_age_acknowledged: 1,
       eulaAgeAcknowledged: 1,
-      cookies_file_path: s.cookies_file_path || '',
-      cookiesFilePath: s.cookies_file_path || '',
+      cookies_file_path: (s.cookies_file_path as string) || '',
+      cookiesFilePath: (s.cookies_file_path as string) || '',
     };
   },
-  saveSettings: async (updates: Record<string, any>) => {
+  saveSettings: async (updates: Record<string, unknown>) => {
     saveSettingsToStorage(updates);
     return { success: true };
   },
@@ -121,77 +262,65 @@ export const webAPI = {
   // ── Disk space (always OK in web mode) ──────────────────────────────────────
   checkDiskSpace: async (_path?: string, _requiredBytes?: number) => ({
     isEnough: true,
-    available: 100 * 1024 * 1024 * 1024, // 100GB dummy
+    available: 100 * 1024 * 1024 * 1024,
     required: _requiredBytes || 0,
   }),
 
-  // ── Folder open (not applicable in web mode) ─────────────────────────────────
+  // ── Folder / external links ──────────────────────────────────────────────────
   openFolder: async (_path: string) => {
     console.log('Open folder not supported in browser:', _path);
     return { success: true };
   },
-
-  // ── External links ───────────────────────────────────────────────────────────
   openExternal: (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   },
 
-  // ── Playlist (web mode: we return info inline, no popup dialog) ─────────────
+  // ── Playlist (sequential Cobalt calls, one per entry) ───────────────────────
   addPlaylistToQueue: async (
     entries: Array<{ url: string; title: string; thumbnail?: string }>,
-    _opts: any,
+    _opts: Record<string, unknown>,
   ) => {
     for (const entry of entries) {
-      const cleanTitle = (entry.title || 'video').replace(/[^a-z0-9]/gi, '_').slice(0, 50);
-      const filename = `${cleanTitle}.mp4`;
-      const downloadUrl =
-        `${API_BASE}/api/download?` +
-        `url=${encodeURIComponent(entry.url)}` +
-        `&formatId=bestvideo%2Bbestaudio` +
-        `&filename=${encodeURIComponent(filename)}`;
-      triggerBrowserDownload(downloadUrl, filename);
-      await new Promise((r) => setTimeout(r, 600));
+      try {
+        const cobaltResp = await cobaltFetch({ url: entry.url, videoQuality: '720' });
+        const downloadUrl = cobaltResp.url || cobaltResp.picker?.[0]?.url;
+        if (downloadUrl) {
+          const cleanTitle = (entry.title || 'video').replace(/[^a-z0-9]/gi, '_').slice(0, 50);
+          triggerBrowserDownload(downloadUrl, `${cleanTitle}.mp4`);
+        }
+      } catch (err) {
+        console.warn('[Cobalt] Skipping playlist entry due to error:', err);
+      }
+      await new Promise((r) => setTimeout(r, 800));
     }
     return { addedCount: entries.length };
   },
 
   // ── App / version info ───────────────────────────────────────────────────────
   getAppVersion: async () => '1.0.8-web',
-  getYtDlpVersion: async () => ({ version: 'latest', updateAvailable: false }),
+  getYtDlpVersion: async () => ({ version: 'cobalt', updateAvailable: false }),
   getUpdateInfo: async () => ({
     needsUpdate: false,
     installedVersion: '1.0.8',
     latestVersion: '1.0.8',
   }),
 
-  // ── Binary updates (no-op) ───────────────────────────────────────────────────
+  // ── Binary updates (no-op in web) ───────────────────────────────────────────
   checkBinaryUpdates: async () => [],
   checkAllBinaryUpdates: async () => [],
   updateBinary: async (_name: string) => ({ success: false }),
   updateBinaries: async () => ({ success: true }),
 
-  // ── Event stubs (Electron IPC events — not needed in web) ───────────────────
-  onDownloadProgress: (_cb: (data: any) => void) => {
-    return () => { };
-  },
-  removeProgressListener: () => { },
-  onYtDlpUpdateAvailable: (_cb: (data: any) => void) => {
-    return () => { };
-  },
-  onYtDlpVersionInfo: (_cb: (data: any) => void) => {
-    return () => { };
-  },
-  onPlaylistDetected: (_cb: (data: any) => void) => {
-    return () => { };
-  },
-  onPlaylistVideoDetected: (_cb: (data: any) => void) => {
-    return () => { };
-  },
-  onPlaylistDetectionComplete: (_cb: (data: any) => void) => {
-    return () => { };
-  },
+  // ── Event stubs (Electron IPC events — not used in web) ─────────────────────
+  onDownloadProgress: (_cb: (data: unknown) => void) => () => {},
+  removeProgressListener: () => {},
+  onYtDlpUpdateAvailable: (_cb: (data: unknown) => void) => () => {},
+  onYtDlpVersionInfo: (_cb: (data: unknown) => void) => () => {},
+  onPlaylistDetected: (_cb: (data: unknown) => void) => () => {},
+  onPlaylistVideoDetected: (_cb: (data: unknown) => void) => () => {},
+  onPlaylistDetectionComplete: (_cb: (data: unknown) => void) => () => {},
 
   // ── Update yt-dlp (no-op in web) ─────────────────────────────────────────────
-  updateYtDlp: async () => ({ success: false, message: 'Update not supported in web mode' }),
-  checkForUpdates: async () => { },
+  updateYtDlp: async () => ({ success: false, message: 'Not applicable in web mode' }),
+  checkForUpdates: async () => {},
 };
