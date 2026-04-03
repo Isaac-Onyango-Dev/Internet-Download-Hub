@@ -37,6 +37,11 @@ jobs:
         run: npm run build:web
         # Outputs React app to docs/web/
 
+      - name: Create 404.html for SPA routing
+        # GitHub Pages serves 404.html on unknown paths, which lets the React
+        # router handle client-side navigation (e.g. /web/ subpaths).
+        run: cp docs/web/index.html docs/web/404.html
+
       - name: Upload entire docs/ folder as Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
