@@ -1,0 +1,72 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download binaries
+        run: npm run setup:binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify binaries exist
+        shell: pwsh
+        run: |
+          $engines = @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe", "gallery-dl.exe", "streamlink.exe", "N_m3u8DL-RE.exe")
+          foreach ($engine in $engines) {
+            if (!(Test-Path "binaries/$engine")) { throw "Critical Error: $engine is missing after setup. Build aborted!" }
+            Write-Host "Verified: $engine"
+          }
+          Write-Host "All download engines successfully verified."
+
+      - name: Generate icons
+        run: npm run generate:icons
+
+      - name: Build Vite frontend
+        run: npx vite build
+
+      - name: Build Windows installer
+        run: npx electron-builder build --win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: get_version
+        shell: bash
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Upload Windows installer to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.get_version.outputs.VERSION }}
+          generate_release_notes: true
+          files: |
+            release/*.exe
+            release/*.blockmap
+          fail_on_unmatched_files: false
+          body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
