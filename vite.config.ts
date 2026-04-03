@@ -4,7 +4,6 @@ import path from 'path';
 
 export default defineConfig({
   base: process.env.VITE_APP_BASE || './',
-  publicDir: path.resolve(import.meta.dirname, 'assets'),
   plugins: [react()],
   resolve: {
     alias: {
@@ -19,18 +18,13 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: Number(process.env.PORT) || 5173,
-    host: '0.0.0.0',
-    strictPort: true,
-    allowedHosts: true,
+    port: 5173,
+    host: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-    },
-    fs: {
-      strict: false,
     },
   },
 });

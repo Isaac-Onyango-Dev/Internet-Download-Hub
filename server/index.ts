@@ -219,7 +219,7 @@ app.get('/api/health', (_req, res) => {
 // In production, serve the Vite-built frontend and handle client-side routing
 const isProd = process.env.NODE_ENV === 'production';
 if (isProd) {
-  const distPath = path.resolve(process.cwd(), 'dist/public');
+  const distPath = path.resolve(process.cwd(), 'docs/app');
   app.use(express.static(distPath));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
