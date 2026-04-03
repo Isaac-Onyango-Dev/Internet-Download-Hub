@@ -3,6 +3,9 @@ import cors from 'cors';
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
+
+import { fileURLToPath } from 'url';
 
 const execFileAsync = promisify(execFile);
 
@@ -11,7 +14,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const YT_DLP = 'yt-dlp';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function getYtDlpPath(): string {
+  if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
+  const local = path.resolve(__dirname, '../binaries/yt-dlp');
+  if (typeof fs !== 'undefined' && fs.existsSync(local)) return local;
+  return 'yt-dlp'; // assumes it is on PATH (installed by Dockerfile)
+}
+
+const YT_DLP = getYtDlpPath();
 const FFMPEG = 'ffmpeg';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -219,10 +231,10 @@ app.get('/api/health', (_req, res) => {
 // In production, serve the Vite-built frontend and handle client-side routing
 const isProd = process.env.NODE_ENV === 'production';
 if (isProd) {
-  const distPath = path.resolve(process.cwd(), 'docs/app');
-  app.use(express.static(distPath));
+  const appDistPath = path.resolve(process.cwd(), 'docs/app');
+  app.use(express.static(appDistPath));
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    res.sendFile(path.join(appDistPath, 'index.html'));
   });
 }
 
