@@ -9,7 +9,7 @@
  * On confirm, calls window.electronAPI.addPlaylistToQueue() with the
  * filtered entry list, then closes and navigates to the queue tab.
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
   Dialog,
   DialogContent,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 
 const APP_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub';
