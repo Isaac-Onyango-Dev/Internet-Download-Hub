@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import Dashboard from '@/pages/Dashboard';
+import DashboardWeb from '@/pages/DashboardWeb';
 import {
   Dialog,
   DialogContent,
@@ -24,14 +25,16 @@ const EULA_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blo
 
 function NavigationRouter() {
   const [location] = useHashLocation();
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+  const DashboardComponent = isElectron ? Dashboard : DashboardWeb;
 
   return (
     <Router hook={useHashLocation}>
       <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/queue" component={Dashboard} />
-        <Route path="/settings" component={Dashboard} />
-        <Route path="/support" component={Dashboard} />
+        <Route path="/" component={DashboardComponent} />
+        <Route path="/queue" component={isElectron ? Dashboard : DashboardComponent} />
+        <Route path="/settings" component={isElectron ? Dashboard : DashboardComponent} />
+        <Route path="/support" component={isElectron ? Dashboard : DashboardComponent} />
         <Route>
           {() => {
             window.location.hash = '#/';
