@@ -502,7 +502,7 @@ var require_cross_spawn = __commonJS({
     var cp = require("child_process");
     var parse = require_parse();
     var enoent = require_enoent();
-    function spawn2(command, args, options) {
+    function spawn3(command, args, options) {
       const parsed = parse(command, args, options);
       const spawned = cp.spawn(parsed.command, parsed.args, parsed.options);
       enoent.hookChildProcess(spawned, parsed);
@@ -514,8 +514,8 @@ var require_cross_spawn = __commonJS({
       result.error = result.error || enoent.verifyENOENTSync(result.status, parsed);
       return result;
     }
-    module2.exports = spawn2;
-    module2.exports.spawn = spawn2;
+    module2.exports = spawn3;
+    module2.exports.spawn = spawn3;
     module2.exports.sync = spawnSync;
     module2.exports._parse = parse;
     module2.exports._enoent = enoent;
@@ -1985,15 +1985,30 @@ var require_execa = __commonJS({
 var import_electron_log2 = __toESM(require("electron-log"), 1);
 var import_electron = require("electron");
 var import_path = __toESM(require("path"), 1);
-var import_child_process = require("child_process");
+var import_child_process2 = require("child_process");
 var import_execa2 = __toESM(require_execa(), 1);
 
 // electron/extractor.ts
 var import_fs2 = __toESM(require("fs"), 1);
+var import_child_process = require("child_process");
 var import_execa = __toESM(require_execa(), 1);
-var import_playwright_core = require("playwright-core");
 
 // electron/url-analyser.ts
+function matchesDomain(host, domains) {
+  for (const domain of domains) {
+    if (domain.includes("/")) {
+      const [domainPart, pathPart] = domain.split("/");
+      if (host === domainPart || host.endsWith("." + domainPart)) {
+        return true;
+      }
+    } else {
+      if (host === domain || host.endsWith("." + domain)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 var YTDLP_NATIVE = [
   "youtube.com",
   "youtu.be",
@@ -2042,7 +2057,6 @@ var GALLERY_DL_NATIVE = [
 ];
 var STREAMLINK_NATIVE = [
   "twitch.tv",
-  "youtube.com/live",
   "kick.com",
   "trovo.live",
   "afreecatv.com",
@@ -2055,18 +2069,16 @@ var STREAMLINK_NATIVE = [
 function analyseUrl(url) {
   try {
     const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase().replace("www.", "");
+    const host = parsed.hostname.toLowerCase();
     const path2 = parsed.pathname.toLowerCase();
-    if (host.includes("youtube.com") || host.includes("youtu.be")) {
-    }
     let engineOrder = ["yt-dlp", "playwright"];
-    if (YTDLP_NATIVE.some((h) => host.includes(h))) {
+    if (matchesDomain(host, YTDLP_NATIVE)) {
       engineOrder = ["yt-dlp", "playwright"];
-    } else if (ANIME_STREAMING.some((h) => host.includes(h))) {
+    } else if (matchesDomain(host, ANIME_STREAMING)) {
       engineOrder = ["n-m3u8dl", "yt-dlp", "playwright"];
-    } else if (GALLERY_DL_NATIVE.some((h) => host.includes(h))) {
+    } else if (matchesDomain(host, GALLERY_DL_NATIVE)) {
       engineOrder = ["gallery-dl", "yt-dlp", "playwright"];
-    } else if (STREAMLINK_NATIVE.some((h) => host.includes(h))) {
+    } else if (matchesDomain(host, STREAMLINK_NATIVE)) {
       engineOrder = ["streamlink", "yt-dlp", "playwright"];
     }
     return {
@@ -2120,8 +2132,8 @@ function isLikelyYoutubeAgeRestrictionError(raw) {
   if (m.includes("age-restricted") || m.includes("age restricted") || m.includes("confirm your age") || m.includes("inappropriate for some users") || m.includes("this video may be inappropriate") || m.includes("video is age restricted") || m.includes("content is age restricted") || m.includes("restricted from embedding") || m.includes("age_limit")) {
     return true;
   }
-  const signInAgePattern = /(?:sign\s*in|login|log\s*in).*(?:age|age\s*restricted|18\+|adult)/i;
-  const ageSignInPattern = /(?:age|age\s*restricted|18\+|adult).*(?:sign\s*in|login|log\s*in)/i;
+  const signInAgePattern = /(?:sign\s*in|login|log\s*in).*(?:\bage\b|age\s*restricted|18\+|adult)/i;
+  const ageSignInPattern = /(?:\bage\b|age\s*restricted|18\+|adult).*(?:sign\s*in|login|log\s*in)/i;
   return signInAgePattern.test(m) || ageSignInPattern.test(m);
 }
 function translateDownloadError(rawError, exitCode, url) {
@@ -2337,68 +2349,87 @@ async function runGalleryDl(url, galleryDlPath2) {
     ]
   };
 }
-async function execYtDlpPlaylistJson(ytDlpPath2, pageUrl, opts) {
+async function streamPlaylistInfo(url, paths, onVideoDetected, onComplete, onError) {
+  if (!import_fs2.default.existsSync(paths.ytDlp)) {
+    onError(new Error("yt-dlp not found"));
+    return;
+  }
   const args = [
-    "-J",
+    "--dump-json",
+    "--flat-playlist",
     "--no-warnings",
     "--user-agent",
     YT_DLP_UA,
-    "--add-header",
-    "Accept-Language:en-US,en;q=0.9",
-    ...ytDlpCommonArgs(pageUrl, {
-      noPlaylist: false,
-      ...opts.youtubePlayerClient !== void 0 ? { youtubePlayerClient: opts.youtubePlayerClient } : {}
-    }),
-    ...ytDlpCookiesArgs(opts.cookiesFile)
+    ...ytDlpCommonArgs(url, { noPlaylist: false }),
+    ...ytDlpCookiesArgs(paths.cookiesFile),
+    "--",
+    url
   ];
-  if (opts.playlistItemLimit && Number.isFinite(opts.playlistItemLimit)) {
-    args.push("--playlist-items", String(opts.playlistItemLimit));
-  }
-  args.push("--", pageUrl);
-  return (0, import_execa.default)(ytDlpPath2, args, { timeout: 12e4 });
-}
-async function extractPlaylistInfo(url, paths, opts) {
-  let result;
-  try {
-    result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
-      playlistItemLimit: opts?.playlistItemLimit,
-      cookiesFile: paths.cookiesFile
-    });
-  } catch (err) {
-    const stderr = String(err.stderr ?? err.message ?? "");
-    if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
-      import_electron_log.default.info("[Extractor] Retrying playlist yt-dlp with youtube:player_client=tv_embedded");
-      result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
-        playlistItemLimit: opts?.playlistItemLimit,
-        youtubePlayerClient: "tv_embedded",
-        cookiesFile: paths.cookiesFile
-      });
-    } else {
-      throw err;
+  import_electron_log.default.info("[Extractor] Streaming playlist info:", url);
+  const process2 = (0, import_child_process.spawn)(paths.ytDlp, args);
+  let incompleteLine = "";
+  let playlistMetadata = null;
+  let detectedCount = 0;
+  process2.stdout.on("data", (data) => {
+    const chunk = data.toString();
+    const lines = (incompleteLine + chunk).split("\n");
+    incompleteLine = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const info = JSON.parse(line);
+        if (info._type === "playlist") {
+          playlistMetadata = {
+            title: info.title || "Playlist",
+            uploader: info.uploader || info.channel || "",
+            videoCount: info.playlist_count || 0
+          };
+          continue;
+        }
+        detectedCount++;
+        const video = parseYtDlpInfo(info, url);
+        onVideoDetected(video, detectedCount, playlistMetadata?.videoCount || 0);
+      } catch (e) {
+        import_electron_log.default.error("[Extractor] Error parsing playlist stream line:", e);
+      }
     }
-  }
-  const info = JSON.parse(result.stdout);
-  if (info?._type !== "playlist" || !Array.isArray(info.entries)) {
-    throw new Error("This URL does not appear to be a playlist.");
-  }
-  const videos = info.entries.map(
-    (entry) => parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, url)
-  );
-  return {
-    title: info.title || "Playlist",
-    uploader: info.uploader || info.channel || "",
-    videoCount: info.playlist_count || videos.length,
-    videos
-  };
+  });
+  process2.stderr.on("data", (data) => {
+    const stderr = data.toString();
+    import_electron_log.default.warn("[Extractor] yt-dlp playlist stream stderr:", stderr);
+  });
+  process2.on("close", (code) => {
+    if (code === 0) {
+      if (playlistMetadata) {
+        onComplete(playlistMetadata);
+      } else {
+        onComplete({ title: "Playlist", uploader: "", videoCount: detectedCount });
+      }
+    } else {
+      onError(new Error(`yt-dlp exited with code ${code}`));
+    }
+  });
+  process2.on("error", (err) => {
+    onError(err);
+  });
 }
 async function extractWithPlaywright(pageUrl, ytDlpPath2, cookiesFile) {
-  const browserPath = import_playwright_core.chromium.executablePath();
+  let chromium;
+  try {
+    const playwrightCore = await import("playwright-core");
+    chromium = playwrightCore.chromium;
+  } catch {
+    throw new Error(
+      "The playwright-core package is not available. This extraction engine cannot be used in the packaged app."
+    );
+  }
+  const browserPath = chromium.executablePath();
   if (!import_fs2.default.existsSync(browserPath)) {
     throw new Error(
       "This site requires deeper analysis but the browser component is not installed yet. Please restart the app to trigger automatic installation, or try a YouTube link instead."
     );
   }
-  const browser = await import_playwright_core.chromium.launch({
+  const browser = await chromium.launch({
     executablePath: browserPath,
     headless: true,
     args: [
@@ -2587,6 +2618,44 @@ try {
 } catch {
   import_electron_log2.default.info("[Main] electron-log initialized");
 }
+function detectSite(url) {
+  let hostname = "";
+  try {
+    hostname = new URL(url).hostname.replace("www.", "");
+  } catch {
+    hostname = url;
+  }
+  if (/twitch\.tv|kick\.com|dailymotion\.com|youtu\.be|youtube\.com/.test(hostname)) {
+    return {
+      name: hostname,
+      engine: "ytdlp",
+      engineBinary: "yt-dlp.exe",
+      isLikelyPlaylist: /list=|(\/c\/)|(\/channel\/)|(\/user\/)/.test(url)
+    };
+  }
+  if (/tiktok\.com|instagram\.com|facebook\.com|fb\.watch|twitter\.com|x\.com|reddit\.com|vimeo\.com/.test(hostname)) {
+    return { name: hostname, engine: "ytdlp", engineBinary: "yt-dlp.exe", isLikelyPlaylist: false };
+  }
+  if (/pixiv\.net|deviantart\.com|flickr\.com|artstation\.com|imgur\.com/.test(hostname)) {
+    return { name: hostname, engine: "gallery-dl", engineBinary: "gallery-dl.exe", isLikelyPlaylist: true };
+  }
+  if (/m3u8/.test(url)) {
+    return { name: "HLS Stream", engine: "nm3u8dlre", engineBinary: "N_m3u8DL-RE.exe", isLikelyPlaylist: false };
+  }
+  return { name: hostname || "unknown site", engine: "ytdlp", engineBinary: "yt-dlp.exe", isLikelyPlaylist: false };
+}
+function buildErrorMessage(siteName, stderr) {
+  const s = stderr.toLowerCase();
+  if (s.includes("private") || s.includes("login required") || s.includes("sign in"))
+    return `This ${siteName} video is private or requires an account login.`;
+  if (s.includes("not available") || s.includes("unavailable"))
+    return `This ${siteName} video is unavailable or has been removed.`;
+  if (s.includes("geo") || s.includes("country") || s.includes("region"))
+    return `This ${siteName} video is geo-restricted and not available in your region.`;
+  if (s.includes("rate") || s.includes("too many"))
+    return `Too many requests to ${siteName}. Please wait a moment and try again.`;
+  return `Failed to download from ${siteName}. The site may have changed or this content is restricted.`;
+}
 var DB_PATH;
 process.env.VITE_ELECTRON = "true";
 var mainWindow = null;
@@ -2773,7 +2842,7 @@ async function downloadFFmpeg() {
         import_fs3.default.mkdirSync(tempDir, { recursive: true });
       }
       const psCommand = `Expand-Archive -Path "${zipPath}" -DestinationPath "${tempDir}" -Force`;
-      await (0, import_util.promisify)(import_child_process.exec)(`powershell -Command "${psCommand}"`);
+      await (0, import_util.promisify)(import_child_process2.exec)(`powershell -Command "${psCommand}"`);
       const findFfmpeg = (dir) => {
         const files = import_fs3.default.readdirSync(dir);
         for (const file of files) {
@@ -3024,7 +3093,6 @@ async function initDb() {
   try {
     db.run("UPDATE downloads SET state = 'paused' WHERE state IN ('downloading', 'merging')");
   } catch (_) {
-    Object(_);
   }
   saveDatabase(db);
 }
@@ -3037,7 +3105,7 @@ async function getFreeSpace(targetPath) {
     } else {
       cmd = `df -b1 "${targetPath}" | tail -1 | awk '{print $4}'`;
     }
-    (0, import_child_process.exec)(cmd, (err, stdout) => {
+    (0, import_child_process2.exec)(cmd, (err, stdout) => {
       if (err) {
         import_electron_log2.default.error("Failed to get free space:", err);
         resolve(Number.MAX_SAFE_INTEGER);
@@ -3283,8 +3351,9 @@ If this persists, check the log file from Help or %APPDATA% logs.`
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
-  const isDevRenderer = !import_electron.app.isPackaged;
-  if (isDevRenderer) {
+  const isDevRenderer = !import_electron.app.isPackaged && process.env.CI !== "true";
+  const forceBuilt = process.env.CI === "true";
+  if (isDevRenderer && !forceBuilt) {
     mainWindow.loadURL("http://localhost:5173");
   } else {
     mainWindow.loadFile(getPackagedIndexHtmlPath());
@@ -3459,20 +3528,20 @@ async function performYtDlpUpdate() {
   const backupPath = destPath + ".backup";
   try {
     if (import_fs3.default.existsSync(backupPath)) import_fs3.default.unlinkSync(backupPath);
-  } catch (_) {
-    Object(_);
+  } catch (err) {
+    import_electron_log2.default.error("Operation failed:", err?.message || err);
   }
   try {
     if (import_fs3.default.existsSync(destPath)) import_fs3.default.renameSync(destPath, backupPath);
-  } catch (_) {
-    Object(_);
+  } catch (err) {
+    import_electron_log2.default.error("Operation failed:", err?.message || err);
   }
   try {
     import_fs3.default.renameSync(tempPath, destPath);
     try {
       if (import_fs3.default.existsSync(backupPath)) import_fs3.default.unlinkSync(backupPath);
-    } catch (_) {
-      Object(_);
+    } catch (err) {
+      import_electron_log2.default.error("Operation failed:", err?.message || err);
     }
     ytDlpPath = destPath;
     import_electron_log2.default.info(`[UPDATE] yt-dlp successfully updated to v${latestVersion} in userData`);
@@ -3482,13 +3551,13 @@ async function performYtDlpUpdate() {
       if (!import_fs3.default.existsSync(destPath) && import_fs3.default.existsSync(backupPath)) {
         import_fs3.default.renameSync(backupPath, destPath);
       }
-    } catch (_) {
-      Object(_);
+    } catch (err2) {
+      import_electron_log2.default.error("Operation failed:", err2?.message || err2);
     }
     try {
       if (import_fs3.default.existsSync(tempPath)) import_fs3.default.unlinkSync(tempPath);
-    } catch (_) {
-      Object(_);
+    } catch (err2) {
+      import_electron_log2.default.error("Operation failed:", err2?.message || err2);
     }
     throw new Error(`Failed to finalize update: ${err.message}`);
   }
@@ -3574,7 +3643,7 @@ function killProcessTree(pid) {
   if (!pid) return;
   try {
     if (process.platform === "win32") {
-      (0, import_child_process.execSync)(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
+      (0, import_child_process2.execSync)(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
     } else {
       process.kill(-pid, "SIGKILL");
     }
@@ -3621,32 +3690,36 @@ function setupIpcHandlers() {
             }
           };
         }
-        const playlist = await extractPlaylistInfo(rawUrl, {
-          ytDlp: ytDlpPath,
-          ffmpeg: ffmpegPath,
-          cookiesFile
-        });
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send("playlist-detected", {
-            title: playlist.title,
-            count: playlist.videoCount,
-            entries: playlist.videos.map((video, index) => ({
-              url: video.url,
-              title: video.title,
-              thumbnail: video.thumbnail,
-              index: index + 1
-            }))
-          });
-        }
+        streamPlaylistInfo(
+          rawUrl,
+          { ytDlp: ytDlpPath, cookiesFile },
+          (video, index, total) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("playlist-video-detected", {
+                video,
+                index,
+                total
+              });
+            }
+          },
+          (metadata) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("playlist-detection-complete", metadata);
+            }
+          },
+          (err) => {
+            import_electron_log2.default.error(`[Extractor] Playlist stream error: ${err.message}`);
+          }
+        );
         return {
           success: true,
-          data: { isPlaylist: true, videos: playlist.videos },
+          data: { isPlaylist: true, streaming: true, videos: [] },
           meta: {
             playlistDetected: true,
             detectPlaylistsEnabled: true,
             collapsedToSingle: false,
-            playlistTitle: playlist.title,
-            playlistVideoCount: playlist.videoCount
+            playlistTitle: "Loading Playlist...",
+            playlistVideoCount: 0
           }
         };
       }
@@ -4052,7 +4125,7 @@ function setupIpcHandlers() {
       if (!import_fs3.default.existsSync(binaryPath)) {
         return "Not installed";
       }
-      const output = (0, import_child_process.execSync)(`"${binaryPath}" ${binary.versionFlag}`, { encoding: "utf8" });
+      const output = (0, import_child_process2.execSync)(`"${binaryPath}" ${binary.versionFlag}`, { encoding: "utf8" });
       const version = output.split("\n")[0].trim();
       return version;
     } catch (error) {
@@ -4091,7 +4164,7 @@ function setupIpcHandlers() {
         if (!import_fs3.default.existsSync(tempDir)) {
           import_fs3.default.mkdirSync(tempDir, { recursive: true });
         }
-        (0, import_child_process.execSync)(
+        (0, import_child_process2.execSync)(
           `powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`,
           { cwd: import_electron.app.getPath("temp") }
         );
@@ -4137,31 +4210,27 @@ function setupIpcHandlers() {
           }
         }
         let addedCount = 0;
-        for (const entry of entries) {
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
           try {
-            const videoInfo = await extractVideoInfo(entry.url, {
-              ytDlp: ytDlpPath,
-              ffmpeg: ffmpegPath,
-              streamlink: streamlinkPath,
-              nm3u8dl: n_m3u8dlPath,
-              galleryDl: galleryDlPath,
-              cookiesFile: getResolvedCookiesPath()
-            });
-            const video = Array.isArray(videoInfo) ? videoInfo[0] : videoInfo;
+            const video = entry.video;
+            const idx = entry.index || i + 1;
             const prefQuality = settings?.default_quality || "best";
             const prefFormat = settings?.default_format || "mp4";
-            let formatId = "bestvideo+bestaudio";
-            if (prefFormat === "mp3") {
-              formatId = "bestaudio";
-            } else if (prefQuality !== "best") {
-              const targetQuality = prefQuality + "p";
-              const match = video.formats?.find((f) => f.quality === targetQuality);
-              formatId = match ? match.formatId : "bestvideo+bestaudio";
+            let formatId = entry.selectedFormat || "bestvideo+bestaudio";
+            if (!entry.selectedFormat) {
+              if (prefFormat === "mp3") {
+                formatId = "bestaudio";
+              } else if (prefQuality !== "best") {
+                const targetQuality = prefQuality + "p";
+                const match = video.formats?.find((f) => f.quality === targetQuality);
+                formatId = match ? match.formatId : "bestvideo+bestaudio";
+              }
             }
             const cleanTitle = entry.title ? entry.title.replace(/[^a-z0-9]/gi, "_").slice(0, 50) : "video";
             const isAudioOnly = formatId === "bestaudio";
             const ext = isAudioOnly ? "mp3" : video.formats?.find((f) => f.formatId === formatId)?.ext || "mp4";
-            const filename = createFolder ? `${entry.index.toString().padStart(2, "0")} - ${cleanTitle}.${ext}` : `${cleanTitle}.${ext}`;
+            const filename = createFolder ? `${idx.toString().padStart(2, "0")} - ${cleanTitle}.${ext}` : `${cleanTitle}.${ext}`;
             const outputPath = import_path.default.join(playlistFolderPath, filename);
             db.run(
               `
@@ -4171,27 +4240,25 @@ function setupIpcHandlers() {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', datetime('now'), ?, ?, ?)
           `,
               [
-                entry.url,
+                video.url,
                 filename,
                 formatId,
                 outputPath,
-                entry.thumbnail ?? null,
+                video.thumbnail ?? null,
                 video.duration ?? null,
                 video.uploader ?? null,
                 options.playlistTitle ?? null,
-                entry.index,
+                idx,
                 entries.length
               ]
             );
             saveDatabase(db);
-            const insertInfo = getQuery(db, "SELECT last_insert_rowid() as id");
-            const downloadId = insertInfo.id;
-            spawnDownload(downloadId, entry.url, outputPath, formatId, false);
             addedCount++;
           } catch (error) {
-            import_electron_log2.default.error(`[IPC Error] Failed to add playlist entry ${entry.index}: ${error.message}`);
+            import_electron_log2.default.error(`[IPC Error] Failed to add playlist entry: ${error.message}`);
           }
         }
+        processQueue();
         return { success: true, addedCount };
       } catch (error) {
         import_electron_log2.default.error(`[IPC Error] add-playlist-to-queue failed: ${error.message}`);
@@ -4211,38 +4278,51 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
   const saveFolder = import_path.default.dirname(outputPath);
   const outputTemplate = import_path.default.join(saveFolder, "%(title)s.%(ext)s");
   const cookiesPath = getResolvedCookiesPath();
-  const ytDlpArgs = [
-    "--newline",
-    "--progress",
-    "--no-colors",
-    "--no-warnings",
-    ...ytDlpCommonArgs(url, {
-      noPlaylist: true,
-      ...youtubePlayerClient !== void 0 ? { youtubePlayerClient } : {}
-    }),
-    ...ytDlpCookiesArgs(cookiesPath),
-    "--windows-filenames",
-    "--trim-filenames",
-    "200",
-    "-f",
-    formatArg,
-    "--merge-output-format",
-    "mp4",
-    "--ffmpeg-location",
-    ffmpegPath,
-    "-o",
-    outputTemplate,
-    "--",
-    url
-  ];
-  if (isResume) {
-    ytDlpArgs.unshift("--continue");
+  const siteInfo = detectSite(url);
+  let binaryPath = ytDlpPath;
+  if (siteInfo.engine === "gallery-dl") binaryPath = galleryDlPath;
+  else if (siteInfo.engine === "streamlink") binaryPath = streamlinkPath;
+  else if (siteInfo.engine === "nm3u8dlre") binaryPath = n_m3u8dlPath;
+  let downloadArgs = [];
+  if (siteInfo.engine === "ytdlp") {
+    downloadArgs = [
+      "--newline",
+      "--progress",
+      "--no-colors",
+      "--no-warnings",
+      ...ytDlpCommonArgs(url, {
+        noPlaylist: true,
+        ...youtubePlayerClient !== void 0 ? { youtubePlayerClient } : {}
+      }),
+      ...ytDlpCookiesArgs(cookiesPath),
+      "--windows-filenames",
+      "--trim-filenames",
+      "200",
+      "-f",
+      formatArg,
+      "--merge-output-format",
+      "mp4",
+      "--ffmpeg-location",
+      ffmpegPath,
+      "-o",
+      outputTemplate
+    ];
+    if (isResume) {
+      downloadArgs.unshift("--continue");
+    }
+    downloadArgs.push("--", url);
+  } else if (siteInfo.engine === "gallery-dl") {
+    downloadArgs = ["-d", saveFolder, url];
+  } else if (siteInfo.engine === "streamlink") {
+    downloadArgs = ["--hls-live-restart", "-o", outputTemplate.replace("%(title)s.%(ext)s", "stream.mp4"), url, "best"];
+  } else if (siteInfo.engine === "nm3u8dlre") {
+    downloadArgs = ["--save-dir", saveFolder, url];
   }
   import_electron_log2.default.info("[PROGRESS-AUDIT] Download started for jobId:", downloadId);
-  import_electron_log2.default.info("[PROGRESS-AUDIT] yt-dlp command:", ytDlpPath, ytDlpArgs.join(" "));
-  const ytDlpProcess = (0, import_child_process.spawn)(ytDlpPath, ytDlpArgs);
+  import_electron_log2.default.info("[PROGRESS-AUDIT] Download command:", binaryPath, downloadArgs.join(" "));
+  const downloadProcess = (0, import_child_process2.spawn)(binaryPath, downloadArgs);
   activeTasks.set(downloadId, {
-    process: ytDlpProcess,
+    process: downloadProcess,
     url,
     formatArg,
     outputTemplate,
@@ -4393,18 +4473,18 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
       }
     }
   };
-  ytDlpProcess.stdout.on("data", (data) => {
+  downloadProcess.stdout.on("data", (data) => {
     import_electron_log2.default.info("[PROGRESS-AUDIT] STDOUT received:", data.toString());
     parseYtDlpOutput(data.toString(), downloadId);
   });
-  ytDlpProcess.stderr.on("data", (data) => {
+  downloadProcess.stderr.on("data", (data) => {
     const text = data.toString();
     aggregatedStderr += text;
     import_electron_log2.default.info("[PROGRESS-AUDIT] STDERR received:", text);
     lastStderrOutput = text;
     parseYtDlpOutput(text, downloadId);
   });
-  ytDlpProcess.on("close", (code) => {
+  downloadProcess.on("close", (code) => {
     import_electron_log2.default.info("[PROGRESS-AUDIT] Process closed with code:", code);
     lineBuffers.delete(downloadId);
     activeTasks.delete(downloadId);
@@ -4459,7 +4539,6 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
             body: dl ? dl.filename : "Your file has been saved."
           }).show();
         } catch (_) {
-          Object(_);
         }
       }
     } else if (code !== null) {
@@ -4472,11 +4551,7 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
         return;
       }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = translateDownloadError(
-        aggregatedStderr || lastStderrOutput,
-        code,
-        url
-      );
+      const userFriendlyError = buildErrorMessage(siteInfo.name, aggregatedStderr || lastStderrOutput);
       updateDownloadInDb(downloadId, { state: "failed", error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send("download-progress", {
@@ -4492,11 +4567,11 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
     }
     processQueue();
   });
-  ytDlpProcess.on("error", (err) => {
+  downloadProcess.on("error", (err) => {
     activeTasks.delete(downloadId);
     updatePowerSave();
     import_electron_log2.default.error(`[Spawn Error] downloadId=${downloadId}: ${err.message}`);
-    const userFriendlyError = translateDownloadError(err?.message || String(err), null, url);
+    const userFriendlyError = buildErrorMessage(siteInfo.name, err?.message || String(err));
     updateDownloadInDb(downloadId, { state: "failed", error: userFriendlyError });
     if (mainWindow) {
       mainWindow.webContents.send("download-progress", {

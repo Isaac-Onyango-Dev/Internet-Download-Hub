@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import execa from 'execa';
-import { chromium } from 'playwright-core';
+// playwright-core is loaded dynamically only when needed (not bundled in installer)
 import { analyseUrl, Engine } from './url-analyser';
 import log from 'electron-log';
 import {
@@ -505,12 +505,27 @@ async function extractWithPlaywright(
   ytDlpPath: string,
   cookiesFile?: string | null,
 ): Promise<VideoInfo> {
+  // Dynamically import playwright-core so it is never required at startup.
+  // The package is NOT bundled inside the installer — it is an optional dependency
+  // that is present only in the development node_modules tree.
+  let chromium: any;
+  try {
+    // @ts-expect-error — playwright-core is an optional peer dependency loaded at runtime
+    const playwrightCore = await import('playwright-core');
+    chromium = playwrightCore.chromium;
+  } catch {
+    throw new Error(
+      'The playwright-core package is not available. ' +
+      'This extraction engine cannot be used in the packaged app.',
+    );
+  }
+
   // Check that Chromium is actually installed before trying to launch
   const browserPath = chromium.executablePath();
   if (!fs.existsSync(browserPath)) {
     throw new Error(
       'This site requires deeper analysis but the browser component is not installed yet. ' +
-        'Please restart the app to trigger automatic installation, or try a YouTube link instead.',
+      'Please restart the app to trigger automatic installation, or try a YouTube link instead.',
     );
   }
 
