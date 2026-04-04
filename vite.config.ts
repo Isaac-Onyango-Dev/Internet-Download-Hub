@@ -22,6 +22,11 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
-    // No proxy needed — Cobalt calls go directly from the browser
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5005',
+        changeOrigin: true,
+      },
+    },
   },
 });

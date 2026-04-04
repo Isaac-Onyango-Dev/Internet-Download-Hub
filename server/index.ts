@@ -223,6 +223,72 @@ app.get('/api/download', (req, res) => {
   });
 });
 
+// ── Cobalt proxy — handles JWT auth for web version ────────────────────────────
+// The web version cannot make direct Cobalt API calls because instances now require
+// JWT authentication. This proxy adds the necessary auth header and forwards requests.
+
+const COBALT_INSTANCES = [
+  'https://cobalt-api.meowing.de',
+  'https://api.cobalt.tools',
+  'https://cobalt-backend.canine.tools',
+];
+
+app.post('/api/cobalt', async (req, res) => {
+  const body = req.body;
+
+  // Validate the request
+  if (!body || typeof body !== 'object' || !body.url) {
+    res.status(400).json({ error: { code: 'error.request.empty_url' } });
+    return;
+  }
+
+  let lastError: unknown = null;
+
+  // Try each Cobalt instance with fallback
+  for (const instance of COBALT_INSTANCES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      const response = await fetch(`${instance}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`[Cobalt] Instance ${instance} returned ${response.status}`);
+        lastError = new Error(`Instance ${instance} returned ${response.status}`);
+        continue;
+      }
+
+      const data = await response.json();
+      res.json(data);
+      return;
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.warn(`[Cobalt] Instance ${instance} failed: ${errMsg}`);
+      lastError = err;
+    }
+  }
+
+  // All instances failed
+  const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
+  console.error(`[Cobalt] All instances failed. Last error: ${finalMsg}`);
+  res.status(503).json({
+    status: 'error',
+    error: { code: 'error.cobalt.unreachable', message: finalMsg },
+  });
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, yt_dlp: YT_DLP });

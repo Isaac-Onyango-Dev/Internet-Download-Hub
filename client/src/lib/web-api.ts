@@ -5,20 +5,37 @@
  * Cobalt docs: https://github.com/imputnet/cobalt/blob/main/docs/api.md
  * Instance list: https://instances.cobalt.best/
  *
+ * The web version uses a backend proxy (/api/cobalt) to forward requests because
+ * all public Cobalt instances now require JWT authentication which browsers cannot provide.
+ *
  * All other methods (settings, history, etc.) use localStorage so the app
  * works as a fully static site with zero backend requirements.
  */
 
-// ── Cobalt instance config ────────────────────────────────────────────────────
-// Primary and fallback community instances with CORS enabled.
-// Updated from https://instances.cobalt.best/ — these instances are actively maintained
-// Replace these if the current ones go offline — check https://instances.cobalt.best/
+// ── Cobalt proxy via backend ────────────────────────────────────────────────────
+// Browser clients call /api/cobalt which handles all Cobalt communication with
+// automatic fallback across multiple instances.
+// Falls back to direct API calls if no backend is available (e.g., GitHub Pages).
 
+const COBALT_PROXY = '/api/cobalt';
+
+// Direct Cobalt instances for GitHub Pages deployment (no backend)
+// These may require authentication but are tried as fallback
 const COBALT_INSTANCES = [
-  'https://cobalt-api.meowing.de',       // Primary — reliable, CORS enabled
-  'https://api.cobalt.tools',             // Fallback — official-aligned instance
-  'https://cobalt-backend.canine.tools',  // Fallback — community maintained
+  'https://cobalt-api.meowing.de',
+  'https://api.cobalt.tools',
+  'https://cobalt-backend.canine.tools',
 ];
+
+// Check if we have a backend proxy available
+async function hasBackendProxy(): Promise<boolean> {
+  try {
+    const resp = await fetch('/api/health', { method: 'HEAD', signal: AbortSignal.timeout(2000) });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
 
 // ── Cobalt fetch with automatic fallback ─────────────────────────────────────
 
@@ -40,12 +57,13 @@ interface CobaltResponse {
   picker?: Array<{ type: string; url: string; thumb?: string }>;
 }
 
-async function cobaltPost(instance: string, body: CobaltRequestBody): Promise<CobaltResponse> {
+async function cobaltPost(body: CobaltRequestBody, useProxy: boolean = true): Promise<CobaltResponse> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
   try {
-    const resp = await fetch(`${instance}/`, {
+    const url = useProxy ? COBALT_PROXY : undefined;
+    const resp = await fetch(url || 'error', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,7 +75,7 @@ async function cobaltPost(instance: string, body: CobaltRequestBody): Promise<Co
     clearTimeout(timeoutId);
 
     if (!resp.ok) {
-      throw new Error(`Cobalt instance ${instance} returned ${resp.status}`);
+      throw new Error(`Request to ${useProxy ? 'backend proxy' : 'Cobalt'} returned ${resp.status}`);
     }
     return resp.json();
   } catch (err) {
@@ -66,13 +84,45 @@ async function cobaltPost(instance: string, body: CobaltRequestBody): Promise<Co
   }
 }
 
-async function cobaltFetch(body: CobaltRequestBody): Promise<CobaltResponse> {
+async function cobaltFetchViaProxy(body: CobaltRequestBody): Promise<CobaltResponse> {
+  try {
+    console.log('[Cobalt] Sending request via backend proxy:', body);
+    return await cobaltPost(body, true);
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Cobalt] Backend proxy failed: ${errMsg}`);
+    throw err;
+  }
+}
+
+async function cobaltFetchDirect(body: CobaltRequestBody): Promise<CobaltResponse> {
   let lastError: unknown = null;
 
   for (const instance of COBALT_INSTANCES) {
     try {
-      return await cobaltPost(instance, body);
+      console.log(`[Cobalt] Trying direct call to ${instance}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const resp = await fetch(`${instance}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) {
+        throw new Error(`Instance returned ${resp.status}`);
+      }
+      const data = await resp.json();
+      console.log(`[Cobalt] Success with ${instance}`);
+      return data;
     } catch (err: unknown) {
+      clearTimeout(undefined);
       const errMsg = err instanceof Error ? err.message : String(err);
       console.warn(`[Cobalt] Instance ${instance} failed: ${errMsg}`);
       lastError = err;
@@ -80,10 +130,28 @@ async function cobaltFetch(body: CobaltRequestBody): Promise<CobaltResponse> {
   }
 
   const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
-  console.error(`[Cobalt] All instances failed. Last error: ${finalMsg}`);
-  throw new Error(
-    'Could not reach any Cobalt download service. Please check your internet connection and try again.',
-  );
+  console.error(`[Cobalt] All direct instances failed: ${finalMsg}`);
+  throw lastError;
+}
+
+async function cobaltFetch(body: CobaltRequestBody): Promise<CobaltResponse> {
+  // Try backend proxy first (for development/desktop with server)
+  try {
+    return await cobaltFetchViaProxy(body);
+  } catch (proxyErr) {
+    console.warn('[Cobalt] Backend proxy unavailable, trying direct API calls...');
+  }
+
+  // Fall back to direct API calls (for GitHub Pages deployment)
+  try {
+    return await cobaltFetchDirect(body);
+  } catch (directErr: unknown) {
+    const errMsg = directErr instanceof Error ? directErr.message : String(directErr);
+    console.error(`[Cobalt] All fallback methods failed: ${errMsg}`);
+    throw new Error(
+      'Could not reach any download service. Please ensure you have an internet connection. If this persists, the service may be temporarily unavailable.',
+    );
+  }
 }
 
 // ── Local settings helpers ────────────────────────────────────────────────────
@@ -338,15 +406,15 @@ export const webAPI = {
   updateBinaries: async () => ({ success: true }),
 
   // ── Event stubs (Electron IPC events — not used in web) ─────────────────────
-  onDownloadProgress: (_cb: (data: unknown) => void) => () => {},
-  removeProgressListener: () => {},
-  onYtDlpUpdateAvailable: (_cb: (data: unknown) => void) => () => {},
-  onYtDlpVersionInfo: (_cb: (data: unknown) => void) => () => {},
-  onPlaylistDetected: (_cb: (data: unknown) => void) => () => {},
-  onPlaylistVideoDetected: (_cb: (data: unknown) => void) => () => {},
-  onPlaylistDetectionComplete: (_cb: (data: unknown) => void) => () => {},
+  onDownloadProgress: (_cb: (data: unknown) => void) => () => { },
+  removeProgressListener: () => { },
+  onYtDlpUpdateAvailable: (_cb: (data: unknown) => void) => () => { },
+  onYtDlpVersionInfo: (_cb: (data: unknown) => void) => () => { },
+  onPlaylistDetected: (_cb: (data: unknown) => void) => () => { },
+  onPlaylistVideoDetected: (_cb: (data: unknown) => void) => () => { },
+  onPlaylistDetectionComplete: (_cb: (data: unknown) => void) => () => { },
 
   // ── Update yt-dlp (no-op in web) ─────────────────────────────────────────────
   updateYtDlp: async () => ({ success: false, message: 'Not applicable in web mode' }),
-  checkForUpdates: async () => {},
+  checkForUpdates: async () => { },
 };
