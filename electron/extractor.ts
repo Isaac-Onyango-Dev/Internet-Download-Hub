@@ -12,9 +12,36 @@
 // ============================================================================
 
 import fs from 'fs';
-import path from 'path';
 import { spawn } from 'child_process';
 import execa from 'execa';
+
+// ── Internal types for yt-dlp JSON output ─────────────────────────────────────
+interface YtDlpFormat {
+  format_id: string;
+  ext: string;
+  height: number | null;
+  acodec: string;
+  vcodec: string;
+  filesize: number | null;
+  filesize_approx: number | null;
+}
+
+interface YtDlpEntry {
+  _type?: string;
+  webpage_url?: string;
+  url?: string;
+  original_url?: string;
+  title?: string;
+  thumbnail?: string;
+  duration?: number;
+  uploader?: string;
+  channel?: string;
+  playlist_count?: number;
+  formats?: YtDlpFormat[];
+  entries?: YtDlpEntry[];
+  error?: string;
+  [key: string]: unknown;
+}
 // playwright-core is loaded dynamically only when needed (not bundled in installer)
 import { analyseUrl, Engine } from './url-analyser';
 import log from 'electron-log';
@@ -98,7 +125,7 @@ export async function extractVideoInfo(
   const { engineOrder } = analyseUrl(url);
   log.info(`[Extractor] Engine order for ${url}: ${engineOrder.join(', ')}`);
 
-  let lastError: any = null;
+  let lastError: unknown = null;
 
   // Try each engine in order until one succeeds
   for (const engine of engineOrder) {
@@ -128,8 +155,8 @@ export async function extractVideoInfo(
 
       log.info(`[Extractor] Success with engine: ${engine}`);
       return result;
-    } catch (err: any) {
-      log.warn(`[Extractor] Engine ${engine} failed: ${err.message}`);
+    } catch (err: unknown) {
+      log.warn(`[Extractor] Engine ${engine} failed: ${err instanceof Error ? err.message : String(err)}`);
       lastError = err;
     }
   }
@@ -188,7 +215,7 @@ function parseYtDlpJsonStdout(stdout: string, pageUrl: string): VideoInfo | Vide
 
   // Check if this is a playlist
   if (info._type === 'playlist' && Array.isArray(info.entries)) {
-    return info.entries.map((entry: any) =>
+    return (info as YtDlpEntry).entries!.map((entry: YtDlpEntry) =>
       parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, pageUrl),
     );
   }
@@ -218,8 +245,8 @@ async function runYtDlp(
       timeout: 120000,
     });
     return parseYtDlpJsonStdout(result.stdout, url);
-  } catch (err: any) {
-    const stderr = String(err.stderr ?? err.message ?? '');
+  } catch (err: unknown) {
+    const stderr = String((err as Record<string, unknown>).stderr ?? (err instanceof Error ? err.message : '') ?? '');
 
     // Special handling for YouTube age-restricted content
     if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
@@ -254,7 +281,7 @@ async function runStreamlink(url: string, streamlinkPath: string): Promise<Video
 
   // Get the best available stream
   const streams = info.streams || {};
-  const bestStream = streams.best || (Object.values(streams)[0] as any);
+  const bestStream = (streams as Record<string, unknown>).best || Object.values(streams as Record<string, unknown>)[0];
   if (!bestStream) throw new Error('No streams found for this URL.');
 
   return {
@@ -378,8 +405,8 @@ export async function extractPlaylistInfo(
       playlistItemLimit: opts?.playlistItemLimit,
       cookiesFile: paths.cookiesFile,
     });
-  } catch (err: any) {
-    const stderr = String(err.stderr ?? err.message ?? '');
+  } catch (err: unknown) {
+    const stderr = String((err as Record<string, unknown>).stderr ?? (err instanceof Error ? err.message : '') ?? '');
     if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
       log.info('[Extractor] Retrying playlist yt-dlp with youtube:player_client=tv_embedded');
       result = await execYtDlpPlaylistJson(paths.ytDlp, url, {
@@ -398,7 +425,7 @@ export async function extractPlaylistInfo(
     throw new Error('This URL does not appear to be a playlist.');
   }
 
-  const videos = info.entries.map((entry: any) =>
+  const videos = (info as YtDlpEntry).entries!.map((entry: YtDlpEntry) =>
     parseYtDlpInfo({ ...entry, uploader: entry.channel || info.uploader }, url),
   );
 
@@ -448,7 +475,7 @@ export async function streamPlaylistInfo(
   let playlistMetadata: { title: string; uploader: string; videoCount: number } | null = null;
   let detectedCount = 0;
 
-  process.stdout.on('data', (data: any) => {
+  process.stdout.on('data', (data: Buffer) => {
     const chunk = data.toString();
     const lines = (incompleteLine + chunk).split('\n');
     incompleteLine = lines.pop() || '';
@@ -478,7 +505,7 @@ export async function streamPlaylistInfo(
     }
   });
 
-  process.stderr.on('data', (data: any) => {
+  process.stderr.on('data', (data: Buffer) => {
     const stderr = data.toString();
     log.warn('[Extractor] yt-dlp playlist stream stderr:', stderr);
   });
@@ -508,7 +535,8 @@ async function extractWithPlaywright(
   // Dynamically import playwright-core so it is never required at startup.
   // The package is NOT bundled inside the installer — it is an optional dependency
   // that is present only in the development node_modules tree.
-  let chromium: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let chromium: { executablePath: () => string; launch: (opts: Record<string, unknown>) => Promise<unknown> };
   try {
     // @ts-expect-error — playwright-core is an optional peer dependency loaded at runtime
     const playwrightCore = await import('playwright-core');
@@ -551,7 +579,7 @@ async function extractWithPlaywright(
     const capturedUrls: string[] = [];
 
     // Intercept ALL network requests and capture video-related ones
-    page.on('request', (request) => {
+    page.on('request', (request: { url: () => string }) => {
       const url = request.url();
 
       // Capture HLS manifests
@@ -567,7 +595,7 @@ async function extractWithPlaywright(
       }
     });
 
-    page.on('response', async (response) => {
+    page.on('response', async (response: { url: () => string; headers: () => Record<string, string> }) => {
       const url = response.url();
       const contentType = response.headers()['content-type'] || '';
 
@@ -607,7 +635,7 @@ async function extractWithPlaywright(
         console.log('[Playwright] Clicked play button:', selector);
         await page.waitForTimeout(3000);
         break;
-      } catch (err) {
+      } catch {
         console.debug('[Playwright] Failed to click ' + selector);
       }
     }
@@ -695,24 +723,24 @@ async function extractWithPlaywright(
   }
 }
 
-function parseYtDlpInfo(info: any, fallbackUrl: string): VideoInfo {
+function parseYtDlpInfo(info: YtDlpEntry, fallbackUrl: string): VideoInfo {
   const resolvedUrl = info?.webpage_url || info?.url || info?.original_url || fallbackUrl;
 
   const formats = (info.formats || [])
-    .filter((f: any) => f.height && (f.acodec !== 'none' || f.vcodec !== 'none'))
-    .map((f: any) => ({
+    .filter((f: YtDlpFormat) => f.height && (f.acodec !== 'none' || f.vcodec !== 'none'))
+    .map((f: YtDlpFormat) => ({
       formatId: f.format_id,
       label:
-        `${f.height}p ${f.ext?.toUpperCase() || ''} ${f.filesize || f.filesize_approx ? '(' + formatBytes(f.filesize || f.filesize_approx) + ')' : ''}`.trim(),
+        `${f.height}p ${f.ext?.toUpperCase() || ''} ${f.filesize || f.filesize_approx ? '(' + formatBytes((f.filesize || f.filesize_approx) as number) + ')' : ''}`.trim(),
       quality: `${f.height}p`,
       ext: f.ext,
       filesize: f.filesize || f.filesize_approx || null,
       height: f.height,
     }))
-    .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+    .sort((a: VideoFormat, b: VideoFormat) => (b.height ?? 0) - (a.height ?? 0));
 
-  const seen = new Set();
-  const uniqueFormats = formats.filter((f: any) => {
+  const seen = new Set<number | null>();
+  const uniqueFormats = formats.filter((f: VideoFormat) => {
     if (seen.has(f.height)) return false;
     seen.add(f.height);
     return true;
