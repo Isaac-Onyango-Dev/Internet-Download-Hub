@@ -536,7 +536,7 @@ async function extractWithPlaywright(
   // The package is NOT bundled inside the installer — it is an optional dependency
   // that is present only in the development node_modules tree.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let chromium: { executablePath: () => string; launch: (opts: Record<string, unknown>) => Promise<unknown> };
+  let chromium: any; // playwright-core types are not available at runtime in the packaged app
   try {
     // @ts-expect-error — playwright-core is an optional peer dependency loaded at runtime
     const playwrightCore = await import('playwright-core');
