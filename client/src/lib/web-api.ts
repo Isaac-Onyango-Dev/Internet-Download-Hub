@@ -11,12 +11,13 @@
 
 // ── Cobalt instance config ────────────────────────────────────────────────────
 // Primary and fallback community instances with CORS enabled.
+// Updated from https://instances.cobalt.best/ — these instances are actively maintained
 // Replace these if the current ones go offline — check https://instances.cobalt.best/
 
 const COBALT_INSTANCES = [
-  'https://cobalt-backend.canine.tools',
-  'https://cobalt-api.meowing.de',
-  'https://api.cobalt.tools',
+  'https://cobalt-api.meowing.de',       // Primary — reliable, CORS enabled
+  'https://api.cobalt.tools',             // Fallback — official-aligned instance
+  'https://cobalt-backend.canine.tools',  // Fallback — community maintained
 ];
 
 // ── Cobalt fetch with automatic fallback ─────────────────────────────────────

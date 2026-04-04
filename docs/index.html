@@ -249,27 +249,57 @@
   <!-- Download section -->
   <section class="download-section" id="download">
     <div class="section-inner">
-      <h2>Download Internet Download Hub</h2>
-      <p class="section-sub">Free for Windows 10 and Windows 11</p>
-      <div class="download-card">
-        <div class="download-card-left">
-          <img src="icon.png" alt="Internet Download Hub" class="download-icon" />
-          <div class="download-info">
-            <h3>Internet Download Hub</h3>
-            <p id="version-text">Latest version</p>
-            <p class="download-requirements">Windows 10 / 11 (64-bit) &nbsp;·&nbsp; ~300 MB</p>
+      <h2>Get Started</h2>
+      <p class="section-sub">Choose between web or desktop version</p>
+      
+      <!-- Web Version Card -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 3rem; max-width: 900px; margin-left: auto; margin-right: auto;">
+        <div class="download-card">
+          <div class="download-card-left">
+            <div style="width: 64px; height: 64px; background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 28px; font-weight: bold;">🌐</div>
+            <div class="download-info">
+              <h3>Web Version</h3>
+              <p style="font-size: 13px; color: #666; margin: 4px 0;">No installation • 50+ sites</p>
+              <p class="download-requirements">Use directly in browser</p>
+            </div>
           </div>
+          <a href="web/" class="btn-download" style="background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%); text-decoration: none;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Launch Web App
+          </a>
         </div>
-        <a id="download-btn"
-          href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest/download/Internet.Download.Hub.Setup.1.0.0.exe"
-          class="btn-download" target="_blank" rel="noopener noreferrer">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-          </svg>
-          Download .exe
-          <span id="file-size" class="file-size-label"></span>
-        </a>
+
+        <div class="download-card">
+          <div class="download-card-left">
+            <img src="icon.png" alt="Internet Download Hub" class="download-icon" />
+            <div class="download-info">
+              <h3>Desktop Version</h3>
+              <p id="version-text" style="font-size: 13px; color: #666; margin: 4px 0;">Latest version</p>
+              <p class="download-requirements">Windows 10 / 11 (64-bit)</p>
+            </div>
+          </div>
+          <a id="download-btn"
+            href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest/download/Internet.Download.Hub.Setup.1.0.0.exe"
+            class="btn-download" target="_blank" rel="noopener noreferrer">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+            </svg>
+            Download .exe
+            <span id="file-size" class="file-size-label"></span>
+          </a>
+        </div>
       </div>
+
+      <!-- Feature comparison note -->
+      <div style="background: #F3F4F6; border-radius: 8px; padding: 1.5rem; text-align: center; max-width: 600px; margin: 0 auto;">
+        <p style="margin: 0; font-size: 13px; color: #4B5563; line-height: 1.6;">
+          <strong>Web Version:</strong> No setup • Cloud-based • Works everywhere<br>
+          <strong>Desktop Version:</strong> 1000+ sites • Full features • Offline mode
+        </p>
+      </div>
+
       <p class="download-note">
         By downloading you agree to the <a
           href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/LICENSE" target="_blank"

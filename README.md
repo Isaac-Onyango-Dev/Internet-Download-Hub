@@ -24,12 +24,27 @@ Internet Download Hub is a free Windows desktop application that lets you downlo
 
 ## Web Version
 
-A web-based version of Internet Download Hub is available for quick downloads without installation.
+A fully free web-based version of Internet Download Hub is available for quick downloads **without installation**.
 
-- **Live Web App**: [internet-download-hub.replit.app](https://internet-download-hub.replit.app/)
-- **GitHub Pages Frontend**: [isaac-onyango-dev.github.io/Internet-Download-Hub/](https://isaac-onyango-dev.github.io/Internet-Download-Hub/)
+- **Web App**: [isaac-onyango-dev.github.io/Internet-Download-Hub/web](https://isaac-onyango-dev.github.io/Internet-Download-Hub/web/)
+- **No installation required** — works directly in your browser
+- **Powered by Cobalt API** — supports YouTube, TikTok, Twitter, Instagram, and more
+- **Fully static** — operates locally in your browser with zero backend requirements
 
-The web version uses a backend proxy to handle video extraction and downloading, while the frontend is served as a static site.
+**Web Version Limitations:**
+- Uses Cobalt API (community instances)
+- No persistent download history
+- Basic quality selection
+- Supported sites: YouTube, TikTok, Twitter, Instagram, Reddit, Vimeo, and 50+ other platforms
+- For advanced features (playlists, scheduling, format conversion), use the **desktop version**
+
+**Desktop Version Advantages:**
+- All 1000+ sites supported by yt-dlp
+- Download history and queue
+- Playlist downloads with auto-naming
+- Audio extraction and format conversion
+- Parallel downloads with pause/resume
+- Customizable output folder
 
 ## Tech Stack
 
