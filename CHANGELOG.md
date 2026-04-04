@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - Web Version Updates
+
+### Added
+
+- **Web-Optimized Dashboard**: New `DashboardWeb.tsx` component designed specifically for browser-based downloading with appropriate UX patterns
+- **Download History in Web**: Track recent downloads (up to 10) stored in browser localStorage
+- **Backend Cobalt Proxy**: Express endpoint at `/api/cobalt` that handles JWT authentication transparently for web clients
+- **Fallback API Logic**: Web version tries backend proxy first, falls back to direct Cobalt API calls for GitHub Pages deployment
+- **Enhanced Web Documentation**: Comprehensive web version user guide covering features, limitations, troubleshooting, privacy, and operations
+
+### Changed
+
+- **Web Version UI**: Removed desktop-like Queue/History tabs in favor of simple, browser-appropriate interface
+- **App Routing**: App now detects Electron environment and uses appropriate dashboard (desktop or web)
+- **Quality Selector**: Simplified to 1080p, 720p, and audio-only (no complex format selection)
+- **Error Handling**: Improved error messages for failed video info fetches and downloads
+
+### Fixed
+
+- **CORS Authentication**: Resolved "Could not reach any Cobalt download service" error by implementing backend proxy that adds JWT tokens server-side
+
+### Improved
+
+- **Web UX**: Single-page workflow optimized for browser downloads (paste URL → get info → select quality → download)
+- **Download Flow**: Downloads now go directly to browser's Downloads folder without fake queue management
+- **Error Messages**: Clear, actionable error messages for different failure scenarios (network, unsupported site, etc.)
+- **Build Configuration**: Added Vite proxy for seamless development API calls between frontend (5173) and backend (5005)
+
 ## [1.0.9] - 2026-04-04
 
 ### Fixed
