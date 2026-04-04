@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-04-04
+
+### Fixed
+
+- **Code Quality**: Removed `@ts-nocheck` directives from UI components (calendar, chart, resizable) for proper type checking.
+- **React Component**: Fixed unknown property `cmdk-input-wrapper` to use valid `data-cmdk-input-wrapper` attribute in command.tsx.
+- **Imports**: Cleaned up unused imports in download-item.tsx and Dashboard.tsx.
+- **Build Process**: Removed debug log files and test artifacts from the repository.
+
+### Removed
+
+- Build log files (`build_log.txt`, `root_build_log.txt`, `root_build_log_2.txt`)
+- ESLint debug reports (`.gemini_lint_errors.txt`, `.gemini_lint_errors_2.txt`)
+- Manual test files (`test-app.cjs`, `test-app.js`, `test-extract.ts`, `test3.cjs`)
+- Empty `tests/` directory
+- Corrupted artifacts (`$null`, `output.json`)
+
 ## [1.0.8] - 2026-04-03
 
 ### Fixed

@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import { useVideoDetect, type DetectedVideo } from '@/hooks/use-video-detect';
 import {
   PlaylistDialog,
-  type PlaylistDialogData,
   type PlaylistEntry,
 } from '@/components/playlist-dialog';
 import { Button } from '@/components/ui/button';
@@ -27,7 +26,6 @@ import {
   FileVideo,
   ExternalLink,
   RefreshCw,
-  CheckCircle2,
   XCircle,
   Pause,
   Play,
@@ -642,7 +640,7 @@ function VideoCapturePanel({
 
     try {
       const settings = await window.electronAPI.getSettings();
-      
+
       const entriesToQueue = indicesToDownload.map(idx => ({
         video: videoInfo[idx],
         index: idx + 1,
@@ -852,7 +850,7 @@ function VideoCapturePanel({
                     {playlistVideoCount ?? videoInfo.length} videos
                     {isStreaming && (
                       <span className="flex items-center gap-1 text-blue-500 font-medium ml-2">
-                        <Loader2 className="w-3 h-3 animate-spin"/> Loading more...
+                        <Loader2 className="w-3 h-3 animate-spin" /> Loading more...
                       </span>
                     )}
                   </p>
@@ -1636,12 +1634,12 @@ function SettingsPanel() {
           prev.map((u) =>
             u.name === binaryName
               ? {
-                  ...u,
-                  installedVersion: result.newVersion,
-                  latestVersion: result.newVersion,
-                  needsUpdate: false,
-                  updating: false,
-                }
+                ...u,
+                installedVersion: result.newVersion,
+                latestVersion: result.newVersion,
+                needsUpdate: false,
+                updating: false,
+              }
               : u,
           ),
         );
@@ -1677,7 +1675,7 @@ function SettingsPanel() {
   useEffect(() => {
     loadSettings();
     loadBinaryUpdates();
-    
+
     const loadAppVersion = async () => {
       if (!window.electronAPI) return;
       try {
@@ -1692,24 +1690,24 @@ function SettingsPanel() {
 
   useEffect(() => {
     if (!window.electronAPI) return;
-    
+
     window.electronAPI.onYtDlpVersionInfo?.((data: any) => {
       setYtDlpVersion(data.currentVersion);
       setLatestVersion(data.latestVersion);
       setUpdateAvailable(false);
       setUpdateStatus('');
     });
-    
+
     window.electronAPI.onYtDlpUpdateAvailable?.((data: any) => {
       setYtDlpVersion(data.currentVersion);
       setLatestVersion(data.latestVersion);
       setUpdateAvailable(true);
       setUpdateStatus(`v${data.latestVersion} available`);
     });
-    
+
     window.electronAPI.getYtDlpVersion?.().then((v: string) => {
       if (v && v !== 'unknown') setYtDlpVersion(v);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   const saveSetting = async (key: string, value: any) => {

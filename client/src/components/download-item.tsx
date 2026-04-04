@@ -10,8 +10,6 @@ import {
   Play,
   X,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   RotateCcw,
   ShieldCheck,
   Layers,
