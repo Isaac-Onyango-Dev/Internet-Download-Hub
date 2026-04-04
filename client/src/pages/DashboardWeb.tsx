@@ -72,8 +72,10 @@ export default function DashboardWeb() {
     setVideoInfo(null);
 
     try {
-      const info = await webAPI.fetchVideoInfo(urlInput);
-      setVideoInfo(info);
+      const response = await webAPI.fetchVideoInfo(urlInput);
+      // Handle the response structure: { success: true, data: videoInfo, meta: {...} }
+      const videoData = response.data || response;
+      setVideoInfo(videoData);
       setSelectedFormat('best-video');
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
