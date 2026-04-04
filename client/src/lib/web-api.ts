@@ -23,10 +23,12 @@ const COBALT_INSTANCES = [
 
 interface CobaltRequestBody {
   url: string;
-  videoQuality?: string;
-  audioFormat?: string;
-  downloadMode?: 'auto' | 'audio' | 'mute';
+  videoQuality?: string; // "720", "1080", etc.
+  audioFormat?: string;   // "mp3", "opus", etc.
   filenameStyle?: 'classic' | 'pretty' | 'basic' | 'nerdy';
+  isAudioOnly?: boolean;
+  isAudioMuted?: boolean;
+  videoCodec?: 'h264' | 'av1' | 'vp9';
 }
 
 interface CobaltResponse {
@@ -169,12 +171,12 @@ function cobaltResponseToVideoInfo(cobaltResp: CobaltResponse, originalUrl: stri
 
 // ── Map quality selection to Cobalt videoQuality param ───────────────────────
 
-function formatIdToQuality(formatId: string): { videoQuality: string; downloadMode: 'auto' | 'audio' } {
+function formatIdToQuality(formatId: string): { videoQuality: string; isAudioOnly: boolean } {
   if (formatId === 'audio-only' || formatId === 'bestaudio') {
-    return { videoQuality: '720', downloadMode: 'audio' };
+    return { videoQuality: '720', isAudioOnly: true };
   }
-  if (formatId === 'best-720') return { videoQuality: '720', downloadMode: 'auto' };
-  return { videoQuality: '1080', downloadMode: 'auto' };
+  if (formatId === 'best-720') return { videoQuality: '720', isAudioOnly: false };
+  return { videoQuality: '1080', isAudioOnly: false };
 }
 
 // ── Public webAPI object ──────────────────────────────────────────────────────
@@ -216,9 +218,14 @@ export const webAPI = {
     uploader?: string;
   }) => {
     const { url, filename, formatId = 'best-video' } = options;
-    const { videoQuality, downloadMode } = formatIdToQuality(formatId);
+    const { videoQuality, isAudioOnly } = formatIdToQuality(formatId);
 
-    const cobaltResp = await cobaltFetch({ url, videoQuality, downloadMode });
+    const cobaltResp = await cobaltFetch({
+      url,
+      videoQuality,
+      isAudioOnly,
+      audioFormat: isAudioOnly ? 'mp3' : undefined,
+    });
 
     if (cobaltResp.status === 'error') {
       throw new Error(`Download failed: ${cobaltResp.error?.code || 'unknown error'}`);
