@@ -37,7 +37,7 @@ jobs:
         run: rm -rf docs/web/*
 
       - name: Build web app
-        run: npm run build:web
+        run: npm run build:gh-pages
         # Outputs React app to docs/web/
 
       - name: Create 404.html for SPA routing

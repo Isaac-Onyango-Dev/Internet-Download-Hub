@@ -23,18 +23,19 @@ import { ExternalLink, Loader2 } from 'lucide-react';
 
 const EULA_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/EULA.txt';
 
+import { isElectron } from '@/lib/utils/env';
+import { api } from '@/lib/api';
+
 function NavigationRouter() {
-  const [location] = useHashLocation();
-  const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
-  const DashboardComponent = isElectron ? Dashboard : DashboardWeb;
+  const DashboardComponent = isElectron() ? Dashboard : DashboardWeb;
 
   return (
     <Router hook={useHashLocation}>
       <Switch>
         <Route path="/" component={DashboardComponent} />
-        <Route path="/queue" component={isElectron ? Dashboard : DashboardComponent} />
-        <Route path="/settings" component={isElectron ? Dashboard : DashboardComponent} />
-        <Route path="/support" component={isElectron ? Dashboard : DashboardComponent} />
+        <Route path="/queue" component={isElectron() ? Dashboard : DashboardComponent} />
+        <Route path="/settings" component={isElectron() ? Dashboard : DashboardComponent} />
+        <Route path="/support" component={isElectron() ? Dashboard : DashboardComponent} />
         <Route>
           {() => {
             window.location.hash = '#/';
@@ -54,12 +55,8 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!window.electronAPI?.getSettings) {
-        if (!cancelled) setEulaGate('done');
-        return;
-      }
       try {
-        const s = await window.electronAPI.getSettings();
+        const s = await api.getSettings();
         const ok = Number((s as { eula_age_acknowledged?: number }).eula_age_acknowledged) === 1;
         if (!cancelled) setEulaGate(ok ? 'done' : 'show');
       } catch {
@@ -72,10 +69,10 @@ function App() {
   }, []);
 
   const handleEulaContinue = async () => {
-    if (!window.electronAPI?.saveSettings || !eulaChecked) return;
+    if (!eulaChecked) return;
     setEulaSaving(true);
     try {
-      await window.electronAPI.saveSettings({ eulaAgeAcknowledged: 1 });
+      await api.saveSettings({ eulaAgeAcknowledged: 1 });
       setEulaGate('done');
     } finally {
       setEulaSaving(false);
@@ -87,7 +84,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <Dialog open={eulaGate === 'show'} onOpenChange={() => {}}>
+          <Dialog open={eulaGate === 'show'} onOpenChange={() => { }}>
             <DialogContent
               className="[&>button]:hidden sm:max-w-md"
               onPointerDownOutside={(e) => e.preventDefault()}
@@ -104,7 +101,7 @@ function App() {
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline text-sm font-medium"
-                    onClick={() => window.electronAPI?.openExternal(EULA_URL)}
+                    onClick={() => api.openExternal(EULA_URL)}
                   >
                     Read the EULA
                     <ExternalLink className="h-3.5 w-3.5" />

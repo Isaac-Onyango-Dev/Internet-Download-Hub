@@ -198,6 +198,14 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
     import_electron.ipcRenderer.removeAllListeners("playlist-detected");
     import_electron.ipcRenderer.on("playlist-detected", (_event, data) => callback(data));
   },
+  onPlaylistVideoDetected: (callback) => {
+    import_electron.ipcRenderer.removeAllListeners("playlist-video-detected");
+    import_electron.ipcRenderer.on("playlist-video-detected", (_event, data) => callback(data));
+  },
+  onPlaylistDetectionComplete: (callback) => {
+    import_electron.ipcRenderer.removeAllListeners("playlist-detection-complete");
+    import_electron.ipcRenderer.on("playlist-detection-complete", (_event, data) => callback(data));
+  },
   /**
    * Adds multiple videos from a playlist to the download queue
    * @param entries - Array of playlist entries with URLs and metadata

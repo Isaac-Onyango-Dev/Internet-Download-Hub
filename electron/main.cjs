@@ -2230,7 +2230,7 @@ async function extractVideoInfo(url, paths) {
       import_electron_log.default.info(`[Extractor] Success with engine: ${engine}`);
       return result;
     } catch (err) {
-      import_electron_log.default.warn(`[Extractor] Engine ${engine} failed: ${err.message}`);
+      import_electron_log.default.warn(`[Extractor] Engine ${engine} failed: ${err instanceof Error ? err.message : String(err)}`);
       lastError = err;
     }
   }
@@ -2280,7 +2280,7 @@ async function runYtDlp(url, ytDlpPath2, cookiesFile) {
     });
     return parseYtDlpJsonStdout(result.stdout, url);
   } catch (err) {
-    const stderr = String(err.stderr ?? err.message ?? "");
+    const stderr = String(err.stderr ?? (err instanceof Error ? err.message : "") ?? "");
     if (isYouTubeUrl(url) && isLikelyYoutubeAgeRestrictionError(stderr)) {
       import_electron_log.default.info("[Extractor] Retrying yt-dlp info with youtube:player_client=tv_embedded");
       const result = await (0, import_execa.default)(ytDlpPath2, buildYtDlpJsonArgs(url, cookiesFile, "tv_embedded"), {
@@ -2485,7 +2485,7 @@ async function extractWithPlaywright(pageUrl, ytDlpPath2, cookiesFile) {
         console.log("[Playwright] Clicked play button:", selector);
         await page.waitForTimeout(3e3);
         break;
-      } catch (err) {
+      } catch {
         console.debug("[Playwright] Failed to click " + selector);
       }
     }
@@ -2561,7 +2561,7 @@ function parseYtDlpInfo(info, fallbackUrl) {
     ext: f.ext,
     filesize: f.filesize || f.filesize_approx || null,
     height: f.height
-  })).sort((a, b) => (b.height || 0) - (a.height || 0));
+  })).sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
   const seen = /* @__PURE__ */ new Set();
   const uniqueFormats = formats.filter((f) => {
     if (seen.has(f.height)) return false;

@@ -1,24 +1,23 @@
 import { useMutation } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 export interface DetectedVideoFormat {
   formatId: string;
   ext: string;
-  resolution: string;
-  filesize: number;
-  vcodec: string;
-  acodec: string;
+  label: string;
+  quality: string;
+  filesize: number | null;
+  height: number | null;
 }
 
 export interface DetectedVideo {
   url: string;
   title: string;
-  mimeType: string;
-  sourceType: 'yt-dlp';
   thumbnail?: string;
   duration?: number;
   uploader?: string;
-  description?: string;
   formats: DetectedVideoFormat[];
+  extractionMethod?: string;
 }
 
 export interface PlaylistData {
@@ -42,17 +41,14 @@ export interface VideoDetectResponse {
 export function useVideoDetect() {
   return useMutation<VideoDetectResponse, Error, string>({
     mutationFn: async (url: string) => {
-      if (!window.electronAPI) {
-        throw new Error('Electron API not available');
-      }
-      const result = await window.electronAPI.fetchVideoInfo(url);
+      const result = await api.fetchVideoInfo(url);
       if (!result.success) {
         throw new Error(result.error || 'Could not fetch video information.');
       }
       if (!result.data) {
         throw new Error('No video information was returned.');
       }
-      return { data: result.data, meta: (result as any).meta };
+      return { data: result.data, meta: result.meta };
     },
   });
 }

@@ -3,11 +3,14 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig(() => {
-  const isWeb = process.env.VITE_TARGET === 'web';
+  const target = process.env.VITE_TARGET; // 'web', 'gh-pages', or undefined (electron)
+  const isWeb = target === 'web' || target === 'gh-pages';
+  const isGHPages = target === 'gh-pages';
+
   return {
     // GitHub Pages web app uses the /Internet-Download-Hub/web/ route
     // The desktop app (Electron) uses local file paths (./)
-    base: isWeb ? '/Internet-Download-Hub/web/' : './',
+    base: isGHPages ? '/Internet-Download-Hub/web/' : './',
     plugins: [react()],
     resolve: {
       alias: {
@@ -18,7 +21,7 @@ export default defineConfig(() => {
     },
     root: path.resolve(import.meta.dirname, 'client'),
     build: {
-      outDir: isWeb 
+      outDir: isGHPages 
         ? path.resolve(import.meta.dirname, 'docs/web') 
         : path.resolve(import.meta.dirname, 'dist'),
       emptyOutDir: true,

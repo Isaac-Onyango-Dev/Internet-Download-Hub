@@ -4,29 +4,45 @@ import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
-
 import { fileURLToPath } from 'url';
 
 const execFileAsync = promisify(execFile);
-
 const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(cors());
 app.use(express.json());
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
+// ── Binary Path Logic ──────────────────────────────────────────────────────────
 function getYtDlpPath(): string {
   if (process.env.YTDLP_PATH) return process.env.YTDLP_PATH;
-  const local = path.resolve(__dirname, '../binaries/yt-dlp');
-  if (typeof fs !== 'undefined' && fs.existsSync(local)) return local;
-  return 'yt-dlp'; // assumes it is on PATH (installed by Dockerfile)
+  
+  // Try local binaries folder first
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+  const local = path.resolve(__dirname, '..', 'binaries', binName);
+  
+  if (fs.existsSync(local)) return local;
+  return binName; // Fallback to system PATH
+}
+
+function getFfmpegPath(): string {
+  if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
+  
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'ffmpeg.exe' : 'ffmpeg';
+  const local = path.resolve(__dirname, '..', 'binaries', binName);
+  
+  if (fs.existsSync(local)) return local;
+  return binName; // Fallback to system PATH
 }
 
 const YT_DLP = getYtDlpPath();
-const FFMPEG = 'ffmpeg';
-const UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const FFMPEG = getFfmpegPath();
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+console.log(`[Server] Using yt-dlp: ${YT_DLP}`);
+console.log(`[Server] Using ffmpeg: ${FFMPEG}`);
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '';
@@ -35,26 +51,30 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseYtDlpJson(info: any, fallbackUrl: string) {
   const resolvedUrl = info?.webpage_url || info?.url || info?.original_url || fallbackUrl;
 
   const formats = (info.formats || [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((f: any) => f.height && (f.acodec !== 'none' || f.vcodec !== 'none'))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((f: any) => ({
       formatId: f.format_id,
-      label: `${f.height}p ${f.ext?.toUpperCase() || ''} ${
-        f.filesize || f.filesize_approx
+      label: `${f.height}p ${f.ext?.toUpperCase() || ''} ${f.filesize || f.filesize_approx
           ? '(' + formatBytes(f.filesize || f.filesize_approx) + ')'
           : ''
-      }`.trim(),
+        }`.trim(),
       quality: `${f.height}p`,
       ext: f.ext,
       filesize: f.filesize || f.filesize_approx || null,
       height: f.height,
     }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
 
   const seen = new Set();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const uniqueFormats = formats.filter((f: any) => {
     if (seen.has(f.height)) return false;
     seen.add(f.height);
@@ -137,6 +157,7 @@ app.get('/api/video-info', async (req, res) => {
         collapsedToSingle: false,
       },
     });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error('[video-info] error:', err.message?.slice(0, 300));
     const msg = err.stderr?.slice(0, 300) || err.message || 'Failed to fetch video info';
@@ -159,7 +180,6 @@ app.get('/api/download', (req, res) => {
 
   res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
   res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
-  res.setHeader('Transfer-Encoding', 'chunked');
 
   let args: string[];
 
@@ -224,9 +244,6 @@ app.get('/api/download', (req, res) => {
 });
 
 // ── Cobalt proxy — handles JWT auth for web version ────────────────────────────
-// The web version cannot make direct Cobalt API calls because instances now require
-// JWT authentication. This proxy adds the necessary auth header and forwards requests.
-
 const COBALT_INSTANCES = [
   'https://cobalt-api.meowing.de',
   'https://api.cobalt.tools',
@@ -236,7 +253,6 @@ const COBALT_INSTANCES = [
 app.post('/api/cobalt', async (req, res) => {
   const body = req.body;
 
-  // Validate the request
   if (!body || typeof body !== 'object' || !body.url) {
     res.status(400).json({ error: { code: 'error.request.empty_url' } });
     return;
@@ -244,19 +260,17 @@ app.post('/api/cobalt', async (req, res) => {
 
   let lastError: unknown = null;
 
-  // Try each Cobalt instance with fallback
   for (const instance of COBALT_INSTANCES) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const response = await fetch(`${instance}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': UA,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -265,7 +279,6 @@ app.post('/api/cobalt', async (req, res) => {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.warn(`[Cobalt] Instance ${instance} returned ${response.status}`);
         lastError = new Error(`Instance ${instance} returned ${response.status}`);
         continue;
       }
@@ -274,15 +287,11 @@ app.post('/api/cobalt', async (req, res) => {
       res.json(data);
       return;
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      console.warn(`[Cobalt] Instance ${instance} failed: ${errMsg}`);
       lastError = err;
     }
   }
 
-  // All instances failed
   const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
-  console.error(`[Cobalt] All instances failed. Last error: ${finalMsg}`);
   res.status(503).json({
     status: 'error',
     error: { code: 'error.cobalt.unreachable', message: finalMsg },
@@ -294,13 +303,13 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, yt_dlp: YT_DLP });
 });
 
-// In production, serve the Vite-built frontend and handle client-side routing
+// In production, serve the Vite-built frontend
 const isProd = process.env.NODE_ENV === 'production';
 if (isProd) {
-  const appDistPath = path.resolve(process.cwd(), 'docs/app');
-  app.use(express.static(appDistPath));
+  const distPath = path.resolve(__dirname, '..', 'dist');
+  app.use(express.static(distPath));
   app.get('*', (_req, res) => {
-    res.sendFile(path.join(appDistPath, 'index.html'));
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 

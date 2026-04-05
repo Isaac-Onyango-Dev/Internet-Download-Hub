@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isElectron } from '@/lib/utils/env';
 
 const DOWNLOADS_KEY = ['/api/downloads'];
 
@@ -10,7 +11,7 @@ export function useDownloads() {
   return useQuery({
     queryKey: DOWNLOADS_KEY,
     queryFn: async () => {
-      if (!window.electronAPI) return [];
+      if (!isElectron()) return []; // Web version is currently stateless
       const downloads = await window.electronAPI.getDownloadHistory();
       return downloads.map((dl: any) => ({
         ...dl,
@@ -26,7 +27,7 @@ export function useDownloads() {
         completedAt: dl.completed_at ? new Date(dl.completed_at) : null,
       }));
     },
-    refetchInterval: 2000,
+    refetchInterval: isElectron() ? 2000 : false,
   });
 }
 
@@ -40,10 +41,27 @@ export function useCreateDownload() {
       savePath?: string;
       thumbnail?: string;
     }) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
-      return await window.electronAPI.startDownload(data);
+      // 1. Electron Path
+      if (isElectron()) {
+        return await window.electronAPI.startDownload(data);
+      }
+
+      // 2. Web Path: Trigger browser download via stream
+      const query = new URLSearchParams({
+        url: data.url,
+        formatId: data.formatId || 'bestvideo+bestaudio',
+        filename: data.filename
+      }).toString();
+      
+      // In a real web app, we redirect to the download endpoint which returns an attachment
+      window.location.href = `/api/download?${query}`;
+      return { success: true };
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
+    onSuccess: () => {
+      if (isElectron()) {
+        queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY });
+      }
+    },
   });
 }
 
@@ -51,7 +69,7 @@ export function useDeleteDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
+      if (!isElectron()) return;
       return await window.electronAPI.deleteDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -62,7 +80,7 @@ export function useCancelDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
+      if (!isElectron()) return;
       return await window.electronAPI.cancelDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -73,7 +91,7 @@ export function useRestartDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
+      if (!isElectron()) return;
       return await window.electronAPI.restartDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -84,7 +102,7 @@ export function usePauseDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
+      if (!isElectron()) return;
       return await window.electronAPI.pauseDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -95,7 +113,7 @@ export function useResumeDownload() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      if (!window.electronAPI) throw new Error('Electron API not available');
+      if (!isElectron()) return;
       return await window.electronAPI.resumeDownload(id);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),
@@ -106,7 +124,7 @@ export function useClearCompletedDownloads() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (type: 'all' | 'completed' | 'failed' = 'all') => {
-      if (!window.electronAPI) return;
+      if (!isElectron()) return;
       await window.electronAPI.clearHistory(type);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: DOWNLOADS_KEY }),

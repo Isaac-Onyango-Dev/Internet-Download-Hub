@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: internet-download-hub
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build:web
+    startCommand: npm run start:web
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+    autoDeploy: true
