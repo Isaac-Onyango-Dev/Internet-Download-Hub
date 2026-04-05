@@ -26,7 +26,7 @@ Internet Download Hub is a free Windows desktop application that lets you downlo
 
 A fully free web-based version of Internet Download Hub is available for quick downloads **without installation**.
 
-- **Web App**: [isaac-onyango-dev.github.io/Internet-Download-Hub/web](https://isaac-onyango-dev.github.io/Internet-Download-Hub/web/)
+- **Web App**: [internet-download-hub.onrender.com](https://internet-download-hub.onrender.com/)
 - **No installation required** — works directly in your browser
 - **Powered by Cobalt API** — supports YouTube, TikTok, Twitter, Instagram, and more
 - **Fully static** — operates locally in your browser with zero backend requirements
@@ -165,7 +165,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for g
 
 ## Support
 
-If you find this app useful please consider sharing it with others. Visit the [project website](https://isaac-onyango-dev.github.io/Internet-Download-Hub) to share or report issues.
+If you find this app useful please consider sharing it with others. Visit the [project website](https://internet-download-hub.onrender.com) to share or report issues.
 
 ## End-user agreement (EULA)
 
