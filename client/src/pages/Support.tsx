@@ -1,5 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import {
+  Share2,
+  Heart,
+  Link2,
+  Copy,
+  Check,
+  Github,
+  Star,
+  ExternalLink,
+  Send,
+  CreditCard,
+  Smartphone,
+  Globe,
+  Wallet,
+  AlertTriangle,
+  Megaphone,
+  PartyPopper,
+} from 'lucide-react';
 
 const APP_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub';
 const GITHUB_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub';
@@ -285,11 +306,16 @@ export default function Support() {
   );
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6">
+    <div className="flex-1 overflow-y-auto bg-background p-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground mb-2">Support Internet Download Hub</h1>
-        <p className="text-muted-foreground text-sm leading-relaxed">
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20">
+            <Heart className="h-6 w-6 text-primary" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground">Support Internet Download Hub</h1>
+        </div>
+        <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl">
           This app is built and maintained by one developer. Your support — whether sharing it with
           others or making a donation — directly helps keep it free, updated, and improving. Thank
           you for using it.
@@ -297,267 +323,224 @@ export default function Support() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-2 mb-6 bg-gray-800 p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setActiveTab('share')}
-          className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${
-            activeTab === 'share'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          📢 Share App
-        </button>
-        <button
-          onClick={() => setActiveTab('support')}
-          className={`px-5 py-2 rounded-md text-sm font-semibold transition-all ${
-            activeTab === 'support'
-              ? 'bg-blue-600 text-white shadow'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          ❤️ Support with Donation
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'share' | 'support')} className="mb-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="share" className="gap-2">
+            <Megaphone className="h-4 w-4" />
+            Share App
+          </TabsTrigger>
+          <TabsTrigger value="support" className="gap-2">
+            <Heart className="h-4 w-4" />
+            Donate
+          </TabsTrigger>
+        </TabsList>
 
-      {/* ── SHARE TAB ────────────────────────────────────────── */}
-      {activeTab === 'share' && (
-        <div className="space-y-6">
+        {/* ── SHARE TAB ────────────────────────────────────────── */}
+        <TabsContent value="share" className="space-y-6 mt-6">
           {/* What you are sharing */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-            <p className="text-xs text-gray-500 uppercase font-semibold mb-2 tracking-wide">
-              What will be shared
-            </p>
-            <p className="text-gray-300 text-sm leading-relaxed">{SHARE_TEXT}</p>
-            <p className="text-blue-400 text-sm mt-2 break-all">{APP_URL}</p>
-          </div>
+          <Card className="border-border/50">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground uppercase font-semibold mb-2 tracking-wide">
+                What will be shared
+              </p>
+              <p className="text-foreground/90 text-sm leading-relaxed">{SHARE_TEXT}</p>
+              <p className="text-primary/80 text-sm mt-2 break-all font-mono text-xs bg-muted/50 px-3 py-2 rounded-md">{APP_URL}</p>
+            </CardContent>
+          </Card>
 
           {/* Native share — only show if supported */}
           {nativeShareSupported && (
-            <button
-              onClick={handleNativeShare}
-              className="w-full flex items-center justify-center gap-3 bg-blue-600
-                         hover:bg-blue-500 text-white font-semibold py-3 px-6
-                         rounded-xl transition-colors"
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
+            <Button onClick={handleNativeShare} className="w-full gap-2 h-11" size="default">
+              <Share2 className="h-4 w-4" />
               Share via System Share Menu
-            </button>
+            </Button>
           )}
 
           {/* Share platforms grid */}
           <div>
-            <p className="text-xs text-gray-500 uppercase font-semibold mb-3 tracking-wide">
+            <p className="text-xs text-muted-foreground uppercase font-semibold mb-3 tracking-wide">
               Share on a platform
             </p>
             <div className="grid grid-cols-2 gap-2">
               {SHARE_PLATFORMS.map((platform) => (
-                <button
+                <Button
                   key={platform.id}
                   onClick={() => handleShare(platform)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl
-                             font-semibold text-sm transition-all
-                             hover:opacity-85 hover:scale-[1.02] active:scale-[0.98]"
+                  className="flex items-center gap-2.5 h-11 font-semibold text-sm transition-all
+                             hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
                   style={{
                     backgroundColor: platform.color,
                     color: platform.textColor,
                   }}
-                  dangerouslySetInnerHTML={{
-                    __html: `${platform.icon}<span>${platform.name}</span>`,
-                  }}
-                />
+                >
+                  <span dangerouslySetInnerHTML={{ __html: platform.icon }} className="shrink-0" />
+                  <span className="truncate">{platform.name}</span>
+                </Button>
               ))}
             </div>
           </div>
 
           {/* Copy options */}
           <div>
-            <p className="text-xs text-gray-500 uppercase font-semibold mb-3 tracking-wide">
+            <p className="text-xs text-muted-foreground uppercase font-semibold mb-3 tracking-wide">
               Copy to clipboard
             </p>
             <div className="flex flex-col gap-2">
-              <button
+              <Button
                 onClick={handleCopyLink}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl
-                           bg-gray-700 hover:bg-gray-600 text-white
-                           font-semibold text-sm transition-colors"
+                variant="outline"
+                className="gap-2 h-11"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                </svg>
-                {copiedId === 'link' ? '✅ Link Copied!' : 'Copy App Link'}
-              </button>
-              <button
+                {copiedId === 'link' ? <Check className="h-4 w-4 text-green-500" /> : <Link2 className="h-4 w-4" />}
+                {copiedId === 'link' ? 'Link Copied!' : 'Copy App Link'}
+              </Button>
+              <Button
                 onClick={handleCopyMessage}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl
-                           bg-gray-700 hover:bg-gray-600 text-white
-                           font-semibold text-sm transition-colors"
+                variant="outline"
+                className="gap-2 h-11"
               >
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                {copiedId === 'message' ? '✅ Message Copied!' : 'Copy Share Message'}
-              </button>
+                {copiedId === 'message' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copiedId === 'message' ? 'Message Copied!' : 'Copy Share Message'}
+              </Button>
             </div>
           </div>
 
           {/* GitHub star */}
-          <div
-            className="bg-gray-800 border border-gray-700 rounded-xl p-4
-                          flex items-center justify-between gap-4"
-          >
-            <div>
-              <p className="text-white font-semibold text-sm">⭐ Star on GitHub</p>
-              <p className="text-gray-400 text-xs mt-1">
-                Starring helps others discover the project
-              </p>
-            </div>
-            <button
-              onClick={handleGitHubSponsors}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg
-                         bg-gray-700 hover:bg-gray-600 text-white
-                         text-sm font-semibold transition-colors whitespace-nowrap"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-              </svg>
-              Star on GitHub
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── DONATION TAB ──────────────────────────────────────── */}
-      {activeTab === 'support' && (
-        <div className="space-y-6">
-          <div className="bg-amber-900 border border-amber-700 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🚧</span>
+          <Card className="border-border/50">
+            <CardContent className="p-4 flex items-center justify-between gap-4">
               <div>
-                <p className="text-amber-200 font-semibold text-sm">Donation Support Coming Soon</p>
-                <p className="text-amber-300 text-xs mt-1 leading-relaxed">
-                  Payment integrations are currently under development. All options below will be
-                  fully active in a future update. In the meantime, sharing the app is the best way
-                  to help.
+                <p className="text-foreground font-semibold text-sm flex items-center gap-2">
+                  <Star className="h-4 w-4 text-yellow-500" />
+                  Star on GitHub
+                </p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  Starring helps others discover the project
                 </p>
               </div>
-            </div>
-          </div>
+              <Button
+                onClick={handleGitHubSponsors}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <Github className="h-4 w-4" />
+                Star
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── DONATION TAB ──────────────────────────────────────── */}
+        <TabsContent value="support" className="space-y-6 mt-6">
+          <Card className="border-amber-500/30 bg-amber-500/10">
+            <CardContent className="pt-5">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/20 shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-amber-200 font-semibold text-sm">Donation Support Coming Soon</p>
+                  <p className="text-amber-300/90 text-xs mt-1 leading-relaxed">
+                    Payment integrations are currently under development. All options below will be
+                    fully active in a future update. In the meantime, sharing the app is the best way
+                    to help.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Payment options grouped by region */}
           {Object.entries(paymentByRegion).map(([region, options]) => (
             <div key={region}>
-              <p className="text-xs text-gray-500 uppercase font-semibold mb-3 tracking-wide">
+              <p className="text-xs text-muted-foreground uppercase font-semibold mb-3 tracking-wide flex items-center gap-2">
                 {region === 'Kenya'
-                  ? '🇰🇪 Kenya — Mobile Money'
+                  ? 'Kenya — Mobile Money'
                   : region === 'Africa'
-                    ? '🌍 Africa — Cards and Mobile Money'
+                    ? 'Africa — Cards and Mobile Money'
                     : region === 'International'
-                      ? '🌐 International'
-                      : '₿ Cryptocurrency'}
+                      ? 'International'
+                      : 'Cryptocurrency'}
               </p>
               <div className="grid grid-cols-1 gap-2">
                 {options.map((option) => (
-                  <button
+                  <Card
                     key={option.id}
+                    className="border-border/50 hover:border-primary/50 transition-all cursor-pointer group"
                     onClick={() => handlePaymentClick(option)}
-                    className="flex items-center gap-4 px-4 py-3 rounded-xl
-                               bg-gray-800 border border-gray-700
-                               hover:border-gray-500 text-white
-                               transition-all text-left group"
                   >
-                    <span className="text-2xl">{option.icon}</span>
-                    <div className="flex-1">
-                      <p className="font-semibold text-sm text-white">{option.name}</p>
-                      <p className="text-gray-400 text-xs">{option.description}</p>
-                    </div>
-                    <span
-                      className="text-xs text-amber-400 font-medium
-                                     bg-amber-900 border border-amber-700
-                                     px-2 py-1 rounded-full whitespace-nowrap"
-                    >
-                      Coming Soon
-                    </span>
-                  </button>
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="p-2.5 rounded-xl bg-primary/10 shrink-0">
+                        {option.id.includes('mpesa') || option.id.includes('airtel') ? (
+                          <Smartphone className="h-5 w-5 text-primary" />
+                        ) : option.id.includes('paypal') || option.id.includes('card') ? (
+                          <CreditCard className="h-5 w-5 text-primary" />
+                        ) : option.id.includes('crypto') || option.id.includes('bitcoin') ? (
+                          <Wallet className="h-5 w-5 text-primary" />
+                        ) : (
+                          <Globe className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-foreground">{option.name}</p>
+                        <p className="text-muted-foreground text-xs">{option.description}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        Coming Soon
+                      </Badge>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </div>
           ))}
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
 
       {/* ── UNDER DEVELOPMENT MODAL ───────────────────────────── */}
       {showUnderDev && selectedPayment && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-70 z-50
-                     flex items-center justify-center p-6"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowUnderDev(false);
           }}
         >
           <div
-            className="bg-gray-800 border border-gray-700 rounded-2xl
-                          p-8 max-w-sm w-full text-center shadow-2xl"
+            className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="text-5xl mb-4">🚧</div>
-            <h3 className="text-white font-bold text-lg mb-2">
+            <div className="p-3 rounded-xl bg-amber-500/20 w-fit mx-auto mb-4">
+              <AlertTriangle className="h-8 w-8 text-amber-500" />
+            </div>
+            <h3 className="text-foreground font-bold text-lg mb-2">
               {selectedPayment.name} — Coming Soon
             </h3>
-            <p className="text-gray-400 text-sm leading-relaxed mb-6">
+            <p className="text-muted-foreground text-sm leading-relaxed mb-6">
               {selectedPayment.name} support is currently under development and will be available in
               a future update. Thank you for your patience and willingness to support the project.
             </p>
-            <p className="text-gray-500 text-xs mb-6">
+            <p className="text-muted-foreground/70 text-xs mb-6">
               In the meantime, sharing the app with others is the most powerful way to support its
               growth — and it is completely free.
             </p>
             <div className="flex flex-col gap-3">
-              <button
+              <Button
                 onClick={() => {
                   setShowUnderDev(false);
                   setActiveTab('share');
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white
-                           font-semibold py-3 rounded-xl transition-colors"
+                className="w-full"
               >
+                <Megaphone className="h-4 w-4 mr-2" />
                 Share App Instead
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setShowUnderDev(false)}
-                className="w-full bg-gray-700 hover:bg-gray-600 text-white
-                           font-semibold py-3 rounded-xl transition-colors"
+                variant="outline"
+                className="w-full"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>

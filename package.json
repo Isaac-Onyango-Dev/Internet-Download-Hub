@@ -1,6 +1,6 @@
 {
   "name": "internet-download-hub",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "A free desktop app to download videos from YouTube, Twitter, TikTok, Instagram, and 1000+ other sites",
   "author": {
     "name": "Isaac Onyango",
@@ -25,7 +25,7 @@
     "dev:web": "concurrently \"cross-env VITE_TARGET=web vite\" \"tsx watch server/index.ts\"",
     "build:web": "cross-env VITE_TARGET=web vite build && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express",
     "build:gh-pages": "cross-env VITE_TARGET=gh-pages vite build",
-    "start:web": "NODE_ENV=production node dist/server.js",
+    "start:web": "cross-env NODE_ENV=production node dist/server.js",
     "dev": "npx kill-port 5173 5005 && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron && concurrently --kill-others-on-fail \"vite\" \"npm run dev:main && wait-on http://localhost:5173 && tsx scripts/dev-electron.ts\"",
     "build": "tsx scripts/build.ts && electron-builder build",
     "setup:binaries": "tsx scripts/download-binaries.ts",
@@ -106,7 +106,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
+    "cross-env": "^7.0.3",
     "date-fns": "^3.6.0",
     "electron": "^41.0.2",
     "electron-builder": "^26.8.1",

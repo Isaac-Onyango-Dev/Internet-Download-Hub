@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { LayoutShell } from '@/components/layout-shell';
-import { cn } from '@/lib/utils';
 import { webAPI } from '@/lib/web-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +15,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     Download,
     AlertCircle,
-    Check,
-    Copy,
     ExternalLink,
     Trash2,
     Download as DownloadIcon,
@@ -84,7 +81,7 @@ export default function DashboardWeb() {
         } finally {
             setIsLoading(false);
         }
-    });
+    }, [urlInput]);
 
     const handleDownload = useCallback(async () => {
         if (!videoInfo) return;
@@ -125,14 +122,14 @@ export default function DashboardWeb() {
         } finally {
             setIsDownloading(false);
         }
-    });
+    }, [videoInfo, urlInput, selectedFormat, recentDownloads]);
 
     const handleClearHistory = useCallback(() => {
         if (confirm('Clear download history?')) {
             setRecentDownloads([]);
             localStorage.removeItem(WEB_DOWNLOADS_KEY);
         }
-    });
+    }, []);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !isLoading && !videoInfo) {
@@ -148,7 +145,7 @@ export default function DashboardWeb() {
                     <Download className="h-4 w-4" />
                     <AlertTitle>Web Version</AlertTitle>
                     <AlertDescription>
-                        Files download directly to your browser's Downloads folder. No installation needed — works in any browser.
+                        Files download directly to your browser&apos;s Downloads folder. No installation needed — works in any browser.
                         Supports YouTube, TikTok, Twitter, Instagram, Reddit, and 50+ other sites.
                     </AlertDescription>
                 </Alert>
@@ -336,7 +333,7 @@ export default function DashboardWeb() {
                             </div>
                         </div>
                         <Button variant="outline" className="w-full mt-4" asChild>
-                            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" target="_blank">
+                            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" target="_blank" rel="noreferrer">
                                 <ExternalLink className="h-4 w-4 mr-2" />
                                 Download Desktop Version
                             </a>

@@ -6,6 +6,7 @@ import { useVideoDetect, type DetectedVideo } from '@/hooks/use-video-detect';
 import {
   PlaylistDialog,
   type PlaylistEntry,
+  type PlaylistDialogData,
 } from '@/components/playlist-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ import {
   Clock,
   X,
   ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react';
 import Support from '@/pages/Support';
 import { Card, CardContent } from '@/components/ui/card';
@@ -212,11 +214,7 @@ export default function Dashboard() {
           <TabsContent value="settings" className="focus-visible:outline-none">
             {renderedTabs.has('settings') && (
               <ErrorBoundary>
-                <SettingsPanel
-                  setSuccessMsg={setSuccessMsg}
-                  onGoToQueue={() => handleTabChange('queue')}
-                  onError={(err) => setGlobalError(err)}
-                />
+                <SettingsPanel />
               </ErrorBoundary>
             )}
           </TabsContent>
@@ -243,8 +241,8 @@ interface VideoInfoProps {
   onError: (err: { message: string }) => void;
   scanUrl: string;
   setScanUrl: (url: string) => void;
-  videoInfo: DetectedVideo[];
-  setVideoInfo: (info: DetectedVideo[]) => void;
+  videoInfo: DetectedVideo[] | null;
+  setVideoInfo: (info: DetectedVideo[] | null) => void;
   showUpdateBanner: boolean;
   ytdlpLatestVersion: string;
   onDismissBanner: () => void;
@@ -312,11 +310,9 @@ function VideoCapturePanel({
     if (!window.electronAPI) return;
 
     window.electronAPI.onPlaylistVideoDetected?.((data: { video: DetectedVideo; index: number; total: number }) => {
-      setVideoInfo((prev: DetectedVideo[]) => {
-        const arr = prev || [];
-        if (arr.some((v: DetectedVideo) => v.url === data.video.url && v.title === data.video.title)) return arr;
-        return [...arr, data.video];
-      });
+      const currentVideoInfo = videoInfo || [];
+      if (currentVideoInfo.some((v: DetectedVideo) => v.url === data.video.url && v.title === data.video.title)) return;
+      setVideoInfo([...currentVideoInfo, data.video]);
     });
 
     window.electronAPI.onPlaylistDetectionComplete?.((metadata: { title: string; count: number }) => {
