@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-04-07
+
+### Fixed
+
+- **TypeScript Compilation**: Resolved all 29 TypeScript errors across 5 files (calendar, chart, resizable, Dashboard, DashboardWeb)
+- **ESLint Errors**: Fixed all 5 blocking ESLint errors and reduced warnings from 162 to 158
+- **react-day-picker v9**: Updated calendar component API from deprecated `IconLeft`/`IconRight` to `Chevron`
+- **react-resizable-panels v4**: Migrated from `PanelGroup`/`PanelResizeHandle` to `Group`/`Separator`
+- **recharts v3**: Fixed tooltip component type compatibility with explicit prop interfaces
+- **DashboardWeb.tsx**: Added missing dependency arrays to all `useCallback` hooks
+- **Security**: Added `rel="noreferrer"` to external `target="_blank"` links
+- **Windows Compatibility**: Fixed `start:web` script to use `cross-env` for NODE_ENV
+- **Build Configuration**: Moved `tsBuildInfoFile` out of `node_modules` to prevent loss on reinstall
+- **cross-env Version**: Corrected from non-existent v10.1.0 to stable v7.0.3
+
+### Added
+
+- **Professional UI/UX**: Complete design system polish across all pages
+- **Support Page Overhaul**: 
+  - Replaced emoji icons with Lucide components
+  - Added proper Tabs component with Share/Donate sections
+  - Improved platform share buttons with brand colors
+  - Enhanced payment options with Card components and icon mapping
+  - Professional modal for "Coming Soon" features
+- **Sidebar Enhancements**:
+  - Version badge display (v1.1.2)
+  - Active state indicators with left border accent
+  - Hover animations with icon scale transitions
+  - Footer with web version link and copyright
+- **404 Page Redesign**: 
+  - Large "404" watermark
+  - Professional icon and messaging
+  - Dual action buttons (Go Back / Return to App)
+  - Entrance animation
+- **Design Token Consistency**: Replaced all hardcoded colors with CSS variables
+- **Page Entrance Animations**: Added fade-in transitions to all major pages
+- **Card Component Usage**: Standardized card styling across Support and Settings pages
+
+### Changed
+
+- **Import Cleanup**: Removed 12+ unused imports across multiple files
+- **Button Standardization**: Consistent sizing and styling using shadcn variants
+- **Color System**: All gray-* values replaced with muted/card/foreground tokens
+- **Typography**: Improved hierarchy and consistency
+- **Spacing**: Standardized padding and margins
+
+### Improved
+
+- **Developer Experience**: Clean TypeScript build with zero errors
+- **Code Quality**: Proper type annotations throughout
+- **Maintainability**: Consistent design system usage
+- **Accessibility**: Better contrast ratios and semantic HTML
+
 ## [Unreleased] - Web Version Updates
 
 ### Added
