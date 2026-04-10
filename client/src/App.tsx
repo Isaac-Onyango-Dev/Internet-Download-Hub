@@ -54,11 +54,13 @@ function NavigationRouter() {
 }
 
 function App() {
-  const [eulaGate, setEulaGate] = useState<'loading' | 'show' | 'done'>('loading');
+  const isDesktop = isElectron();
+  const [eulaGate, setEulaGate] = useState<'loading' | 'show' | 'done'>(isDesktop ? 'loading' : 'done');
   const [eulaChecked, setEulaChecked] = useState(false);
   const [eulaSaving, setEulaSaving] = useState(false);
 
   useEffect(() => {
+    if (!isDesktop) return; // EULA only applies to desktop
     let cancelled = false;
     (async () => {
       try {
@@ -72,7 +74,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDesktop]);
 
   const handleEulaContinue = async () => {
     if (!eulaChecked) return;
