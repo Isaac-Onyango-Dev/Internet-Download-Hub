@@ -3,6 +3,8 @@
 // electron/preload.ts
 var import_electron = require("electron");
 import_electron.contextBridge.exposeInMainWorld("electronAPI", {
+  // ── Runtime detection flag (hidden marker, not exposed in TypeScript types) ──
+  __isElectron: true,
   // ============================================================================
   // VIDEO INFORMATION EXTRACTION
   // ============================================================================

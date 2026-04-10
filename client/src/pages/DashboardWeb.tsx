@@ -1,346 +1,448 @@
-import { useState, useCallback } from 'react';
-import { LayoutShell } from '@/components/layout-shell';
-import { webAPI } from '@/lib/web-api';
+import { useState, useCallback, useEffect } from 'react';
+import * as React from 'react';
+import { Link } from 'wouter';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
-    Download,
-    AlertCircle,
-    ExternalLink,
-    Trash2,
-    Download as DownloadIcon,
-    Clock,
-    Loader2,
+  AlertCircle,
+  Download,
+  ExternalLink,
+  Clock,
+  Loader2,
+  Trash2,
+  Globe,
+  Video,
+  Shield,
+  Zap,
 } from 'lucide-react';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface VideoFormat {
+  formatId: string;
+  label: string;
+  quality: string;
+  ext: string;
+  filesize?: number | null;
+}
+
 interface VideoInfo {
-    url: string;
-    title: string;
-    thumbnail?: string;
-    formats: Array<{
-        formatId: string;
-        label: string;
-        quality: string;
-        ext: string;
-    }>;
+  url: string;
+  title: string;
+  thumbnail?: string;
+  duration?: number;
+  uploader?: string;
+  formats: VideoFormat[];
 }
 
 interface DownloadRecord {
-    id: string;
-    title: string;
-    filename: string;
-    timestamp: number;
+  id: string;
+  title: string;
+  url: string;
+  quality: string;
+  timestamp: number;
 }
 
-const WEB_DOWNLOADS_KEY = 'idh_web_downloads';
+const WEB_DOWNLOADS_KEY = 'idh_web_downloads_v2';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function isValidUrl(str: string): boolean {
+  try {
+    const url = new URL(str.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(1)} GB`;
+  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
+
+function loadRecentDownloads(): DownloadRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(WEB_DOWNLOADS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentDownloads(records: DownloadRecord[]) {
+  localStorage.setItem(WEB_DOWNLOADS_KEY, JSON.stringify(records.slice(0, 10)));
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function DashboardWeb() {
-    const [urlInput, setUrlInput] = useState('');
-    const [selectedFormat, setSelectedFormat] = useState('best-video');
-    const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isDownloading, setIsDownloading] = useState(false);
-    const [recentDownloads, setRecentDownloads] = useState<DownloadRecord[]>(() => {
-        try {
-            return JSON.parse(localStorage.getItem(WEB_DOWNLOADS_KEY) || '[]');
-        } catch {
-            return [];
-        }
-    });
+  const [urlInput, setUrlInput] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('');
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [recentDownloads, setRecentDownloads] = useState<DownloadRecord[]>(loadRecentDownloads);
 
-    const handleFetchInfo = useCallback(async () => {
-        if (!urlInput.trim()) {
-            setError('Please enter a video URL');
-            return;
-        }
+  // Focus URL input on mount
+  const urlInputRef = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    urlInputRef.current?.focus();
+  }, []);
 
-        setIsLoading(true);
-        setError(null);
-        setVideoInfo(null);
+  // ── Fetch video info ────────────────────────────────────────────────────
+  const handleFetchInfo = useCallback(async () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      setError('Please paste a video URL.');
+      return;
+    }
+    if (!isValidUrl(trimmed)) {
+      setError("That doesn't look like a valid URL. Paste a link starting with http:// or https://");
+      return;
+    }
 
-        try {
-            const response = await webAPI.fetchVideoInfo(urlInput);
-            // Handle the response structure: { success: true, data: videoInfo, meta: {...} }
-            const videoData = response.data || response;
-            setVideoInfo(videoData);
-            setSelectedFormat('best-video');
-        } catch (err: unknown) {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            setError(errorMsg);
-            setVideoInfo(null);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [urlInput]);
+    setIsLoading(true);
+    setError(null);
+    setVideoInfo(null);
+    setSelectedFormat('');
 
-    const handleDownload = useCallback(async () => {
-        if (!videoInfo) return;
+    try {
+      const response = await api.fetchVideoInfo(trimmed);
+      if (!response?.success) {
+        throw new Error(response?.error || 'Could not fetch video information.');
+      }
+      const data = response.data as VideoInfo;
+      if (!data?.formats || data.formats.length === 0) {
+        throw new Error('No downloadable formats found for this video.');
+      }
+      setVideoInfo(data);
+      setSelectedFormat(data.formats[0].formatId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      setVideoInfo(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [urlInput]);
 
-        setIsDownloading(true);
-        setError(null);
+  // ── Download ─────────────────────────────────────────────────────────────
+  const handleDownload = useCallback(async () => {
+    if (!videoInfo || !selectedFormat) return;
 
-        try {
-            const ext = videoInfo.formats.find(f => f.formatId === selectedFormat)?.ext || 'mp4';
-            const filename = `${videoInfo.title.replace(/[^a-z0-9]/gi, '_').slice(0, 50)}.${ext}`;
+    setIsDownloading(true);
+    setError(null);
 
-            await webAPI.startDownload({
-                url: urlInput,
-                filename,
-                formatId: selectedFormat,
-            });
+    try {
+      const fmt = videoInfo.formats.find(f => f.formatId === selectedFormat);
+      const ext = fmt?.ext || 'mp4';
+      const cleanTitle = videoInfo.title.replace(/[^a-z0-9]/gi, '_').slice(0, 60);
+      const filename = `${cleanTitle}.${ext}`;
 
-            // Add to recent downloads
-            const newRecord: DownloadRecord = {
-                id: Date.now().toString(),
-                title: videoInfo.title,
-                filename,
-                timestamp: Date.now(),
-            };
+      await api.startDownload({
+        url: videoInfo.url,
+        filename,
+        formatId: selectedFormat,
+      });
 
-            const updated = [newRecord, ...recentDownloads].slice(0, 10);
-            setRecentDownloads(updated);
-            localStorage.setItem(WEB_DOWNLOADS_KEY, JSON.stringify(updated));
+      // Record in recent downloads
+      const record: DownloadRecord = {
+        id: Date.now().toString(),
+        title: videoInfo.title,
+        url: videoInfo.url,
+        quality: fmt?.label || selectedFormat,
+        timestamp: Date.now(),
+      };
+      const updated = [record, ...recentDownloads];
+      setRecentDownloads(updated);
+      saveRecentDownloads(updated);
 
-            // Reset form
-            setUrlInput('');
-            setVideoInfo(null);
+      // Reset
+      setUrlInput('');
+      setVideoInfo(null);
+      setSelectedFormat('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`Download failed: ${msg}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [videoInfo, selectedFormat, recentDownloads]);
 
-            setError(null);
-        } catch (err: unknown) {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            setError(errorMsg);
-        } finally {
-            setIsDownloading(false);
-        }
-    }, [videoInfo, urlInput, selectedFormat, recentDownloads]);
+  // ── Clear history ───────────────────────────────────────────────────────
+  const handleClearHistory = useCallback(() => {
+    setRecentDownloads([]);
+    localStorage.removeItem(WEB_DOWNLOADS_KEY);
+  }, []);
 
-    const handleClearHistory = useCallback(() => {
-        if (confirm('Clear download history?')) {
-            setRecentDownloads([]);
-            localStorage.removeItem(WEB_DOWNLOADS_KEY);
-        }
-    }, []);
+  // ── Enter key ───────────────────────────────────────────────────────────
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isLoading && !videoInfo) handleFetchInfo();
+  };
 
-    const handleKeyPress = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !isLoading && !videoInfo) {
-            handleFetchInfo();
-        }
-    };
+  const fmt = videoInfo?.formats.find(f => f.formatId === selectedFormat);
 
-    return (
-        <LayoutShell>
-            <div className="max-w-4xl mx-auto space-y-6 py-6">
-                {/* Info Banner */}
-                <Alert className="border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100">
-                    <Download className="h-4 w-4" />
-                    <AlertTitle>Web Version</AlertTitle>
-                    <AlertDescription>
-                        Files download directly to your browser&apos;s Downloads folder. No installation needed — works in any browser.
-                        Supports YouTube, TikTok, Twitter, Instagram, Reddit, and 50+ other sites.
-                    </AlertDescription>
-                </Alert>
+  // ── Render ──────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-background">
+      {/* ── Top Bar ─────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <Globe className="h-5 w-5 text-primary" />
+            <span className="font-bold text-foreground">Internet Download Hub</span>
+            <Badge variant="secondary" className="text-xs">Web</Badge>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/supported-sites">
+              <a className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Supported Sites
+              </a>
+            </Link>
+            <a
+              href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Get Desktop App
+            </a>
+          </div>
+        </div>
+      </header>
 
-                {/* Main Download Card */}
-                <Card>
-                    <CardContent className="p-6 space-y-4">
-                        {/* URL Input */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Video URL</label>
-                            <div className="flex gap-2">
-                                <Input
-                                    placeholder="Paste YouTube, TikTok, Twitter, or other video link..."
-                                    value={urlInput}
-                                    onChange={e => setUrlInput(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    disabled={isLoading || isDownloading}
-                                    className="flex-1"
-                                />
-                                <Button
-                                    onClick={handleFetchInfo}
-                                    disabled={isLoading || !urlInput.trim()}
-                                    className="min-w-32"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Getting Info...
-                                        </>
-                                    ) : (
-                                        'Get Info'
-                                    )}
-                                </Button>
-                            </div>
-                        </div>
+      {/* ── Main Content ────────────────────────────────────────────────── */}
+      <main className="mx-auto max-w-2xl px-6 py-12 space-y-8">
 
-                        {/* Error Message */}
-                        {error && (
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Error</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
+        {/* ── Hero ────────────────────────────────────────────────────── */}
+        <div className="text-center space-y-4">
+          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
+            Download any video, <span className="text-primary">instantly</span>
+          </h1>
+          <p className="text-muted-foreground text-lg max-w-md mx-auto">
+            Paste a link. Pick your quality. The file downloads to your browser.
+          </p>
+        </div>
 
-                        {/* Video Info */}
-                        {videoInfo && (
-                            <div className="space-y-4">
-                                {/* Thumbnail */}
-                                {videoInfo.thumbnail && (
-                                    <div className="relative overflow-hidden rounded-lg bg-muted">
-                                        <img
-                                            src={videoInfo.thumbnail}
-                                            alt={videoInfo.title}
-                                            className="w-full h-auto max-h-64 object-cover"
-                                        />
-                                    </div>
-                                )}
+        {/* ── URL Input ───────────────────────────────────────────────── */}
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              ref={urlInputRef}
+              placeholder="Paste YouTube, TikTok, Twitter, Instagram, or any video link…"
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading || isDownloading}
+              className="h-12 text-base flex-1"
+            />
+            <Button
+              onClick={handleFetchInfo}
+              disabled={isLoading || !urlInput.trim()}
+              className="h-12 px-6 min-w-28"
+              size="lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Fetching…
+                </>
+              ) : (
+                'Get Info'
+              )}
+            </Button>
+          </div>
+        </div>
 
-                                {/* Title */}
-                                <div>
-                                    <p className="font-semibold text-lg line-clamp-2">{videoInfo.title}</p>
-                                </div>
+        {/* ── Error ───────────────────────────────────────────────────── */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-                                {/* Quality Selection */}
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Download Quality</label>
-                                    <Select value={selectedFormat} onValueChange={setSelectedFormat}>
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {videoInfo.formats.map(fmt => (
-                                                <SelectItem key={fmt.formatId} value={fmt.formatId}>
-                                                    {fmt.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+        {/* ── Video Info Card ─────────────────────────────────────────── */}
+        {videoInfo && (
+          <div className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm">
+            {/* Thumbnail */}
+            {videoInfo.thumbnail && (
+              <div className="overflow-hidden rounded-lg bg-muted">
+                <img
+                  src={videoInfo.thumbnail}
+                  alt=""
+                  className="w-full aspect-video object-cover"
+                  loading="lazy"
+                />
+              </div>
+            )}
 
-                                {/* Download Button */}
-                                <Button
-                                    onClick={handleDownload}
-                                    disabled={isDownloading}
-                                    size="lg"
-                                    className="w-full"
-                                >
-                                    {isDownloading ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Downloading...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Download className="h-4 w-4 mr-2" />
-                                            Download to Browser
-                                        </>
-                                    )}
-                                </Button>
-
-                                {/* Info Text */}
-                                <p className="text-xs text-muted-foreground">
-                                    📥 File will appear in your Downloads folder (typically: {'\u007E'}/Downloads)
-                                </p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Recent Downloads */}
-                {recentDownloads.length > 0 && (
-                    <Card>
-                        <CardContent className="p-6 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <Clock className="h-5 w-5" />
-                                    <h3 className="font-semibold">Recent Downloads</h3>
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleClearHistory}
-                                    className="text-destructive hover:bg-destructive/10"
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Clear
-                                </Button>
-                            </div>
-
-                            <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {recentDownloads.map(record => (
-                                    <div
-                                        key={record.id}
-                                        className="flex items-center gap-3 p-3 rounded-lg border bg-muted/50 hover:bg-muted transition-colors"
-                                    >
-                                        <DownloadIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">{record.title}</p>
-                                            <p className="text-xs text-muted-foreground truncate">{record.filename}</p>
-                                        </div>
-                                        <div className="text-xs text-muted-foreground shrink-0">
-                                            {new Date(record.timestamp).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                            })}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                {/* Browser Support Info */}
-                <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Supported Browsers</AlertTitle>
-                    <AlertDescription>
-                        Chrome, Firefox, Safari, and Edge. Works best on desktop. Mobile browsers may have download limitations
-                        depending on your device.
-                    </AlertDescription>
-                </Alert>
-
-                {/* Why Web Version */}
-                <Card className="bg-muted/50">
-                    <CardContent className="p-6 space-y-3">
-                        <h4 className="font-semibold">Web vs Desktop Version</h4>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <p className="font-medium text-green-700 dark:text-green-400">✓ Web Version</p>
-                                <ul className="text-muted-foreground space-y-1 mt-2">
-                                    <li>• No installation needed</li>
-                                    <li>• Works everywhere</li>
-                                    <li>• Instant access</li>
-                                </ul>
-                            </div>
-                            <div>
-                                <p className="font-medium text-blue-700 dark:text-blue-400">⚡ Desktop Version</p>
-                                <ul className="text-muted-foreground space-y-1 mt-2">
-                                    <li>• 1000+ sites</li>
-                                    <li>• Batch downloads</li>
-                                    <li>• MP3 extraction</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <Button variant="outline" className="w-full mt-4" asChild>
-                            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" target="_blank" rel="noreferrer">
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Download Desktop Version
-                            </a>
-                        </Button>
-                    </CardContent>
-                </Card>
+            {/* Title + meta */}
+            <div>
+              <h2 className="text-lg font-semibold leading-snug line-clamp-2">{videoInfo.title}</h2>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {videoInfo.duration ? (
+                  <span className="flex items-center gap-1">
+                    <Video className="h-3.5 w-3.5" />
+                    {formatDuration(videoInfo.duration)}
+                  </span>
+                ) : null}
+                {videoInfo.uploader ? <span>{videoInfo.uploader}</span> : null}
+              </div>
             </div>
-        </LayoutShell>
-    );
+
+            {/* Quality selector */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Quality</label>
+              <Select value={selectedFormat} onValueChange={setSelectedFormat}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {videoInfo.formats.map(f => (
+                    <SelectItem key={f.formatId} value={f.formatId}>
+                      {f.label}{f.filesize ? ` — ${formatBytes(f.filesize)}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Download button */}
+            <Button
+              onClick={handleDownload}
+              disabled={isDownloading || !selectedFormat}
+              size="lg"
+              className="w-full h-12 text-base"
+            >
+              {isDownloading ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Starting download…
+                </>
+              ) : (
+                <>
+                  <Download className="h-5 w-5 mr-2" />
+                  Download {fmt ? fmt.label : 'File'}
+                </>
+              )}
+            </Button>
+
+            <p className="text-center text-xs text-muted-foreground">
+              File saves to your browser&apos;s Downloads folder
+            </p>
+          </div>
+        )}
+
+        {/* ── Recent Downloads ────────────────────────────────────────── */}
+        {recentDownloads.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Recent Downloads</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearHistory}
+                className="h-8 text-xs text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                Clear
+              </Button>
+            </div>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {recentDownloads.map(r => (
+                <div
+                  key={r.id}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5 text-sm"
+                >
+                  <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{r.title}</p>
+                    <p className="text-xs text-muted-foreground">{r.quality}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    {new Date(r.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Trust bar ───────────────────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-4 py-4">
+          {[
+            { icon: <Zap className="h-5 w-5" />, label: '1000+ sites' },
+            { icon: <Shield className="h-5 w-5" />, label: 'No ads, no tracking' },
+            { icon: <Globe className="h-5 w-5" />, label: 'Works in any browser' },
+          ].map(item => (
+            <div key={item.label} className="flex flex-col items-center gap-1.5 text-center">
+              <span className="text-primary">{item.icon}</span>
+              <span className="text-xs font-medium text-muted-foreground">{item.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Desktop CTA ─────────────────────────────────────────────── */}
+        <div className="rounded-xl border border-border bg-card/50 p-6 text-center space-y-3">
+          <h3 className="font-semibold text-foreground">Need more power?</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            The desktop app adds playlist downloads, parallel queues, MP3 extraction, and 1,000+ sites.
+          </p>
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Download for Windows
+            </a>
+          </Button>
+        </div>
+      </main>
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      <footer className="border-t border-border py-6">
+        <div className="mx-auto max-w-5xl px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} Isaac Onyango · MIT License</span>
+          <div className="flex gap-4">
+            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+              GitHub
+            </a>
+            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+              Report a Bug
+            </a>
+            <Link href="/supported-sites">
+              <a className="hover:text-foreground transition-colors">Supported Sites</a>
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
 }

@@ -16,6 +16,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 // Expose a secure API to the renderer process
 // This creates window.electronAPI that the React app can use
 contextBridge.exposeInMainWorld('electronAPI', {
+  // ── Runtime detection flag (hidden marker, not exposed in TypeScript types) ──
+  __isElectron: true,
+
   // ============================================================================
   // VIDEO INFORMATION EXTRACTION
   // ============================================================================

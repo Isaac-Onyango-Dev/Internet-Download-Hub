@@ -48,7 +48,7 @@ export function useVideoDetect() {
       if (!result.data) {
         throw new Error('No video information was returned.');
       }
-      return { data: result.data, meta: result.meta };
+      return { data: result.data as DetectedVideo | PlaylistData, meta: result.meta as VideoDetectMeta | undefined };
     },
   });
 }

@@ -28,16 +28,20 @@ import { isElectron } from '@/lib/utils/env';
 import { api } from '@/lib/api';
 
 function NavigationRouter() {
-  const DashboardComponent = isElectron() ? Dashboard : DashboardWeb;
+  const isDesktop = isElectron();
 
   return (
     <Router hook={useHashLocation}>
       <Switch>
-        <Route path="/" component={DashboardComponent} />
-        <Route path="/queue" component={isElectron() ? Dashboard : DashboardComponent} />
+        {/* Desktop gets full tabbed Dashboard, Web gets single-page DashboardWeb */}
+        <Route path="/" component={isDesktop ? Dashboard : DashboardWeb} />
+        {/* Desktop-only sub-routes */}
+        {isDesktop && <Route path="/queue" component={Dashboard} />}
+        {isDesktop && <Route path="/settings" component={Dashboard} />}
+        {isDesktop && <Route path="/support" component={Dashboard} />}
+        {/* Shared page — available in both modes */}
         <Route path="/supported-sites" component={SupportedSites} />
-        <Route path="/settings" component={isElectron() ? Dashboard : DashboardComponent} />
-        <Route path="/support" component={isElectron() ? Dashboard : DashboardComponent} />
+        {/* Catch-all: redirect home */}
         <Route>
           {() => {
             window.location.hash = '#/';
