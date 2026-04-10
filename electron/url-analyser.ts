@@ -10,7 +10,7 @@ function matchesDomain(host: string, domains: string[]): boolean {
   for (const domain of domains) {
     if (domain.includes('/')) {
       // Handle path-based matching (e.g., 'youtube.com/live')
-      const [domainPart, pathPart] = domain.split('/');
+      const [domainPart] = domain.split('/');
       if (host === domainPart || host.endsWith('.' + domainPart)) {
         return true;
       }
@@ -89,7 +89,6 @@ export function analyseUrl(url: string): AnalysisResult {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    const path = parsed.pathname.toLowerCase();
 
     let engineOrder: Engine[] = ['yt-dlp', 'playwright'];
 
@@ -107,8 +106,8 @@ export function analyseUrl(url: string): AnalysisResult {
       engineOrder,
       isPlaylist: parsed.searchParams.has('list'),
     };
-  } catch (error: any) {
-    if (error.message.includes('valid URL')) throw error;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('valid URL')) throw error;
     throw new Error('Please enter a valid URL');
   }
 }

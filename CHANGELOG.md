@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-04-10
+
+### Added
+
+- **Application Menu Bar** — Fully functional top menu (File, Edit, View, Downloads, Help):
+  - **File** → New Download (`Ctrl+N`), Choose Save Folder (`Ctrl+Shift+S`), Close to Tray toggle, Exit (`Alt+F4`)
+  - **Edit** → Undo, Redo, Cut, Copy, Paste, Delete, Select All
+  - **View** → Full Screen (`F11`), Zoom In/Out/Reset (`Ctrl++/-/0`), Reload (`Ctrl+R`), Dev Tools (`F12`, dev-only)
+  - **Downloads** → Open Download Folder (`Ctrl+J`), View Queue (`Ctrl+L`), Clear Completed/Failed/All History
+  - **Help** → GitHub Repo, Report a Bug, Request a Feature, Open Log File, Check for Updates, About dialog
+- **App Update Checker** — Help → Check for Updates now queries GitHub Releases API, compares installed vs latest version, shows release notes, and offers a direct download link
+- **About Dialog** — Displays app version, yt-dlp/ffmpeg/streamlink engine versions, copyright info, and a "Copy Info" button for bug reports
+- **Menu-to-Renderer IPC** — New events (`navigate-to-tab`, `settings-updated`, `downloads-cleared`) so menu actions update the UI reactively
+- **Supported Sites Page** — Standalone page listing 50+ supported sites across 10 categories with search functionality
+
+### Improved
+
+- **DevTools Security** — Properly gated behind `isDev` check; hidden entirely in production builds
+- **Type Safety** — All new IPC endpoints fully typed in `electron.d.ts`
+- **Web Compatibility** — Menu event stubs added to `web-api.ts` for zero-crash parity between desktop and web
+- **Clipboard Access** — Replaced `require('electron')` with proper ES module import
+
+### Fixed
+
+- **ESLint** — 0 errors, 0 warnings across entire codebase
+- **TypeScript** — 0 compilation errors
+- **Build Pipeline** — Vite, esbuild (main + preload) all pass cleanly
+
 ## [1.1.2] - 2026-04-07
 
 ### Fixed

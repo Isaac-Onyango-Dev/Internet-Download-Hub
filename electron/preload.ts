@@ -92,7 +92,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Listens for real-time download progress updates
    * @param callback - Function to handle progress data
    */
-  onDownloadProgress: (callback: (data: any) => void) => {
+  onDownloadProgress: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('download-progress');
     ipcRenderer.on('download-progress', (_event, data) => {
       callback(data);
@@ -177,7 +177,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @param settings - Settings object to save
    * @returns Promise when save completes
    */
-  saveSettings: (settings: any) => ipcRenderer.invoke('save-settings', settings),
+  saveSettings: (settings: Record<string, unknown>) => ipcRenderer.invoke('save-settings', settings),
 
   /**
    * Resets all settings to their default values
@@ -230,7 +230,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Listens for yt-dlp version check results
    * @param callback - Function to handle version info
    */
-  onYtDlpVersionInfo: (callback: (data: any) => void) => {
+  onYtDlpVersionInfo: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('ytdlp-version-info');
     ipcRenderer.on('ytdlp-version-info', (_event, data) => callback(data));
   },
@@ -239,7 +239,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Listens for yt-dlp update availability notifications
    * @param callback - Function to handle update notifications
    */
-  onYtDlpUpdateAvailable: (callback: (data: any) => void) => {
+  onYtDlpUpdateAvailable: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('ytdlp-update-available');
     ipcRenderer.on('ytdlp-update-available', (_event, data) => callback(data));
   },
@@ -253,15 +253,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * When a user pastes a playlist URL, this event fires with playlist info
    * @param callback - Function to handle playlist detection data
    */
-  onPlaylistDetected: (callback: (data: any) => void) => {
+  onPlaylistDetected: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('playlist-detected');
     ipcRenderer.on('playlist-detected', (_event, data) => callback(data));
   },
-  onPlaylistVideoDetected: (callback: (data: any) => void) => {
+  onPlaylistVideoDetected: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('playlist-video-detected');
     ipcRenderer.on('playlist-video-detected', (_event, data) => callback(data));
   },
-  onPlaylistDetectionComplete: (callback: (data: any) => void) => {
+  onPlaylistDetectionComplete: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('playlist-detection-complete');
     ipcRenderer.on('playlist-detection-complete', (_event, data) => callback(data));
   },
@@ -296,7 +296,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Shows progress when FFmpeg is being downloaded automatically
    * @param callback - Function to handle progress data
    */
-  onFFmpegDownloadProgress: (callback: (data: any) => void) => {
+  onFFmpegDownloadProgress: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('ffmpeg-download-progress');
     ipcRenderer.on('ffmpeg-download-progress', (_event, data) => callback(data));
   },
@@ -305,8 +305,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * Listens for FFmpeg download notifications (completion, errors, etc.)
    * @param callback - Function to handle notification data
    */
-  onFFmpegDownloadNotification: (callback: (data: any) => void) => {
+  onFFmpegDownloadNotification: (callback: (data: unknown) => void) => {
     ipcRenderer.removeAllListeners('ffmpeg-download-notification');
     ipcRenderer.on('ffmpeg-download-notification', (_event, data) => callback(data));
+  },
+
+  // ============================================================================
+  // MENU-DRIVEN EVENTS (application menu → renderer)
+  // ============================================================================
+
+  /**
+   * Listens for tab navigation requests from the application menu
+   * e.g. Downloads → View Queue, File → New Download
+   */
+  onNavigateToTab: (callback: (tabPath: string) => void) => {
+    ipcRenderer.removeAllListeners('navigate-to-tab');
+    ipcRenderer.on('navigate-to-tab', (_event, tabPath: string) => callback(tabPath));
+  },
+
+  /**
+   * Listens for settings update events (e.g. save folder changed via menu)
+   */
+  onSettingsUpdated: (callback: () => void) => {
+    ipcRenderer.removeAllListeners('settings-updated');
+    ipcRenderer.on('settings-updated', () => callback());
+  },
+
+  /**
+   * Listens for download history clear events (from Downloads menu)
+   */
+  onDownloadsCleared: (callback: () => void) => {
+    ipcRenderer.removeAllListeners('downloads-cleared');
+    ipcRenderer.on('downloads-cleared', () => callback());
   },
 });

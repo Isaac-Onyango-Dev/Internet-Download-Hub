@@ -12,14 +12,12 @@ import {
   Github,
   Star,
   ExternalLink,
-  Send,
   CreditCard,
   Smartphone,
   Globe,
   Wallet,
   AlertTriangle,
   Megaphone,
-  PartyPopper,
 } from 'lucide-react';
 
 const APP_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub';

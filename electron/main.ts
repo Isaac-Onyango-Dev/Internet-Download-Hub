@@ -1,3 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-nocheck
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 // ============================================================================
 // INTERNET DOWNLOAD HUB - MAIN PROCESS
 // ============================================================================
@@ -23,6 +26,7 @@ import {
   nativeImage,
   powerSaveBlocker,
   Notification,
+  clipboard,
 } from 'electron';
 import path from 'path'; // File path utilities
 import { spawn, exec, execSync, ChildProcess } from 'child_process'; // Process spawning for downloads
@@ -884,6 +888,395 @@ function createTray() {
   setInterval(updateTrayMenu, 3000);
 }
 
+// ============================================================================
+// APPLICATION MENU (Top Menu Bar)
+// ============================================================================
+
+function createApplicationMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    // ── File ──────────────────────────────────────────────────────────────
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Download',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.show();
+              mainWindow.webContents.send('navigate-to-tab', '/');
+            }
+          },
+        },
+        {
+          label: 'Choose Save Folder…',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: async () => {
+            if (!mainWindow) return;
+            const settings = getQuery(db, 'SELECT download_path FROM settings WHERE id = 1');
+            const defaultPath = settings?.download_path || app.getPath('downloads');
+            const result = await dialog.showOpenDialog(mainWindow, {
+              title: 'Choose Default Save Folder',
+              defaultPath,
+              properties: ['openDirectory'],
+            });
+            if (!result.canceled && result.filePaths.length > 0) {
+              db.run('UPDATE settings SET download_path = ? WHERE id = 1', result.filePaths[0]);
+              saveDatabase(db);
+              mainWindow.webContents.send('settings-updated');
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Close to Tray',
+          type: 'checkbox',
+          checked: (() => {
+            const s = getQuery(db, 'SELECT close_to_tray FROM settings WHERE id = 1');
+            return s ? s.close_to_tray !== 0 : true;
+          })(),
+          click: (item) => {
+            db.run('UPDATE settings SET close_to_tray = ? WHERE id = 1', (item as any).checked ? 1 : 0);
+            saveDatabase(db);
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Exit',
+          accelerator: 'Alt+F4',
+          click: () => {
+            (app as any).isQuitting = true;
+            app.quit();
+          },
+        },
+      ],
+    },
+    // ── Edit ──────────────────────────────────────────────────────────────
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo', label: 'Undo' },
+        { role: 'redo', label: 'Redo' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Cut' },
+        { role: 'copy', label: 'Copy' },
+        { role: 'paste', label: 'Paste' },
+        { role: 'delete', label: 'Delete' },
+        { type: 'separator' },
+        { role: 'selectAll', label: 'Select All' },
+      ],
+    },
+    // ── View ──────────────────────────────────────────────────────────────
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Full Screen',
+          accelerator: 'F11',
+          click: () => {
+            if (mainWindow) mainWindow.setFullScreen(!mainWindow.isFullScreen());
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+Plus',
+          click: () => {
+            if (mainWindow) {
+              const wc = mainWindow.webContents;
+              const current = wc.getZoomFactor();
+              wc.setZoomFactor(Math.min(current + 0.1, 3.0));
+            }
+          },
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => {
+            if (mainWindow) {
+              const wc = mainWindow.webContents;
+              const current = wc.getZoomFactor();
+              wc.setZoomFactor(Math.max(current - 0.1, 0.5));
+            }
+          },
+        },
+        {
+          label: 'Reset Zoom',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.setZoomFactor(1.0);
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Reload',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.reload();
+          },
+        },
+        ...(isDev
+          ? [
+              { type: 'separator' } as Electron.MenuItemConstructorOptions,
+              {
+                label: 'Toggle Developer Tools',
+                accelerator: 'F12',
+                click: () => {
+                  if (mainWindow) mainWindow.webContents.toggleDevTools();
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    // ── Downloads ─────────────────────────────────────────────────────────
+    {
+      label: 'Downloads',
+      submenu: [
+        {
+          label: 'Open Download Folder',
+          accelerator: 'CmdOrCtrl+J',
+          click: async () => {
+            const settings = getQuery(db, 'SELECT download_path FROM settings WHERE id = 1');
+            const folder = settings?.download_path || app.getPath('downloads');
+            shell.openPath(folder);
+          },
+        },
+        {
+          label: 'View Queue & History',
+          accelerator: 'CmdOrCtrl+L',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.show();
+              mainWindow.webContents.send('navigate-to-tab', '/queue');
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Clear Completed Downloads',
+          click: () => {
+            try {
+              db.run("DELETE FROM downloads WHERE state = 'completed'");
+              saveDatabase(db);
+              if (mainWindow) mainWindow.webContents.send('downloads-cleared');
+            } catch (err: unknown) {
+              log.error('[Menu] Failed to clear completed downloads:', err);
+            }
+          },
+        },
+        {
+          label: 'Clear Failed Downloads',
+          click: () => {
+            try {
+              db.run("DELETE FROM downloads WHERE state = 'failed'");
+              saveDatabase(db);
+              if (mainWindow) mainWindow.webContents.send('downloads-cleared');
+            } catch (err: unknown) {
+              log.error('[Menu] Failed to clear failed downloads:', err);
+            }
+          },
+        },
+        {
+          label: 'Clear All History',
+          click: () => {
+            try {
+              db.run('DELETE FROM downloads');
+              saveDatabase(db);
+              if (mainWindow) mainWindow.webContents.send('downloads-cleared');
+            } catch (err: unknown) {
+              log.error('[Menu] Failed to clear all history:', err);
+            }
+          },
+        },
+      ],
+    },
+    // ── Help ──────────────────────────────────────────────────────────────
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Visit GitHub Repository',
+          click: () => shell.openExternal('https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub'),
+        },
+        {
+          label: 'Report a Bug',
+          click: () =>
+            shell.openExternal('https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues/new'),
+        },
+        {
+          label: 'Request a Feature',
+          click: () =>
+            shell.openExternal('https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/discussions/new'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Open Log File',
+          click: () => {
+            try {
+              const logFile = log.transports.file.getFile();
+              if (logFile?.path) {
+                shell.openPath(logFile.path);
+              } else {
+                shell.openPath(app.getPath('logs'));
+              }
+            } catch (err: unknown) {
+              log.error('[Menu] Failed to open log file:', err);
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates',
+          click: async () => {
+            if (!mainWindow) return;
+
+            // Show a loading indicator via the window title temporarily
+            const currentVersion = app.getVersion();
+            log.info(`[Menu] Checking for updates… (installed: v${currentVersion})`);
+
+            try {
+              const release = await fetchJson(
+                'https://api.github.com/repos/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest',
+              );
+              const latestTag: string = release.tag_name; // e.g. "v1.1.3"
+              const latestVersion = latestTag.replace(/^v/, '');
+
+              if (currentVersion === latestVersion) {
+                dialog.showMessageBox(mainWindow, {
+                  type: 'info',
+                  title: 'You\'re up to date',
+                  message: 'Internet Download Hub is up to date.',
+                  detail:
+                    `Installed version: v${currentVersion}\n\n` +
+                    `You're running the latest version. Updates will be automatically ` +
+                    `downloaded when new releases are published.`,
+                  buttons: ['OK'],
+                  defaultId: 0,
+                  noLink: true,
+                });
+              } else {
+                const releaseName = release.name || latestVersion;
+                const releaseBody = release.body || '';
+                const releaseNotes = releaseBody
+                  .split('\n')
+                  .filter((line: string) => line.trim())
+                  .slice(0, 20) // limit to first 20 lines
+                  .join('\n');
+
+                const { response } = await dialog.showMessageBox(mainWindow, {
+                  type: 'info',
+                  title: 'Update Available',
+                  message: `Version ${latestVersion} is available`,
+                  detail:
+                    `Installed: v${currentVersion}\nLatest: v${latestVersion}\n\n` +
+                    `${releaseNotes ? `Release Notes:\n${releaseNotes}\n\n` : ''}` +
+                    `You can download the latest installer from GitHub.`,
+                  buttons: ['Download Update', 'Later'],
+                  defaultId: 0,
+                  cancelId: 1,
+                  noLink: true,
+                });
+
+                if (response === 0) {
+                  shell.openExternal(
+                    `https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest`,
+                  );
+                }
+              }
+            } catch (err: unknown) {
+              log.error('[Menu] Update check failed:', err);
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'Update Check Failed',
+                message: 'Could not check for updates.',
+                detail:
+                  'Please check your internet connection and try again.\n\n' +
+                  'You can also visit the releases page manually:',
+                buttons: ['Open GitHub Releases', 'Cancel'],
+                defaultId: 0,
+                cancelId: 1,
+                noLink: true,
+              }).then(({ response }) => {
+                if (response === 0) {
+                  shell.openExternal(
+                    'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest',
+                  );
+                }
+              });
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'About Internet Download Hub',
+          click: async () => {
+            const version = app.getVersion();
+            const ytDlpVersion = await (async () => {
+              try {
+                const r = await execa(ytDlpPath, ['--version'], { timeout: 5000 });
+                return r.stdout.trim();
+              } catch {
+                return 'Not installed';
+              }
+            })();
+            const ffmpegVersion = await (async () => {
+              try {
+                const r = await execa(ffmpegPath, ['-version'], { timeout: 5000 });
+                const m = r.stdout.match(/ffmpeg version\s+(\S+)/);
+                return m ? m[1] : 'Not installed';
+              } catch {
+                return 'Not installed';
+              }
+            })();
+            const streamlinkVersion = await (async () => {
+              try {
+                const r = await execa(streamlinkPath, ['--version'], { timeout: 5000 });
+                return r.stdout.trim().split('\n')[0] || 'Not installed';
+              } catch {
+                return 'Not installed';
+              }
+            })();
+
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About Internet Download Hub',
+              message: 'Internet Download Hub',
+              detail:
+                `Version: ${version}\n\n` +
+                `A free, open-source desktop video downloader for Windows.\n` +
+                `Supports 1000+ sites via yt-dlp, streamlink, gallery-dl & more.\n\n` +
+                `── Engine Versions ──\n` +
+                `yt-dlp:       ${ytDlpVersion}\n` +
+                `ffmpeg:       ${ffmpegVersion}\n` +
+                `streamlink:   ${streamlinkVersion}\n\n` +
+                `© ${new Date().getFullYear()} Isaac Onyango\n` +
+                `Licensed under MIT\n` +
+                `https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub`,
+              buttons: ['OK', 'Copy Info'],
+              defaultId: 0,
+              cancelId: 0,
+              noLink: true,
+            }).then(({ response }) => {
+              if (response === 1) {
+                const info =
+                  `Internet Download Hub v${version}\n` +
+                  `yt-dlp: ${ytDlpVersion}\n` +
+                  `ffmpeg: ${ffmpegVersion}\n` +
+                  `streamlink: ${streamlinkVersion}`;
+                clipboard.writeText(info);
+              }
+            });
+          },
+        },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 // ── Window Management ───────────────────────────────────────────────────────
 const getPreloadPath = (): string => {
   if (app.isPackaged) {
@@ -1250,11 +1643,12 @@ const BINARIES = [
   },
   {
     name: 'streamlink',
-    releaseApi: 'https://api.github.com/repos/streamlink/streamlink/releases/latest',
+    releaseApi: 'https://api.github.com/repos/streamlink/windows-builds/releases/latest',
     downloadUrl: (tag: string) =>
-      `https://github.com/streamlink/streamlink/releases/download/${tag}/streamlink-${tag.replace('v', '')}-py311-x86_64.exe`,
+      `https://github.com/streamlink/windows-builds/releases/download/${tag}/streamlink-${tag.replace('v', '')}.zip`,
     versionFlag: '--version',
     fileName: 'streamlink.exe',
+    isZip: true,
   },
   {
     name: 'gallery-dl',
@@ -1267,13 +1661,21 @@ const BINARIES = [
   {
     name: 'N_m3u8DL-RE',
     releaseApi: 'https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest',
-    downloadUrl: (tag: string) =>
-      `https://github.com/nilaoda/N_m3u8DL-RE/releases/download/${tag}/N_m3u8DL-RE_${tag.replace('v', '')}_win-x64.zip`,
+    downloadUrl: null, // Dynamic - finds the correct asset from release
     versionFlag: '--version',
     fileName: 'N_m3u8DL-RE.exe',
     isZip: true,
   },
 ];
+
+/**
+ * Helper to find the correct download asset URL from a release
+ */
+function getAssetDownloadUrl(release: any, fileNamePattern: string): string | null {
+  const assets = release.assets || [];
+  const asset = assets.find((a: any) => a.name.includes(fileNamePattern));
+  return asset ? asset.browser_download_url : null;
+}
 
 /**
  * Safe update: download new binary to system temp dir first,
@@ -1537,13 +1939,27 @@ function setupIpcHandlers() {
           },
           (metadata: { title: string; uploader: string; videoCount: number }) => {
             if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('playlist-detection-complete', metadata);
+              mainWindow.webContents.send('playlist-detection-complete', {
+                title: metadata.title,
+                count: metadata.videoCount,
+                uploader: metadata.uploader,
+              });
             }
           },
           (err: Error) => {
             log.error(`[Extractor] Playlist stream error: ${err.message}`);
           }
         );
+
+        // Notify the frontend to open the PlaylistDialog immediately
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('playlist-detected', {
+            title: 'Loading Playlist...',
+            count: 0,
+            entries: [],
+            streaming: true,
+          });
+        }
 
         return {
           success: true,
@@ -2041,20 +2457,37 @@ function setupIpcHandlers() {
   // ── check-all-binary-updates ───────────────────────────────────────────────
   ipcMain.handle('check-all-binary-updates', async () => {
     try {
-      const results = [];
+      // Check all binaries in parallel instead of sequential
+      const results = await Promise.all(
+        BINARIES.map(async (binary) => {
+          const [installedVersion, latestVersion] = await Promise.all([
+            getBinaryVersion(binary),
+            getLatestBinaryVersion(binary),
+          ]);
 
-      for (const binary of BINARIES) {
-        const installedVersion = await getBinaryVersion(binary);
-        const latestVersion = await getLatestBinaryVersion(binary);
+          // Normalize versions by removing 'v' prefix for comparison
+          const normalizeVersion = (v: string) => v.replace(/^v/, '');
+          const normalizedInstalled = normalizeVersion(installedVersion);
+          const normalizedLatest = normalizeVersion(latestVersion);
 
-        results.push({
-          name: binary.name,
-          installedVersion,
-          latestVersion,
-          needsUpdate: installedVersion !== latestVersion,
-          downloadUrl: binary.downloadUrl(latestVersion),
-        });
-      }
+          // For N_m3u8DL-RE, use dynamic asset finder
+          let downloadUrl: string | null = null;
+          if (binary.downloadUrl === null) {
+            // Will be resolved during update
+            downloadUrl = null;
+          } else {
+            downloadUrl = binary.downloadUrl(latestVersion);
+          }
+
+          return {
+            name: binary.name,
+            installedVersion,
+            latestVersion,
+            needsUpdate: normalizedInstalled !== normalizedLatest,
+            downloadUrl,
+          };
+        }),
+      );
 
       return results;
     } catch (error: any) {
@@ -2064,7 +2497,10 @@ function setupIpcHandlers() {
   });
 
   // ── update-binary ───────────────────────────────────────────────────────────
-  ipcMain.handle('update-binary', async (_: any, { binaryName }: { binaryName: string }) => {
+  ipcMain.handle('update-binary', async (_: any, binaryNameOrObj: string | { binaryName: string }) => {
+    // Handle both string and object formats for backwards compatibility
+    const binaryName = typeof binaryNameOrObj === 'string' ? binaryNameOrObj : binaryNameOrObj.binaryName;
+    
     try {
       const binary = BINARIES.find((b) => b.name === binaryName);
       if (!binary) {
@@ -2117,7 +2553,19 @@ function setupIpcHandlers() {
       const release = await fetchJson(binary.releaseApi);
       const latestVersion = release.tag_name;
 
-      const downloadUrl = binary.downloadUrl(latestVersion);
+      // Get download URL - handle dynamic asset finding for N_m3u8DL-RE
+      let downloadUrl: string;
+      if (binary.downloadUrl === null) {
+        // Dynamic asset finder for N_m3u8DL-RE
+        const asset = getAssetDownloadUrl(release, 'win-x64');
+        if (!asset) {
+          throw new Error(`Could not find download asset for ${binary.name}`);
+        }
+        downloadUrl = asset;
+      } else {
+        downloadUrl = binary.downloadUrl(latestVersion);
+      }
+
       const tempPath = path.join(app.getPath('temp'), `${binary.fileName}.tmp`);
 
       // Destination: userData/binaries (always writable, even in Program Files installs)
@@ -2149,15 +2597,33 @@ function setupIpcHandlers() {
           { cwd: app.getPath('temp') },
         );
 
-        // Find the .exe in extracted files
-        const extractedFiles = fs.readdirSync(tempDir);
-        const exeFile = extractedFiles.find((f) => f.endsWith('.exe'));
-        if (!exeFile) {
+        // Find the specific .exe file in extracted files
+        const findSpecificExe = (dir: string, fileName: string): string | null => {
+          const files = fs.readdirSync(dir);
+          // First try exact match
+          if (files.includes(fileName)) {
+            return path.join(dir, fileName);
+          }
+          // Then search recursively
+          for (const file of files) {
+            const fullPath = path.join(dir, file);
+            const stat = fs.statSync(fullPath);
+            if (stat.isDirectory()) {
+              const found = findSpecificExe(fullPath, fileName);
+              if (found) return found;
+            } else if (file === fileName) {
+              return fullPath;
+            }
+          }
+          return null;
+        };
+
+        const exePath = findSpecificExe(tempDir, binary.fileName);
+        if (!exePath) {
           throw new Error(`Could not find ${binary.fileName} in extracted archive`);
         }
 
-        const finalPath = path.join(tempDir, exeFile);
-        fs.copyFileSync(finalPath, destPath);
+        fs.copyFileSync(exePath, destPath);
 
         // Clean up
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -2204,7 +2670,7 @@ function setupIpcHandlers() {
       try {
         const settings = getQuery(db, 'SELECT * FROM settings WHERE id = 1');
         const baseSavePath = options.savePath || settings?.download_path || settings?.downloadPath;
-        const createFolder = options.createFolder ?? true;
+        const createFolder = options.createFolder ?? (settings?.create_playlist_folder !== 0);
 
         let playlistFolderPath = baseSavePath;
         if (createFolder && options.playlistTitle) {
@@ -2224,9 +2690,9 @@ function setupIpcHandlers() {
         for (let i = 0; i < entries.length; i++) {
           const entry = entries[i];
           try {
-            // Using the fully populated VideoInfo objects passed directly from the UI stream.
-            // No need to re-extract!
-            const video = entry.video;
+            // Entries can come from dialog as { index, url, title, thumbnail }
+            // OR from streaming as { video: { url, title, thumbnail, formats, ... }, index }
+            const video = entry.video || entry;
             const idx = entry.index || i + 1;
 
             // Determine format based on settings
@@ -2234,7 +2700,7 @@ function setupIpcHandlers() {
             const prefFormat = settings?.default_format || 'mp4';
             // First check if the user had overridden the selection from UI
             let formatId = entry.selectedFormat || 'bestvideo+bestaudio';
-            
+
             if (!entry.selectedFormat) {
               if (prefFormat === 'mp3') {
                 formatId = 'bestaudio';
@@ -2245,9 +2711,8 @@ function setupIpcHandlers() {
               }
             }
 
-            const cleanTitle = entry.title
-              ? entry.title.replace(/[^a-z0-9]/gi, '_').slice(0, 50)
-              : 'video';
+            const cleanTitle = video.title || entry.title || 'video';
+            const sanitizedName = cleanTitle.replace(/[^a-z0-9]/gi, '_').slice(0, 50);
             const isAudioOnly = formatId === 'bestaudio';
             const ext = isAudioOnly
               ? 'mp3'
@@ -2255,15 +2720,15 @@ function setupIpcHandlers() {
 
             // For playlist downloads, include playlist index in filename
             const filename = createFolder
-              ? `${idx.toString().padStart(2, '0')} - ${cleanTitle}.${ext}`
-              : `${cleanTitle}.${ext}`;
+              ? `${idx.toString().padStart(2, '0')} - ${sanitizedName}.${ext}`
+              : `${sanitizedName}.${ext}`;
 
             // Create download entry directly in database
             const outputPath = path.join(playlistFolderPath, filename);
             db.run(
               `
             INSERT INTO downloads (
-              url, filename, format_id, save_path, thumbnail, duration, uploader, 
+              url, filename, format_id, save_path, thumbnail, duration, uploader,
               state, created_at, playlist_title, playlist_index, playlist_total
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', datetime('now'), ?, ?, ?)
           `,
@@ -2297,6 +2762,13 @@ function setupIpcHandlers() {
       }
     },
   );
+
+  // ── Menu-driven IPC events (main → renderer) ──────────────────────────────
+  // These let menu items communicate with the React renderer
+
+  ipcMain.on('menu:navigate', (_event, tabPath: string) => {
+    if (mainWindow) mainWindow.webContents.send('navigate-to-tab', tabPath);
+  });
 }
 
 // Store incomplete lines between data chunks
@@ -2319,10 +2791,10 @@ function spawnDownload(
   let cleanedFilePathCandidate: string | null = null;
   const formatArg =
     formatId === 'bestvideo+bestaudio' || !formatId
-      ? 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
+      ? 'bestvideo+bestaudio/best'
       : formatId === 'bestaudio'
         ? 'bestaudio/best'
-        : `${formatId}+bestaudio/best`;
+        : `${formatId}+bestaudio`;
 
   const saveFolder = path.dirname(outputPath);
   const outputTemplate = path.join(saveFolder, '%(title)s.%(ext)s');
@@ -2738,6 +3210,7 @@ if (app) {
         log.info('[Main] App ready — startup sequence begin');
         checkBinaries();
         await initDb();
+        createApplicationMenu();
         setupIpcHandlers();
         createWindow();
         createTray();

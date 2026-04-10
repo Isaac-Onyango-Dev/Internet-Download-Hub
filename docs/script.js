@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 const REPO = 'Isaac-Onyango-Dev/Internet-Download-Hub'
 const PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub'
 const SHARE_TEXT = 'Check out Internet Download Hub — a free desktop app that downloads videos from YouTube, TikTok, Instagram and 1000+ sites. Completely free and open source.'
@@ -34,28 +35,6 @@ function updateScreenshotDisplay() {
   if (nextBtn) nextBtn.disabled = currentScreenshot === totalScreenshots - 1
 }
 
-// Smooth scroll to section without triggering browser favicon reload
-function scrollToSection(sectionId) {
-  const element = document.getElementById(sectionId)
-  if (!element) return
-
-  // Use scrollIntoView for smooth scrolling without changing the URL hash
-  element.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start'
-  })
-
-  // Offset for fixed navbar height
-  // scrollIntoView does not account for fixed headers so we adjust manually
-  setTimeout(() => {
-    const navbarHeight = document.querySelector('.navbar')?.offsetHeight || 64
-    const currentScroll = window.scrollY
-    window.scrollTo({
-      top: currentScroll - navbarHeight,
-      behavior: 'smooth'
-    })
-  }, 50)
-}
 
 // Prevent favicon from disappearing during navigation
 function protectFavicon() {
@@ -350,7 +329,6 @@ async function fetchDownloadCount() {
 
     if (ok && allReleases.length >= 0) {
       const shieldStyleTotal = sumAllAssetDownloads(allReleases)
-      const installerTotal = sumInstallerDownloads(allReleases)
       const displayTotal = shieldStyleTotal
       updateDownloadCounter(displayTotal)
       console.log('[IDH] Download count refreshed:', displayTotal)
@@ -386,6 +364,15 @@ function bootDocsPage() {
     })
   }
 }
+
+// ── Global Exports ───────────────────────────────────────────────────────────
+// Attach public functions to window so the IDE and HTML event handlers
+// recognize them as used/reachable.
+window.changeScreenshot = changeScreenshot;
+window.goToScreenshot = goToScreenshot;
+window.copyLink = copyLink;
+window.showDonateModal = showDonateModal;
+window.closeDonateModal = closeDonateModal;
 
 // Run once: duplicate listeners were firing loadReleaseInfo() twice and burning anonymous GitHub API quota.
 if (document.readyState === 'loading') {

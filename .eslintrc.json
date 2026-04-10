@@ -36,6 +36,14 @@
         "@typescript-eslint/ban-ts-comment": "off",
         "react/no-unknown-property": "off"
       }
+    },
+    {
+      "files": ["*.cjs"],
+      "rules": {
+        "@typescript-eslint/no-require-imports": "off",
+        "@typescript-eslint/no-var-requires": "off",
+        "no-undef": "off"
+      }
     }
   ],
   "settings": {

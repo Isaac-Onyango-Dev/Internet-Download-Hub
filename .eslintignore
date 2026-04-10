@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+release/
+out/
+build/
+
+# Documentation assets (minified bundles)
+docs/web/assets/
+docs/app/assets/
+docs/app/index.html
+
+# Electron bundles
+electron/*.cjs
+
+# Utility scripts
+parse_lint.js
+parse_lint.cjs

@@ -9,7 +9,7 @@ import {
   readdirSync,
   lstatSync,
 } from 'node:fs';
-import { join, basename, dirname } from 'node:path';
+import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 
 const exec = promisify(execCallback);
@@ -58,6 +58,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   }
 
   const writeStream = createWriteStream(dest);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await pipeline(response.body as any, writeStream);
 }
 
@@ -92,6 +93,7 @@ async function main() {
     mkdirSync(BINARIES_DIR);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const binary of BINARIES as any) {
     const allExist = binary.names.every((name: string) => existsSync(join(BINARIES_DIR, name)));
 

@@ -4,7 +4,6 @@ import path from 'path';
 
 export default defineConfig(() => {
   const target = process.env.VITE_TARGET; // 'web', 'gh-pages', or undefined (electron)
-  const isWeb = target === 'web' || target === 'gh-pages';
   const isGHPages = target === 'gh-pages';
 
   return {

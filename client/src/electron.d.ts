@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export {};
 
 export interface BinaryUpdateInfo {
@@ -106,7 +107,7 @@ declare global {
         callback: (data: { currentVersion: string; latestVersion: string }) => void,
       ) => void;
       onPlaylistDetected: (
-        callback: (data: { title: string; count: number; entries: PlaylistEntry[] }) => void,
+        callback: (data: { title: string; count: number; entries: PlaylistEntry[]; streaming?: boolean }) => void,
       ) => void;
       onPlaylistVideoDetected: (
         callback: (data: { video: any; index: number; total: number }) => void,
@@ -122,6 +123,11 @@ declare global {
       // FFmpeg Download Events
       onFFmpegDownloadProgress: (callback: (data: FFmpegDownloadProgress) => void) => void;
       onFFmpegDownloadNotification: (callback: (data: FFmpegDownloadNotification) => void) => void;
+
+      // Menu-driven Events
+      onNavigateToTab: (callback: (tabPath: string) => void) => void;
+      onSettingsUpdated: (callback: () => void) => void;
+      onDownloadsCleared: (callback: () => void) => void;
     };
   }
 }

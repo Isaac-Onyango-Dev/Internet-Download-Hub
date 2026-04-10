@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { cn } from '@/lib/utils';
-import { Download, HardDrive, Settings, Heart, ArrowRightLeft } from 'lucide-react';
+import { Download, HardDrive, Settings, Heart, ArrowRightLeft, Globe } from 'lucide-react';
 
 interface LayoutShellProps {
   children: ReactNode;
@@ -13,6 +13,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const navItems = [
     { href: '/', label: 'Downloader', icon: Download },
     { href: '/queue', label: 'Queue & History', icon: HardDrive },
+    { href: '/supported-sites', label: 'Supported Sites', icon: Globe },
     { href: '/settings', label: 'Settings', icon: Settings },
     { href: '/support', label: 'Support', icon: Heart },
   ];
@@ -43,10 +44,11 @@ export function LayoutShell({ children }: LayoutShellProps) {
         <nav className="flex-1 space-y-1 mt-4">
           {navItems.map((item) => {
             const Icon = item.icon;
+            // Use exact matching for routes with common prefixes
             const isActive =
               item.href === '/'
                 ? location === '/' || location === ''
-                : location.startsWith(item.href);
+                : location === item.href;
 
             return (
               <button

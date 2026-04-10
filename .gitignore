@@ -12,6 +12,7 @@ dist/
 out/
 build/
 release/
+docs/app/
 
 # ===========================
 # Electron build artifacts

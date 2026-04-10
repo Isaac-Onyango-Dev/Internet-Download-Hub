@@ -24,6 +24,7 @@ interface YtDlpFormat {
   vcodec: string;
   filesize: number | null;
   filesize_approx: number | null;
+  fps?: number | null;
 }
 
 interface YtDlpEntry {
@@ -726,25 +727,73 @@ async function extractWithPlaywright(
 function parseYtDlpInfo(info: YtDlpEntry, fallbackUrl: string): VideoInfo {
   const resolvedUrl = info?.webpage_url || info?.url || info?.original_url || fallbackUrl;
 
-  const formats = (info.formats || [])
-    .filter((f: YtDlpFormat) => f.height && (f.acodec !== 'none' || f.vcodec !== 'none'))
-    .map((f: YtDlpFormat) => ({
-      formatId: f.format_id,
-      label:
-        `${f.height}p ${f.ext?.toUpperCase() || ''} ${f.filesize || f.filesize_approx ? '(' + formatBytes((f.filesize || f.filesize_approx) as number) + ')' : ''}`.trim(),
-      quality: `${f.height}p`,
-      ext: f.ext,
-      filesize: f.filesize || f.filesize_approx || null,
-      height: f.height,
-    }))
-    .sort((a: VideoFormat, b: VideoFormat) => (b.height ?? 0) - (a.height ?? 0));
+  // Get all formats from yt-dlp output
+  const rawFormats = info.formats || [];
+  
+  // Log format discovery for debugging
+  log.info(`[Extractor] Found ${rawFormats.length} raw formats for ${info.title || 'video'}`);
 
-  const seen = new Set<number | null>();
-  const uniqueFormats = formats.filter((f: VideoFormat) => {
-    if (seen.has(f.height)) return false;
-    seen.add(f.height);
-    return true;
+  const formats = rawFormats
+    .filter((f: YtDlpFormat) => {
+      // Keep formats that have height AND video codec (not audio-only or dash audio)
+      const hasHeight = f.height && f.height > 0;
+      const hasVideo = f.vcodec && f.vcodec !== 'none';
+      return hasHeight && hasVideo;
+    })
+    .map((f: YtDlpFormat) => {
+      const fps = f.fps ? `${f.fps}fps` : '';
+      const sizeInfo = f.filesize || f.filesize_approx ? formatBytes(f.filesize || f.filesize_approx!) : '';
+
+      return {
+        formatId: f.format_id,
+        label: `${f.height}p ${fps} ${sizeInfo}`.replace(/\s{2,}/g, ' ').trim(),
+        quality: `${f.height}p`,
+        ext: f.ext,
+        filesize: f.filesize || f.filesize_approx || null,
+        height: f.height,
+      };
+    })
+    // Sort by height descending, then by filesize descending (larger = better quality)
+    .sort((a: VideoFormat, b: VideoFormat) => {
+      if (b.height !== a.height) return (b.height ?? 0) - (a.height ?? 0);
+      return (b.filesize ?? 0) - (a.filesize ?? 0);
+    });
+
+  // Remove strict deduplication - keep all formats but prefer larger files for same height
+  const seen = new Map<number | null, VideoFormat>();
+  formats.forEach((f) => {
+    const existing = seen.get(f.height);
+    if (!existing || (f.filesize ?? 0) > (existing.filesize ?? 0)) {
+      seen.set(f.height, f);
+    }
   });
+  let uniqueFormats = Array.from(seen.values()).sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+
+  // FALLBACK: If yt-dlp didn't return full formats, construct them from known heights
+  if (uniqueFormats.length < 3) {
+    log.info(`[Extractor] Limited formats detected (${uniqueFormats.length}), adding fallback quality options`);
+    const commonHeights = [2160, 1440, 1080, 720, 480, 360, 240, 144];
+    const existingHeights = new Set<number>(uniqueFormats.map(f => f.height).filter((h): h is number => h !== null));
+    
+    // Get video height if available (cast from unknown due to index signature)
+    const videoHeight: number | null = typeof info.height === 'number' ? info.height : null;
+    
+    commonHeights.forEach(height => {
+      if (!existingHeights.has(height) && (videoHeight === null || height <= videoHeight)) {
+        uniqueFormats.push({
+          formatId: `bestvideo[height=${height}]+bestaudio/best[height=${height}]`,
+          label: `${height}p (Available)`,
+          quality: `${height}p`,
+          ext: 'mp4',
+          filesize: null,
+          height: height,
+        });
+      }
+    });
+    
+    // Re-sort after adding fallbacks
+    uniqueFormats = uniqueFormats.sort((a, b) => (b.height ?? 0) - (a.height ?? 0));
+  }
 
   return {
     url: resolvedUrl,

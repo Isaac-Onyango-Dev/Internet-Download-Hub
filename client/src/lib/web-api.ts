@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * Web API — a browser-compatible replacement for window.electronAPI.
  *
@@ -413,6 +414,15 @@ export const webAPI = {
   onPlaylistDetected: (_cb: (data: unknown) => void) => () => { },
   onPlaylistVideoDetected: (_cb: (data: unknown) => void) => () => { },
   onPlaylistDetectionComplete: (_cb: (data: unknown) => void) => () => { },
+
+  // ── Menu-driven event stubs (Electron only — no-op in web) ──────────────
+  onNavigateToTab: (_cb: (tabPath: string) => void) => () => { },
+  onSettingsUpdated: (_cb: () => void) => () => { },
+  onDownloadsCleared: (_cb: () => void) => () => { },
+
+  // ── FFmpeg download event stubs (Electron only — no-op in web) ──────────
+  onFFmpegDownloadProgress: (_cb: (data: unknown) => void) => () => { },
+  onFFmpegDownloadNotification: (_cb: (data: unknown) => void) => () => { },
 
   // ── Update yt-dlp (no-op in web) ─────────────────────────────────────────────
   updateYtDlp: async () => ({ success: false, message: 'Not applicable in web mode' }),

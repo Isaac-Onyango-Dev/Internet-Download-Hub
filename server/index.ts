@@ -55,31 +55,72 @@ function formatBytes(bytes: number): string {
 function parseYtDlpJson(info: any, fallbackUrl: string) {
   const resolvedUrl = info?.webpage_url || info?.url || info?.original_url || fallbackUrl;
 
-  const formats = (info.formats || [])
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .filter((f: any) => f.height && (f.acodec !== 'none' || f.vcodec !== 'none'))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((f: any) => ({
-      formatId: f.format_id,
-      label: `${f.height}p ${f.ext?.toUpperCase() || ''} ${f.filesize || f.filesize_approx
-          ? '(' + formatBytes(f.filesize || f.filesize_approx) + ')'
-          : ''
-        }`.trim(),
-      quality: `${f.height}p`,
-      ext: f.ext,
-      filesize: f.filesize || f.filesize_approx || null,
-      height: f.height,
-    }))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+  const rawFormats = info.formats || [];
+  console.log(`[Server] Found ${rawFormats.length} raw formats for ${info.title || 'video'}`);
 
-  const seen = new Set();
+  const formats = (rawFormats)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((f: any) => {
+      const hasHeight = f.height && f.height > 0;
+      const hasVideo = f.vcodec && f.vcodec !== 'none';
+      return hasHeight && hasVideo;
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((f: any) => {
+      const fps = f.fps ? `${f.fps}fps` : '';
+      const sizeInfo = f.filesize || f.filesize_approx ? formatBytes(f.filesize || f.filesize_approx) : '';
+
+      return {
+        formatId: f.format_id,
+        label: `${f.height}p ${fps} ${sizeInfo}`.replace(/\s{2,}/g, ' ').trim(),
+        quality: `${f.height}p`,
+        ext: f.ext,
+        filesize: f.filesize || f.filesize_approx || null,
+        height: f.height,
+      };
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .sort((a: any, b: any) => {
+      if (b.height !== a.height) return (b.height || 0) - (a.height || 0);
+      return (b.filesize || 0) - (a.filesize || 0);
+    });
+
+  // Keep best format per height (prefer larger file size)
+  const seen = new Map();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const uniqueFormats = formats.filter((f: any) => {
-    if (seen.has(f.height)) return false;
-    seen.add(f.height);
-    return true;
+  formats.forEach((f: any) => {
+    const existing = seen.get(f.height);
+    if (!existing || (f.filesize || 0) > (existing.filesize || 0)) {
+      seen.set(f.height, f);
+    }
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let uniqueFormats = Array.from(seen.values()).sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+
+  // FALLBACK: If yt-dlp didn't return full formats, construct them from known heights
+  if (uniqueFormats.length < 3) {
+    console.log(`[Server] Limited formats detected (${uniqueFormats.length}), adding fallback quality options`);
+    const commonHeights = [2160, 1440, 1080, 720, 480, 360, 240, 144];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existingHeights = new Set(uniqueFormats.map((f: any) => f.height));
+    const videoHeight = info.height || null;
+    
+    commonHeights.forEach(height => {
+      if (!existingHeights.has(height) && (!videoHeight || height <= videoHeight)) {
+        uniqueFormats.push({
+          formatId: `bestvideo[height=${height}]+bestaudio/best[height=${height}]`,
+          label: `${height}p (Available)`,
+          quality: `${height}p`,
+          ext: 'mp4',
+          filesize: null,
+          height: height,
+        });
+      }
+    });
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    uniqueFormats = uniqueFormats.sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+  }
 
   return {
     url: resolvedUrl,
@@ -198,8 +239,15 @@ app.get('/api/download', (req, res) => {
       '--', url,
     ];
   } else {
+    const formatArg =
+      formatId === 'bestvideo+bestaudio' || !formatId
+        ? 'bestvideo+bestaudio/best'
+        : formatId === 'bestaudio'
+          ? 'bestaudio/best'
+          : `${formatId}+bestaudio`;
+
     args = [
-      '-f', formatId,
+      '-f', formatArg,
       '--user-agent', UA,
       '--add-header', 'Accept-Language:en-US,en;q=0.9',
       '--no-warnings',

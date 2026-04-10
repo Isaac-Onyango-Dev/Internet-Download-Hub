@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { spawn } = require('child_process');
 const path = require('path');
 const electronModule = require('electron');

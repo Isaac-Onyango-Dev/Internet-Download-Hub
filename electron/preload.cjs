@@ -233,5 +233,30 @@ import_electron.contextBridge.exposeInMainWorld("electronAPI", {
   onFFmpegDownloadNotification: (callback) => {
     import_electron.ipcRenderer.removeAllListeners("ffmpeg-download-notification");
     import_electron.ipcRenderer.on("ffmpeg-download-notification", (_event, data) => callback(data));
+  },
+  // ============================================================================
+  // MENU-DRIVEN EVENTS (application menu → renderer)
+  // ============================================================================
+  /**
+   * Listens for tab navigation requests from the application menu
+   * e.g. Downloads → View Queue, File → New Download
+   */
+  onNavigateToTab: (callback) => {
+    import_electron.ipcRenderer.removeAllListeners("navigate-to-tab");
+    import_electron.ipcRenderer.on("navigate-to-tab", (_event, tabPath) => callback(tabPath));
+  },
+  /**
+   * Listens for settings update events (e.g. save folder changed via menu)
+   */
+  onSettingsUpdated: (callback) => {
+    import_electron.ipcRenderer.removeAllListeners("settings-updated");
+    import_electron.ipcRenderer.on("settings-updated", () => callback());
+  },
+  /**
+   * Listens for download history clear events (from Downloads menu)
+   */
+  onDownloadsCleared: (callback) => {
+    import_electron.ipcRenderer.removeAllListeners("downloads-cleared");
+    import_electron.ipcRenderer.on("downloads-cleared", () => callback());
   }
 });

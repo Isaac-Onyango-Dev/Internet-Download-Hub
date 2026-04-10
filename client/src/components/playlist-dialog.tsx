@@ -50,11 +50,13 @@ interface Props {
   onClose: () => void;
   /** Called with the entries the user picked plus the playlist title */
   onConfirm: (entries: PlaylistEntry[], opts: { playlistTitle: string }) => Promise<void>;
+  /** True while yt-dlp is still streaming the playlist metadata */
+  streaming?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
+export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = false }: Props) {
   const [mode, setMode] = useState<DownloadMode>('all');
   const [rangeFrom, setRangeFrom] = useState('1');
   const [rangeTo, setRangeTo] = useState('');
@@ -62,13 +64,14 @@ export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Reset internal state whenever the dialog opens with new data
+  // Use data as it arrives (entries grow while streaming)
   const entries = data?.entries ?? [];
-  const total = data?.count ?? entries.length;
+  const total = data?.count ?? 0;
   const title = data?.title ?? 'Playlist';
+  const loadedCount = entries.length;
 
   // Initialise rangeTo when data changes
-  const defaultRangeTo = String(total);
+  const defaultRangeTo = total > 0 ? String(total) : '';
 
   // ── Computed entry list based on mode ────────────────────────────────────
 
@@ -111,6 +114,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
 
   const canConfirm =
     !submitting &&
+    !streaming &&
     (mode === 'all'
       ? entries.length > 0
       : mode === 'range'
@@ -184,8 +188,17 @@ export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
           <DialogDescription asChild>
             <div className="mt-1 space-y-0.5 text-sm text-white/60">
               <p className="font-medium text-white/80 truncate max-w-lg">{title}</p>
-              <p>
-                {total} video{total !== 1 ? 's' : ''} found
+              <p className="flex items-center gap-2">
+                {streaming ? (
+                  <span className="flex items-center gap-1 text-blue-400">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading videos... ({loadedCount} found{total > 0 ? ` of ~${total}` : ''})
+                  </span>
+                ) : (
+                  <span>
+                    {total} video{total !== 1 ? 's' : ''} found
+                  </span>
+                )}
               </p>
             </div>
           </DialogDescription>
@@ -207,12 +220,13 @@ export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
           <RadioGroup
             value={mode}
             onValueChange={(v) => handleModeChange(v as DownloadMode)}
+            disabled={streaming}
             className="space-y-2"
           >
             {/* All */}
-            <div className="flex items-center gap-3 rounded-lg border border-white/10 px-4 py-3 hover:bg-white/5 cursor-pointer">
+            <div className={`flex items-center gap-3 rounded-lg border border-white/10 px-4 py-3 ${streaming ? 'opacity-50' : 'hover:bg-white/5 cursor-pointer'}`}>
               <RadioGroupItem value="all" id="mode-all" />
-              <Label htmlFor="mode-all" className="cursor-pointer text-sm">
+              <Label htmlFor="mode-all" className={`text-sm ${streaming ? '' : 'cursor-pointer'}`}>
                 Download entire playlist <span className="text-white/50">({total} videos)</span>
               </Label>
             </div>
@@ -358,6 +372,10 @@ export function PlaylistDialog({ open, data, onClose, onConfirm }: Props) {
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding to Queue…
+              </>
+            ) : streaming ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Waiting for videos...
               </>
             ) : (
               `Add ${resolvedEntries.length > 0 ? resolvedEntries.length : total} video${(resolvedEntries.length || total) !== 1 ? 's' : ''} to Queue`

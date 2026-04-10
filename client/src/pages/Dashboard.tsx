@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { LayoutShell } from '@/components/layout-shell';
 import { cn } from '@/lib/utils';
 import { useVideoDetect, type DetectedVideo } from '@/hooks/use-video-detect';
+import { queryClient } from '@/lib/queryClient';
 import {
   PlaylistDialog,
   type PlaylistEntry,
@@ -36,7 +38,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import Support from '@/pages/Support';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -121,6 +123,7 @@ export default function Dashboard() {
   // Playlist detection dialog state
   const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
   const [playlistDetectedData, setPlaylistDetectedData] = useState<PlaylistDialogData | null>(null);
+  const [isPlaylistStreaming, setIsPlaylistStreaming] = useState(false);
 
   /** Called when the user confirms their selection in the PlaylistDialog. */
   const handlePlaylistConfirm = async (
@@ -151,6 +154,18 @@ export default function Dashboard() {
     window.electronAPI.onPlaylistDetected?.((data) => {
       setPlaylistDetectedData(data);
       setShowPlaylistDialog(true);
+      setIsPlaylistStreaming(true);
+    });
+
+    // ── Menu-driven navigation ────────────────────────────────────────────
+    window.electronAPI.onNavigateToTab?.((tabPath: string) => {
+      handleTabChange(tabPath === '/' ? 'downloader' : tabPath.replace('/', ''));
+    });
+    window.electronAPI.onSettingsUpdated?.(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+    });
+    window.electronAPI.onDownloadsCleared?.(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/downloads'] });
     });
   }, []);
 
@@ -162,8 +177,12 @@ export default function Dashboard() {
       <PlaylistDialog
         open={showPlaylistDialog}
         data={playlistDetectedData}
-        onClose={() => setShowPlaylistDialog(false)}
+        onClose={() => {
+          setShowPlaylistDialog(false);
+          setIsPlaylistStreaming(false);
+        }}
         onConfirm={handlePlaylistConfirm}
+        streaming={isPlaylistStreaming}
       />
 
       <div className="space-y-8 animate-in fade-in duration-300">
@@ -204,6 +223,9 @@ export default function Dashboard() {
               onGoToQueue={() => handleTabChange('queue')}
               successMsg={successMsg}
               setSuccessMsg={setSuccessMsg}
+              isPlaylistStreaming={isPlaylistStreaming}
+              setIsPlaylistStreaming={setIsPlaylistStreaming}
+              setPlaylistDetectedData={setPlaylistDetectedData}
             />
           </TabsContent>
 
@@ -250,6 +272,10 @@ interface VideoInfoProps {
   onGoToQueue: () => void;
   successMsg: string | null;
   setSuccessMsg: (msg: string | null) => void;
+  // Playlist streaming state
+  isPlaylistStreaming: boolean;
+  setIsPlaylistStreaming: (streaming: boolean) => void;
+  setPlaylistDetectedData: (updater: (prev: PlaylistDialogData | null) => PlaylistDialogData | null) => void;
 }
 
 function VideoCapturePanel({
@@ -266,6 +292,9 @@ function VideoCapturePanel({
   onGoToQueue,
   successMsg,
   setSuccessMsg,
+  isPlaylistStreaming,
+  setIsPlaylistStreaming,
+  setPlaylistDetectedData,
 }: VideoInfoProps & { successMsg: string | null }) {
   const urlInputRef = useRef<HTMLInputElement>(null);
   const videoDetectMutation = useVideoDetect();
@@ -313,12 +342,44 @@ function VideoCapturePanel({
       const currentVideoInfo = videoInfo || [];
       if (currentVideoInfo.some((v: DetectedVideo) => v.url === data.video.url && v.title === data.video.title)) return;
       setVideoInfo([...currentVideoInfo, data.video]);
+
+      // Also update the playlist dialog data in real-time
+      setPlaylistDetectedData((prev: PlaylistDialogData | null) => {
+        if (!prev) return prev; // Dialog not open yet
+
+        const newEntry = {
+          index: data.index,
+          url: data.video.url,
+          title: data.video.title,
+          thumbnail: data.video.thumbnail,
+        };
+
+        // Avoid duplicates
+        const alreadyExists = prev.entries.some((e: PlaylistEntry) => e.index === data.index);
+        if (alreadyExists) return prev;
+
+        return {
+          ...prev,
+          entries: [...prev.entries, newEntry].sort((a, b) => a.index - b.index),
+          count: data.total > 0 ? data.total : prev.entries.length + 1,
+        };
+      });
     });
 
     window.electronAPI.onPlaylistDetectionComplete?.((metadata: { title: string; count: number }) => {
       setPlaylistTitle(metadata.title);
       setPlaylistVideoCount(metadata.count);
-      setIsStreaming(false);
+      setIsPlaylistStreaming(false);
+
+      // Update dialog with final count and title
+      setPlaylistDetectedData((prev: PlaylistDialogData | null) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          title: metadata.title,
+          count: metadata.count,
+        };
+      });
     });
   }, [setVideoInfo]);
 
@@ -336,6 +397,7 @@ function VideoCapturePanel({
     setVideoInfo(null);
     setIsStreaming(false);
     setStreamedCount(0);
+    setIsPlaylistStreaming(false);
 
     const trimmed = scanUrl.trim();
     if (!trimmed) {
@@ -1545,6 +1607,20 @@ function HistoryPanel() {
 // Settings Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DEFAULT_SETTINGS = {
+  downloadPath: '',
+  maxConcurrentDownloads: 3,
+  defaultQuality: 'best',
+  defaultFormat: 'mp4',
+  theme: 'system',
+  detectPlaylists: true,
+  playlistDownloadMode: 'all',
+  createPlaylistFolder: true,
+  eulaAgeAcknowledged: 0 as 0 | 1,
+  cookiesFilePath: '',
+  closeToTray: true,
+};
+
 function SettingsPanel() {
   const [settings, setSettings] = useState<any>(null);
   const [binaryUpdates, setBinaryUpdates] = useState<any[]>([]);
@@ -1553,27 +1629,12 @@ function SettingsPanel() {
   const [ytDlpVersion, setYtDlpVersion] = useState<string>('');
   const [latestVersion, setLatestVersion] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
-  const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
-
-  const defaultSettings = {
-    downloadPath: '',
-    maxConcurrentDownloads: 3,
-    defaultQuality: 'best',
-    defaultFormat: 'mp4',
-    theme: 'system',
-    detectPlaylists: true,
-    playlistDownloadMode: 'all',
-    createPlaylistFolder: true,
-    eulaAgeAcknowledged: 0 as 0 | 1,
-    cookiesFilePath: '',
-    closeToTray: true,
-  };
 
   const loadSettings = useCallback(async () => {
     try {
       if (!window.electronAPI) {
-        setSettings(defaultSettings);
+        setSettings(DEFAULT_SETTINGS);
         return;
       }
       const s = await window.electronAPI.getSettings();
@@ -1585,7 +1646,7 @@ function SettingsPanel() {
       }
 
       if (!s) {
-        setSettings({ ...defaultSettings, downloadPath: defaultPath });
+        setSettings({ ...DEFAULT_SETTINGS, downloadPath: defaultPath });
         return;
       }
 
@@ -1604,7 +1665,7 @@ function SettingsPanel() {
         closeToTray: Boolean(s.close_to_tray ?? 1),
       });
     } catch (error) {
-      setSettings(defaultSettings);
+      setSettings(DEFAULT_SETTINGS);
     }
   }, []);
 
@@ -1661,7 +1722,16 @@ function SettingsPanel() {
           console.error(`Failed to update ${binary.name}:`, error);
         }
       }
-      await loadBinaryUpdates();
+      // Reuse the already-fetched updates array instead of calling checkAllBinaryUpdates again
+      setBinaryUpdates((prev) =>
+        prev.map((u) => {
+          const updated = updates.find((e: any) => e.name === u.name);
+          if (updated) {
+            return { ...u, installedVersion: updated.latestVersion, latestVersion: updated.latestVersion, needsUpdate: false, updating: false };
+          }
+          return u;
+        }),
+      );
     } catch (error: any) {
       console.error('Failed to update binaries:', error);
       setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: false })));
@@ -1670,7 +1740,8 @@ function SettingsPanel() {
 
   useEffect(() => {
     loadSettings();
-    loadBinaryUpdates();
+    // Load binary updates asynchronously without blocking the UI
+    setTimeout(() => loadBinaryUpdates(), 0);
 
     const loadAppVersion = async () => {
       if (!window.electronAPI) return;
@@ -1711,8 +1782,6 @@ function SettingsPanel() {
     const updated = { ...settings, [key]: value };
     setSettings(updated);
     await window.electronAPI.saveSettings(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   const handleBrowse = async () => {
@@ -1737,8 +1806,6 @@ function SettingsPanel() {
     try {
       await window.electronAPI.resetSettings();
       await loadSettings();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     } finally {
       setResetting(false);
     }
@@ -1940,42 +2007,24 @@ function SettingsPanel() {
             <div className="flex items-center space-x-3">
               <Switch
                 id="playlist-detect"
-                checked={settings?.detectPlaylists || false}
+                checked={settings?.detectPlaylists ?? true}
                 onCheckedChange={(checked) => saveSetting('detectPlaylists', checked)}
               />
               <Label htmlFor="playlist-detect" className="text-sm cursor-pointer">
-                Enable Playlist Downloading
+                Detect and download playlists
               </Label>
             </div>
             {settings?.detectPlaylists && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">Default Playlist Mode</Label>
-                  <Select
-                    value={settings.playlistDownloadMode}
-                    onValueChange={(v) => saveSetting('playlistDownloadMode', v)}
-                  >
-                    <SelectTrigger className="w-full max-w-sm bg-input border-border h-11">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Download all videos automatically</SelectItem>
-                      <SelectItem value="select">Let me choose which videos to download</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center space-x-3 pt-2">
-                  <Switch
-                    id="playlist-create-folder"
-                    checked={settings.createPlaylistFolder || false}
-                    onCheckedChange={(checked) => saveSetting('createPlaylistFolder', checked)}
-                  />
-                  <Label htmlFor="playlist-create-folder" className="text-sm cursor-pointer">
-                    Create playlist folder
-                  </Label>
-                </div>
-              </>
+              <div className="flex items-center space-x-3 ml-8">
+                <Switch
+                  id="playlist-create-folder"
+                  checked={settings?.createPlaylistFolder ?? true}
+                  onCheckedChange={(checked) => saveSetting('createPlaylistFolder', checked)}
+                />
+                <Label htmlFor="playlist-create-folder" className="text-sm cursor-pointer">
+                  Create playlist folder for downloads
+                </Label>
+              </div>
             )}
           </div>
 
@@ -2038,59 +2087,66 @@ function SettingsPanel() {
 
             {/* Individual binary updates */}
             <div className="space-y-4">
-              {binaryUpdates.map((binary) => (
-                <div
-                  key={binary.name}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h4 className="font-medium">{binary.name}</h4>
-                      <span className="text-xs text-muted-foreground">
-                        v{binary.installedVersion} installed
-                      </span>
+              {binaryUpdates.map((binary) => {
+                // Normalize version display - remove 'v' prefix if present to avoid double 'v'
+                const normalizeVersion = (v: string) => v.replace(/^v/, '');
+                const displayInstalled = normalizeVersion(binary.installedVersion);
+                const displayLatest = normalizeVersion(binary.latestVersion);
+
+                return (
+                  <div
+                    key={binary.name}
+                    className="flex items-center justify-between p-4 border border-border rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-medium">{binary.name}</h4>
+                        <span className="text-xs text-muted-foreground">
+                          {displayInstalled} installed
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">
+                          Latest: {displayLatest}
+                        </span>
+                        {binary.needsUpdate && (
+                          <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full ml-2">
+                            Update available
+                          </span>
+                        )}
+                        {!binary.needsUpdate &&
+                          binary.installedVersion !== 'Checking...' &&
+                          binary.installedVersion !== 'Not installed' && (
+                            <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Up to date
+                            </span>
+                          )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        Latest: v{binary.latestVersion}
-                      </span>
-                      {binary.needsUpdate && (
-                        <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full ml-2">
-                          Update available
-                        </span>
+                      {binary.updating ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm">Updating...</span>
+                        </div>
+                      ) : binary.needsUpdate ? (
+                        <Button
+                          onClick={() => handleUpdateBinary(binary.name)}
+                          disabled={binary.updating}
+                          variant="default"
+                          size="sm"
+                        >
+                          Update
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Up to date</span>
                       )}
-                      {!binary.needsUpdate &&
-                        binary.installedVersion !== 'Checking...' &&
-                        binary.installedVersion !== 'Not installed' && (
-                          <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Up to date
-                          </span>
-                        )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    {binary.updating ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">Updating...</span>
-                      </div>
-                    ) : binary.needsUpdate ? (
-                      <Button
-                        onClick={() => handleUpdateBinary(binary.name)}
-                        disabled={binary.updating}
-                        variant="default"
-                        size="sm"
-                      >
-                        Update
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Up to date</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Status message */}

@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ErrorBoundary } from '@/components/error-boundary';
 import Dashboard from '@/pages/Dashboard';
 import DashboardWeb from '@/pages/DashboardWeb';
+import SupportedSites from '@/pages/SupportedSites';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ function NavigationRouter() {
       <Switch>
         <Route path="/" component={DashboardComponent} />
         <Route path="/queue" component={isElectron() ? Dashboard : DashboardComponent} />
+        <Route path="/supported-sites" component={SupportedSites} />
         <Route path="/settings" component={isElectron() ? Dashboard : DashboardComponent} />
         <Route path="/support" component={isElectron() ? Dashboard : DashboardComponent} />
         <Route>
