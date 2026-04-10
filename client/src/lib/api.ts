@@ -43,20 +43,60 @@ const COBALT_INSTANCES = [
   'https://cobalt-backend.canine.tools',
 ];
 
-async function cobaltPost(url: string, body: Record<string, unknown>): Promise<unknown> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+/**
+ * Try the server-side Cobalt proxy first, then fall back to direct instances.
+ * The server proxy adds a proper User-Agent header and avoids CORS issues.
+ */
+async function cobaltFetch(url: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  let lastError: unknown = null;
 
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  });
-  clearTimeout(timeoutId);
+  // Tier 1: Server proxy (avoids CORS, adds User-Agent)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const resp = await fetch('/api/cobalt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (resp.ok) {
+      const data = await resp.json();
+      if ((data as Record<string, unknown>).status !== 'error') return data;
+      lastError = new Error(`Cobalt error: ${(data as Record<string, unknown>).error ? JSON.stringify((data as Record<string, unknown>).error) : 'unknown'}`);
+    } else {
+      lastError = new Error(`Server proxy returned ${resp.status}`);
+    }
+  } catch (err: unknown) {
+    lastError = err;
+  }
 
-  if (!resp.ok) throw new Error(`Cobalt returned ${resp.status}`);
-  return resp.json();
+  // Tier 2: Direct Cobalt instances
+  for (const instance of COBALT_INSTANCES) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const resp = await fetch(`${instance}/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) { lastError = new Error(`${instance} returned ${resp.status}`); continue; }
+      const data = await resp.json();
+      if ((data as Record<string, unknown>).status === 'error') {
+        lastError = new Error(`Cobalt: ${(data as Record<string, unknown>).error ? JSON.stringify((data as Record<string, unknown>).error) : 'unknown'}`);
+        continue;
+      }
+      return data;
+    } catch (err: unknown) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('All Cobalt instances failed');
 }
 
 /**
@@ -65,50 +105,35 @@ async function cobaltPost(url: string, body: Record<string, unknown>): Promise<u
  * so this works from any server IP without cookies.
  */
 async function fetchYoutubeViaCobalt(url: string): Promise<ApiResponse> {
-  let lastError: unknown = null;
+  const data = await cobaltFetch(url, { url });
 
-  for (const instance of COBALT_INSTANCES) {
-    try {
-      const data = await cobaltPost(`${instance}/`, { url }) as Record<string, unknown>;
+  // Cobalt returns filename which we parse for metadata
+  const filename = data.filename as string | undefined;
+  const downloadUrl = data.url as string | undefined;
 
-      if ((data as Record<string, unknown>).status === 'error') {
-        const err = (data as Record<string, unknown>).error as Record<string, string> | undefined;
-        throw new Error(err?.code || 'Cobalt could not process this video.');
-      }
+  // Derive title from filename (Cobalt doesn't return raw metadata like yt-dlp)
+  const rawTitle = filename
+    ? filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim()
+    : 'YouTube Video';
 
-      // Cobalt returns filename which we parse for metadata
-      const filename = (data as Record<string, unknown>).filename as string | undefined;
-      const downloadUrl = (data as Record<string, unknown>).url as string | undefined;
-
-      // Derive title from filename (Cobalt doesn't return raw metadata like yt-dlp)
-      const rawTitle = filename
-        ? filename.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').trim()
-        : 'YouTube Video';
-
-      return {
-        success: true,
-        data: {
-          url,
-          title: rawTitle,
-          thumbnail: '',
-          duration: 0,
-          uploader: '',
-          formats: [
-            { formatId: 'best-video', label: 'Best Video (1080p)', quality: '1080p', ext: 'mp4', filesize: null, height: 1080 },
-            { formatId: 'best-720', label: 'Standard Quality (720p)', quality: '720p', ext: 'mp4', filesize: null, height: 720 },
-            { formatId: 'best-480', label: '480p', quality: '480p', ext: 'mp4', filesize: null, height: 480 },
-            { formatId: 'audio-only', label: 'Audio Only (MP3)', quality: 'audio', ext: 'mp3', filesize: null, height: null },
-          ],
-          _cobaltDownloadUrl: downloadUrl,
-        },
-        meta: { playlistDetected: false, detectPlaylistsEnabled: false, collapsedToSingle: false },
-      };
-    } catch (err: unknown) {
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error('All Cobalt instances failed for YouTube.');
+  return {
+    success: true,
+    data: {
+      url,
+      title: rawTitle,
+      thumbnail: '',
+      duration: 0,
+      uploader: '',
+      formats: [
+        { formatId: 'best-video', label: 'Best Video (1080p)', quality: '1080p', ext: 'mp4', filesize: null, height: 1080 },
+        { formatId: 'best-720', label: 'Standard Quality (720p)', quality: '720p', ext: 'mp4', filesize: null, height: 720 },
+        { formatId: 'best-480', label: '480p', quality: '480p', ext: 'mp4', filesize: null, height: 480 },
+        { formatId: 'audio-only', label: 'Audio Only (MP3)', quality: 'audio', ext: 'mp3', filesize: null, height: null },
+      ],
+      _cobaltDownloadUrl: downloadUrl,
+    },
+    meta: { playlistDetected: false, detectPlaylistsEnabled: false, collapsedToSingle: false },
+  };
 }
 
 // ── Main API ──────────────────────────────────────────────────────────────
@@ -151,45 +176,31 @@ export const api = {
     // Everything else → server yt-dlp stream endpoint
     if (isYouTubeUrl(data.url)) {
       const isAudioOnly = data.formatId === 'audio-only' || data.formatId === 'bestaudio';
-      const videoQuality = isAudioOnly ? '720' : '1080';
 
-      let lastError: unknown = null;
-      for (const instance of COBALT_INSTANCES) {
-        try {
-          const respData = await cobaltPost(`${instance}/`, {
-            url: data.url,
-            videoQuality,
-            isAudioOnly,
-            audioFormat: isAudioOnly ? 'mp3' : undefined,
-          }) as Record<string, unknown>;
+      const respData = await cobaltFetch(data.url, {
+        url: data.url,
+        videoQuality: isAudioOnly ? '720' : '1080',
+        downloadMode: isAudioOnly ? 'audio' : 'auto',
+        audioFormat: isAudioOnly ? 'mp3' : undefined,
+      });
 
-          if ((respData as Record<string, unknown>).status === 'error') {
-            const err = (respData as Record<string, unknown>).error as Record<string, string> | undefined;
-            throw new Error(err?.code || 'Download failed via Cobalt.');
-          }
+      const downloadUrl = respData.url as string
+        || (respData.picker as Array<{ url: string }> | undefined)?.[0]?.url;
 
-          const downloadUrl = (respData as Record<string, unknown>).url as string
-            || ((respData as Record<string, unknown>).picker as Array<{ url: string }> | undefined)?.[0]?.url;
+      if (!downloadUrl) throw new Error('Cobalt did not return a download URL.');
 
-          if (!downloadUrl) throw new Error('Cobalt did not return a download URL.');
+      // Trigger browser download
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = data.filename;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { if (a.parentNode) a.parentNode.removeChild(a); }, 1000);
 
-          // Trigger browser download
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = data.filename;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => { if (a.parentNode) a.parentNode.removeChild(a); }, 1000);
-
-          return { success: true, id: Date.now() };
-        } catch (err: unknown) {
-          lastError = err;
-        }
-      }
-      throw lastError || new Error('All Cobalt instances failed for download.');
+      return { success: true, id: Date.now() };
     }
 
     // Non-YouTube: server stream endpoint
