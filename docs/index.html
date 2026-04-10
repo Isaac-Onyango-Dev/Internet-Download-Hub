@@ -1,444 +1,565 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- ── Favicon — browser tab icon ──────────────────────────── -->
-
-  <!-- Standard favicon — used by most browsers -->
+  <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico" />
-
-  <!-- PNG favicons — higher quality on modern browsers -->
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
-
-  <!-- Apple devices — used when page is saved to home screen on iPhone/iPad -->
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
 
-  <!-- General purpose icon for any other use -->
-  <link rel="icon" type="image/png" sizes="192x192" href="icon.png" />
-
-  <!-- ── Page metadata ────────────────────────────────────────── -->
-  <meta name="description"
-    content="Internet Download Hub — Free Windows video downloader. Download from YouTube, TikTok, Twitter, Instagram and 1000+ sites." />
-
-  <!-- Open Graph — controls how page looks when shared on social media -->
+  <!-- SEO / Social -->
+  <meta name="description" content="Internet Download Hub — Free Windows video downloader. Download from YouTube, TikTok, Twitter, Instagram and 1000+ sites." />
   <meta property="og:title" content="Internet Download Hub" />
   <meta property="og:description" content="Free desktop app to download videos from 1000+ sites. No ads. No limits." />
   <meta property="og:image" content="https://isaac-onyango-dev.github.io/Internet-Download-Hub/icon.png" />
   <meta property="og:url" content="https://isaac-onyango-dev.github.io/Internet-Download-Hub" />
   <meta property="og:type" content="website" />
-
-  <!-- Base URL for relative paths -->
-  <base href="/Internet-Download-Hub/">
-
-  <!-- Twitter card — controls how page looks when shared on Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Internet Download Hub" />
   <meta name="twitter:description" content="Free desktop app to download videos from 1000+ sites." />
   <meta name="twitter:image" content="https://isaac-onyango-dev.github.io/Internet-Download-Hub/icon.png" />
 
+  <base href="/Internet-Download-Hub/" />
   <title>Internet Download Hub — Free Video Downloader for Windows</title>
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-  <!-- Navigation -->
-  <nav class="navbar">
+  <!-- ═══════════════════════════════════════════
+       NAVIGATION
+       ═══════════════════════════════════════════ -->
+  <nav class="navbar" id="navbar">
     <div class="nav-inner">
-      <div class="nav-brand">
-        <img src="icon.png" alt="IDH Logo" class="nav-logo" />
+      <a href="#" class="nav-brand">
+        <img src="icon.png" alt="" class="nav-logo" />
         <span>Internet Download Hub</span>
-      </div>
+      </a>
       <div class="nav-links">
-        <a href="#features" class="nav-link">Features</a>
-        <a href="#download" class="nav-link">Download</a>
-        <a href="#support" class="nav-link">Support</a>
-        <a href="https://internet-download-hub.onrender.com/" class="nav-web-app">Try Web App</a>
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank"
-          rel="noopener noreferrer">GitHub</a>
+        <a href="#features">Features</a>
+        <a href="#sites">Sites</a>
+        <a href="#download">Download</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://internet-download-hub.onrender.com/" class="nav-web-app" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Web App
+        </a>
       </div>
+      <button class="nav-mobile-toggle" id="mobile-toggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="nav-mobile-menu" id="mobile-menu">
+      <a href="#features" class="mobile-link">Features</a>
+      <a href="#sites" class="mobile-link">Sites</a>
+      <a href="#download" class="mobile-link">Download</a>
+      <a href="#faq" class="mobile-link">FAQ</a>
+      <a href="https://internet-download-hub.onrender.com/" class="mobile-link" target="_blank" rel="noopener">Web App</a>
     </div>
   </nav>
 
-  <!-- Hero -->
+  <!-- ═══════════════════════════════════════════
+       HERO
+       ═══════════════════════════════════════════ -->
   <section class="hero">
+    <div class="hero-glow"></div>
     <div class="hero-inner">
-      <img src="icon.png" alt="Internet Download Hub" class="hero-logo" />
-      <h1>Internet Download Hub</h1>
-      <p class="hero-subtitle">Download videos from YouTube, TikTok, Twitter, Instagram and 1000+ other sites —
-        completely free, no limits, no ads.</p>
-      <div class="hero-badges">
-        <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=flat-square" alt="Windows" />
-        <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT" />
-        <img id="download-badge"
-          src="https://img.shields.io/github/downloads/Isaac-Onyango-Dev/Internet-Download-Hub/total?style=flat-square&amp;color=059669&amp;label=Downloads"
-          alt="Downloads" />
+      <div class="hero-badge animate-in">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>v1.1.3 — Now with playlist downloads</span>
       </div>
-      <div class="hero-actions">
-        <a id="hero-download-btn" href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
-          target="_blank" rel="noopener noreferrer" class="btn-primary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-          </svg>
+
+      <h1 class="animate-in" data-delay="100">
+        Every video.<br />
+        <span class="gradient-text">One downloader.</span>
+      </h1>
+
+      <p class="hero-subtitle animate-in" data-delay="200">
+        Paste a link. Pick your quality. Hit download.<br />
+        Internet Download Hub handles the rest — from YouTube playlists to TikTok clips, all in one place.
+      </p>
+
+      <div class="hero-actions animate-in" data-delay="300">
+        <a id="hero-download-btn" href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" class="btn-primary" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Download for Windows
         </a>
-        <a href="https://internet-download-hub.onrender.com/" class="btn-web">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <circle cx="12" cy="12" r="10" />
-            <path
-              d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
-          Try Web App
-        </a>
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener"
-          class="btn-secondary">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-          View on GitHub
+        <a href="https://internet-download-hub.onrender.com/" class="btn-secondary" target="_blank" rel="noopener">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Use Web App
         </a>
       </div>
-      <p class="hero-note">Windows 10 / 11 (64-bit) &nbsp;·&nbsp; Free forever &nbsp;·&nbsp; Open source &nbsp;·&nbsp;
-        <a href="https://internet-download-hub.onrender.com/" style="color:var(--accent);text-decoration:underline;">Web version available</a>
-      </p>
+
+      <div class="hero-meta animate-in" data-delay="400">
+        <span>Windows 10 / 11</span>
+        <span class="dot">·</span>
+        <span>Free forever</span>
+        <span class="dot">·</span>
+        <span>Open source</span>
+        <span class="dot">·</span>
+        <span id="version-text" class="version-text">v1.1.3</span>
+      </div>
     </div>
   </section>
 
-  <!-- Download count -->
+  <!-- ═══════════════════════════════════════════
+       STATS BAR
+       ═══════════════════════════════════════════ -->
   <section class="stats-bar">
     <div class="stats-inner">
-      <div class="stat">
-        <span class="stat-number" id="total-downloads">
-          <span class="loading-dots">···</span>
-        </span>
-        <span class="stat-label">Total Downloads</span>
+      <div class="stat animate-in" data-delay="0">
+        <span class="stat-number" id="total-downloads">—</span>
+        <span class="stat-label">Downloads</span>
       </div>
-      <div class="stat">
-        <span class="stat-number">1,000+</span>
+      <div class="stat animate-in" data-delay="100">
+        <span class="stat-number" data-count="1000">0</span><span class="stat-number-suffix">+</span>
         <span class="stat-label">Supported Sites</span>
       </div>
-      <div class="stat">
-        <span class="stat-number">Free</span>
-        <span class="stat-label">Always</span>
+      <div class="stat animate-in" data-delay="200">
+        <span class="stat-number">4</span>
+        <span class="stat-label">Download Engines</span>
+      </div>
+      <div class="stat animate-in" data-delay="300">
+        <span class="stat-number">0</span>
+        <span class="stat-label">Ads or Limits</span>
       </div>
     </div>
   </section>
 
-  <!-- Features -->
+  <!-- ═══════════════════════════════════════════
+       HOW IT WORKS
+       ═══════════════════════════════════════════ -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="section-inner">
+      <p class="section-eyebrow animate-in">How it works</p>
+      <h2 class="animate-in">Three steps. That's it.</h2>
+      <p class="section-sub animate-in">No sign-ups. No extensions. No complicated setup.</p>
+
+      <div class="steps-row">
+        <div class="step-card animate-in" data-delay="0">
+          <div class="step-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div class="step-label">Paste any video link</div>
+          <p class="step-desc">From YouTube, TikTok, Instagram, Twitter, Reddit — over 1,000 sites supported.</p>
+        </div>
+
+        <div class="step-card animate-in" data-delay="150">
+          <div class="step-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </div>
+          <div class="step-label">Pick quality & format</div>
+          <p class="step-desc">1080p, 720p, audio-only MP3 — file sizes shown before you commit.</p>
+        </div>
+
+        <div class="step-card animate-in" data-delay="300">
+          <div class="step-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          </div>
+          <div class="step-label">Download & done</div>
+          <p class="step-desc">Files save to your chosen folder. Queue multiple videos. Pause and resume anytime.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       FEATURES
+       ═══════════════════════════════════════════ -->
   <section class="features" id="features">
     <div class="section-inner">
-      <h2>Everything you need to download any video</h2>
-      <p class="section-sub">Built for everyday users. No technical knowledge required.</p>
+      <p class="section-eyebrow animate-in">Features</p>
+      <h2 class="animate-in">Built for real use</h2>
+      <p class="section-sub animate-in">Not a toy. A tool that gets the job done, every time.</p>
+
       <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🌐</div>
-          <h3>1000+ Supported Sites</h3>
-          <p>YouTube, TikTok, Twitter, Instagram, Facebook, Reddit, Vimeo, Dailymotion, and hundreds more.</p>
+        <div class="feature-card animate-in" data-delay="0">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          </div>
+          <h3>Playlist Downloads</h3>
+          <p>Download entire YouTube playlists at once. Pick every video, a range, or just the ones you want. Each one queues individually — no chaos, no missed files.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Fast Parallel Downloads</h3>
-          <p>Download multiple videos at once with real-time progress tracking, speed display, and time remaining.</p>
+
+        <div class="feature-card animate-in" data-delay="80">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <h3>Parallel Downloads</h3>
+          <p>Run multiple downloads at the same time. Each one tracks its own speed, progress, and ETA. Set how many can run simultaneously.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎯</div>
-          <h3>Choose Your Quality</h3>
-          <p>Select from 1080p, 720p, 480p, 360p, or audio only. File size shown before you download.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔄</div>
-          <h3>Smart Fallback System</h3>
-          <p>Four download engines work together automatically. If one fails the next one tries — you never need to
-            know.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📁</div>
-          <h3>Download Queue</h3>
-          <p>Add multiple videos to download at once. Pause, resume, or cancel any download at any time.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎵</div>
+
+        <div class="feature-card animate-in" data-delay="160">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          </div>
           <h3>Audio Extraction</h3>
-          <p>Download audio only as MP3 from any supported video. Perfect for music and podcasts.</p>
+          <p>One click for MP3 output from any video. Great for music, podcasts, or lectures. Quality options from 128kbps to 320kbps.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔒</div>
-          <h3>No Installation Hassle</h3>
-          <p>yt-dlp, FFmpeg, and all required tools are bundled inside. Nothing extra to install.</p>
+
+        <div class="feature-card animate-in" data-delay="240">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          </div>
+          <h3>Quality Selection</h3>
+          <p>See every available resolution with file sizes before you download. From 144p for quick previews to 4K for the best quality. No surprises.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-icon">🆓</div>
-          <h3>Free and Open Source</h3>
-          <p>No ads, no subscriptions, no limits. The source code is public on GitHub for anyone to inspect.</p>
+
+        <div class="feature-card animate-in" data-delay="320">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <h3>Four Engines, Zero Failures</h3>
+          <p>yt-dlp, streamlink, gallery-dl, and N_m3u8DL-RE work together behind the scenes. If one fails, the next tries. You never even know it happened.</p>
+        </div>
+
+        <div class="feature-card animate-in" data-delay="400">
+          <div class="feature-visual">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>Private & Offline</h3>
+          <p>Everything runs on your machine. No accounts, no cloud, no tracking. Your download history stays local. Import browser cookies for age-restricted content.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Screenshots -->
+  <!-- ═══════════════════════════════════════════
+       SUPPORTED SITES
+       ═══════════════════════════════════════════ -->
+  <section class="supported-sites" id="sites">
+    <div class="section-inner">
+      <p class="section-eyebrow animate-in">Supported Sites</p>
+      <h2 class="animate-in">1,000+ sites. One app.</h2>
+      <p class="section-sub animate-in">If it has a video, it probably works.</p>
+
+      <div class="sites-grid animate-in" data-delay="100">
+        <div class="site-group">
+          <div class="site-group-label">Video Platforms</div>
+          <div class="site-tags">
+            <span class="site-tag">YouTube</span>
+            <span class="site-tag">Vimeo</span>
+            <span class="site-tag">Dailymotion</span>
+            <span class="site-tag">Bilibili</span>
+            <span class="site-tag">Odysee</span>
+            <span class="site-tag">Rumble</span>
+          </div>
+        </div>
+        <div class="site-group">
+          <div class="site-group-label">Social Media</div>
+          <div class="site-tags">
+            <span class="site-tag">TikTok</span>
+            <span class="site-tag">Twitter / X</span>
+            <span class="site-tag">Instagram</span>
+            <span class="site-tag">Facebook</span>
+            <span class="site-tag">Reddit</span>
+            <span class="site-tag">Tumblr</span>
+          </div>
+        </div>
+        <div class="site-group">
+          <div class="site-group-label">Live Streaming</div>
+          <div class="site-tags">
+            <span class="site-tag">Twitch</span>
+            <span class="site-tag">Kick</span>
+          </div>
+        </div>
+        <div class="site-group">
+          <div class="site-group-label">Anime & Streaming</div>
+          <div class="site-tags">
+            <span class="site-tag">Crunchyroll</span>
+            <span class="site-tag">Funimation</span>
+            <span class="site-tag">Niconico</span>
+          </div>
+        </div>
+        <div class="site-group">
+          <div class="site-group-label">Image Galleries</div>
+          <div class="site-tags">
+            <span class="site-tag">Pixiv</span>
+            <span class="site-tag">DeviantArt</span>
+            <span class="site-tag">Flickr</span>
+            <span class="site-tag">ArtStation</span>
+            <span class="site-tag">Imgur</span>
+          </div>
+        </div>
+        <div class="site-group">
+          <div class="site-group-label">And 980+ more…</div>
+          <div class="site-tags">
+            <span class="site-tag site-tag-more">Powered by yt-dlp, gallery-dl & streamlink</span>
+          </div>
+        </div>
+      </div>
+
+      <a href="https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md" class="sites-full-link animate-in" data-delay="200" target="_blank" rel="noopener">
+        View the complete list of supported sites
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       SCREENSHOTS
+       ═══════════════════════════════════════════ -->
   <section class="screenshots" id="screenshots">
     <div class="section-inner">
-      <h2>See Internet Download Hub in Action</h2>
-      <p class="section-sub">Clean interface, powerful features, reliable downloads</p>
+      <p class="section-eyebrow animate-in">Screenshots</p>
+      <h2 class="animate-in">See it in action</h2>
+      <p class="section-sub animate-in">Clean interface. Powerful features. Nothing you don't need.</p>
 
-      <div class="screenshot-container">
-        <div class="screenshot-carousel">
-          <div class="screenshot-slide active">
-            <div class="screenshot-mockup" style="padding: 0;">
-              <img src="screenshots/downloader.jpg" alt="Downloader Interface"
-                style="display: block; width: 100%; height: auto;" />
+      <div class="screenshot-carousel animate-in" data-delay="100">
+        <div class="carousel-viewport">
+          <div class="carousel-track" id="carousel-track">
+            <div class="carousel-slide">
+              <div class="screenshot-frame">
+                <img src="screenshots/downloader.jpg" alt="Downloader" loading="lazy" />
+              </div>
+              <p class="screenshot-caption">Main Downloader — paste a URL, pick quality, and go</p>
             </div>
-          </div>
-          <div class="screenshot-slide">
-            <div class="screenshot-mockup" style="padding: 0;">
-              <img src="screenshots/queue.jpg" alt="Download Queue"
-                style="display: block; width: 100%; height: auto;" />
+            <div class="carousel-slide">
+              <div class="screenshot-frame">
+                <img src="screenshots/queue.jpg" alt="Download Queue" loading="lazy" />
+              </div>
+              <p class="screenshot-caption">Active Queue — multiple downloads with live progress</p>
             </div>
-          </div>
-          <div class="screenshot-slide">
-            <div class="screenshot-mockup" style="padding: 0;">
-              <img src="screenshots/settings.jpg" alt="Settings" style="display: block; width: 100%; height: auto;" />
+            <div class="carousel-slide">
+              <div class="screenshot-frame">
+                <img src="screenshots/settings.jpg" alt="Settings" loading="lazy" />
+              </div>
+              <p class="screenshot-caption">Settings — customize paths, quality, and engines</p>
             </div>
           </div>
         </div>
 
-        <div class="screenshot-controls">
-          <button class="screenshot-nav prev" onclick="changeScreenshot(-1)">‹</button>
-          <div class="screenshot-indicators">
-            <span class="indicator active" onclick="goToScreenshot(0)"></span>
-            <span class="indicator" onclick="goToScreenshot(1)"></span>
-            <span class="indicator" onclick="goToScreenshot(2)"></span>
-          </div>
-          <button class="screenshot-nav next" onclick="changeScreenshot(1)">›</button>
+        <div class="carousel-controls">
+          <button class="carousel-btn prev" id="carousel-prev" aria-label="Previous">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="carousel-dots" id="carousel-dots"></div>
+          <button class="carousel-btn next" id="carousel-next" aria-label="Next">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- How to use -->
-  <section class="how-to-use">
+  <!-- ═══════════════════════════════════════════
+       DESKTOP VS WEB
+       ═══════════════════════════════════════════ -->
+  <section class="comparison" id="comparison">
     <div class="section-inner">
-      <h2>How to use it</h2>
-      <p class="section-sub">Three steps is all it takes</p>
-      <div class="steps">
-        <div class="step">
-          <div class="step-number">1</div>
-          <h3>Paste the video link</h3>
-          <p>Copy the URL from your browser address bar and paste it into the app</p>
+      <p class="section-eyebrow animate-in">Two ways to use it</p>
+      <h2 class="animate-in">Pick your fit</h2>
+      <p class="section-sub animate-in">Quick download? Web version. Heavy lifting? Desktop.</p>
+
+      <div class="comparison-grid">
+        <div class="comparison-card animate-in" data-delay="0">
+          <div class="comparison-card-header">
+            <div class="comparison-card-icon web-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div>
+              <h3>Web App</h3>
+              <p class="comparison-card-subtitle">No install · 50+ sites</p>
+            </div>
+          </div>
+          <ul class="comparison-list">
+            <li>Opens in any browser</li>
+            <li>YouTube, TikTok, Twitter, Instagram, Reddit, and more</li>
+            <li>Quick downloads, no setup</li>
+            <li>Cloud-powered — works anywhere</li>
+          </ul>
+          <a href="https://internet-download-hub.onrender.com/" class="comparison-card-cta web-cta" target="_blank" rel="noopener">Launch Web App</a>
         </div>
-        <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-number">2</div>
-          <h3>Choose quality</h3>
-          <p>Select your preferred video quality and file size from the options shown</p>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-number">3</div>
-          <h3>Download</h3>
-          <p>Click Download and the file saves directly to your Downloads folder</p>
+
+        <div class="comparison-card animate-in" data-delay="100">
+          <div class="comparison-card-header">
+            <div class="comparison-card-icon desktop-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div>
+              <h3>Desktop App</h3>
+              <p class="comparison-card-subtitle">Full power · 1000+ sites</p>
+            </div>
+          </div>
+          <ul class="comparison-list">
+            <li>Playlist downloads with auto-foldering</li>
+            <li>Parallel downloads with pause & resume</li>
+            <li>Quality selection with file size previews</li>
+            <li>Audio extraction & format conversion</li>
+            <li>Download history and queue persistence</li>
+            <li>All 1,000+ sites via bundled engines</li>
+          </ul>
+          <a href="#download" class="comparison-card-cta desktop-cta">Download Desktop App</a>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Download section -->
+  <!-- ═══════════════════════════════════════════
+       DOWNLOAD
+       ═══════════════════════════════════════════ -->
   <section class="download-section" id="download">
     <div class="section-inner">
-      <h2>Get Started</h2>
-      <p class="section-sub">Choose between web or desktop version</p>
+      <p class="section-eyebrow animate-in">Download</p>
+      <h2 class="animate-in">Get it now</h2>
+      <p class="section-sub animate-in">Free forever. No ads. No spyware. No strings attached.</p>
 
-      <!-- Web Version Card -->
-      <div
-        style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 3rem; max-width: 900px; margin-left: auto; margin-right: auto;">
-        <div class="download-card">
-          <div class="download-card-left">
-            <div
-              style="width: 64px; height: 64px; background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 28px; font-weight: bold;">
-              🌐</div>
-            <div class="download-info">
-              <h3>Web Version</h3>
-              <p style="font-size: 13px; color: #666; margin: 4px 0;">No installation • 50+ sites</p>
-              <p class="download-requirements">Use directly in browser</p>
+      <div class="download-card-main animate-in" data-delay="100">
+        <div class="download-card-main-inner">
+          <div class="download-card-info">
+            <img src="icon.png" alt="" class="download-app-icon" />
+            <div>
+              <h3>Internet Download Hub</h3>
+              <p class="download-card-version" id="download-version">v1.1.3 · Windows 10 / 11 (64-bit)</p>
+              <p class="download-card-size" id="download-size">~130 MB installer</p>
             </div>
           </div>
-          <a href="https://internet-download-hub.onrender.com/" class="btn-download"
-            style="background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%); text-decoration: none;">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <circle cx="12" cy="12" r="10" />
-              <path
-                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            Launch Web App
-          </a>
-        </div>
-
-        <div class="download-card">
-          <div class="download-card-left">
-            <img src="icon.png" alt="Internet Download Hub" class="download-icon" />
-            <div class="download-info">
-              <h3>Desktop Version</h3>
-              <p id="version-text" style="font-size: 13px; color: #666; margin: 4px 0;">Latest version</p>
-              <p class="download-requirements">Windows 10 / 11 (64-bit)</p>
-            </div>
-          </div>
-          <a id="download-btn"
-            href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest/download/Internet.Download.Hub.Setup.1.0.0.exe"
-            class="btn-download" target="_blank" rel="noopener noreferrer">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-            </svg>
-            Download .exe
-            <span id="file-size" class="file-size-label"></span>
+          <a id="download-btn" href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest" class="btn-download" target="_blank" rel="noopener">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download Installer
           </a>
         </div>
       </div>
 
-      <!-- Feature comparison note -->
-      <div
-        style="background: #F3F4F6; border-radius: 8px; padding: 1.5rem; text-align: center; max-width: 600px; margin: 0 auto;">
-        <p style="margin: 0; font-size: 13px; color: #4B5563; line-height: 1.6;">
-          <strong>Web Version:</strong> No setup • Cloud-based • Works everywhere<br>
-          <strong>Desktop Version:</strong> 1000+ sites • Full features • Offline mode
+      <div class="download-notes animate-in" data-delay="200">
+        <p>
+          The installer bundles all required download engines. You won't need to install Python, yt-dlp, or FFmpeg separately — everything is included.
+        </p>
+        <p>
+          Windows may show a security warning for unsigned apps. Click <strong>More info → Run anyway</strong>. This is normal and safe — the source code is public on GitHub.
         </p>
       </div>
-
-      <p class="download-note">
-        By downloading you agree to the <a
-          href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/LICENSE" target="_blank"
-          rel="noopener">MIT License</a>.
-        Windows may show a security warning — click <strong>More info → Run anyway</strong> to install.
-        This is normal for unsigned applications.
-      </p>
     </div>
   </section>
 
-  <!-- Support section -->
-  <section class="support-section" id="support">
+  <!-- ═══════════════════════════════════════════
+       FAQ
+       ═══════════════════════════════════════════ -->
+  <section class="faq" id="faq">
     <div class="section-inner">
-      <h2>Support the Project</h2>
-      <p class="section-sub">
-        Internet Download Hub is built and maintained by one developer.
-        Your support helps keep it free, updated, and improving.
-      </p>
-      <div class="support-grid">
+      <p class="section-eyebrow animate-in">FAQ</p>
+      <h2 class="animate-in">Common questions</h2>
+      <p class="section-sub animate-in">Quick answers for the things people usually ask.</p>
 
-        <!-- Share card -->
-        <div class="support-card">
-          <div class="support-icon">📢</div>
-          <h3>Share the App</h3>
-          <p>Tell a friend or share on social media. It is the most powerful way to help a free project grow.</p>
-          <div class="share-buttons">
-            <a class="share-btn share-twitter" id="share-twitter"
-              href="https://twitter.com/intent/tweet?text=Check+out+Internet+Download+Hub%21&url=https://isaac-onyango-dev.github.io/Internet-Download-Hub/"
-              target="_blank" rel="noopener noreferrer">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-              Share on X
-            </a>
-            <a class="share-btn share-reddit" id="share-reddit"
-              href="https://www.reddit.com/submit?url=https://isaac-onyango-dev.github.io/Internet-Download-Hub/&title=Internet+Download+Hub+-+Free+Video+Downloader"
-              target="_blank" rel="noopener noreferrer">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" />
-              </svg>
-              Share on Reddit
-            </a>
-            <a class="share-btn share-whatsapp" id="share-whatsapp"
-              href="https://wa.me/?text=Check+out+Internet+Download+Hub%3A+https://isaac-onyango-dev.github.io/Internet-Download-Hub/"
-              target="_blank" rel="noopener noreferrer">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-              Share on WhatsApp
-            </a>
-            <button class="share-btn share-copy" id="copy-link-btn" onclick="copyLink()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-              </svg>
-              <span id="copy-label">Copy Link</span>
-            </button>
+      <div class="faq-list">
+        <details class="faq-item animate-in" data-delay="0">
+          <summary class="faq-question">
+            <span>Do I need to install Python or yt-dlp separately?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>No. All required tools — yt-dlp, FFmpeg, streamlink, gallery-dl, and N_m3u8DL-RE — are bundled inside the installer. Just install and go.</p>
           </div>
-        </div>
+        </details>
 
-        <!-- Donate card -->
-        <div class="support-card">
-          <div class="support-icon">☕</div>
-          <h3>Buy Me a Coffee</h3>
-          <p>Support development with a small donation. Even a coffee helps keep this project alive and updated.</p>
-          <button class="btn-donate" onclick="showDonateModal()">
-            Support with a Donation
+        <details class="faq-item animate-in" data-delay="60">
+          <summary class="faq-question">
+            <span>Can I download entire YouTube playlists?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>Yes. Paste a playlist URL and the app detects it automatically. You can download all videos, pick a range, or select individual ones. Each video queues separately so nothing gets missed.</p>
+          </div>
+        </details>
+
+        <details class="faq-item animate-in" data-delay="120">
+          <summary class="faq-question">
+            <span>Is this app safe?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>The source code is fully open source under the MIT license — anyone can review it on GitHub. The app only downloads publicly available content. There are no ads, no subscriptions, and no data collection.</p>
+          </div>
+        </details>
+
+        <details class="faq-item animate-in" data-delay="180">
+          <summary class="faq-question">
+            <span>How do I download age-restricted YouTube videos?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>In Settings, you can import your browser cookies (Netscape format) from Chrome, Edge, or Firefox. This lets the app access content that requires your account. The cookies are stored locally on your machine only.</p>
+          </div>
+        </details>
+
+        <details class="faq-item animate-in" data-delay="240">
+          <summary class="faq-question">
+            <span>What's the difference between the web and desktop versions?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>The web version is great for quick downloads from popular sites like YouTube, TikTok, and Twitter. The desktop version adds playlists, parallel downloads, audio extraction, download history, and support for 1,000+ sites. Both are free.</p>
+          </div>
+        </details>
+
+        <details class="faq-item animate-in" data-delay="300">
+          <summary class="faq-question">
+            <span>Why does FFmpeg download on first use?</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="faq-answer">
+            <p>FFmpeg is a large library used to merge separate video and audio tracks into a single high-quality file. To keep the installer small, it downloads automatically the first time you need it for high-quality video merging. This only happens once.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       SUPPORT
+       ═══════════════════════════════════════════ -->
+  <section class="support" id="support">
+    <div class="section-inner">
+      <div class="support-inner">
+        <h2 class="animate-in">Like this project?</h2>
+        <p class="support-sub animate-in">The best way to support is to share it with someone who needs it.</p>
+
+        <div class="support-actions animate-in" data-delay="100">
+          <a id="share-twitter" href="" target="_blank" rel="noopener" class="share-btn twitter">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Share on X
+          </a>
+          <a id="share-reddit" href="" target="_blank" rel="noopener" class="share-btn reddit">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+            Share on Reddit
+          </a>
+          <button class="share-btn copy-link" id="copy-link-btn" onclick="copyLink()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            <span id="copy-label">Copy Link</span>
           </button>
         </div>
 
-        <!-- Star card -->
-        <div class="support-card">
-          <div class="support-icon">⭐</div>
-          <h3>Star on GitHub</h3>
-          <p>Starring the project on GitHub helps other people discover it and shows your appreciation.</p>
-          <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener"
-            class="btn-github">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path
-                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-            </svg>
-            Star on GitHub
-          </a>
-        </div>
-
+        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener" class="star-link animate-in" data-delay="200">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Star on GitHub — it helps others find it
+        </a>
       </div>
     </div>
   </section>
 
-  <!-- Donate modal -->
-  <div class="modal-overlay" id="donate-modal" onclick="closeDonateModal(event)">
-    <div class="modal">
-      <button class="modal-close" onclick="closeDonateModal()">✕</button>
-      <div class="modal-icon">🚧</div>
-      <h3>Donations Coming Soon</h3>
-      <p>Direct donation support is currently under development. In the meantime the best way to support this project is
-        to share it with others and star it on GitHub.</p>
-      <div class="modal-actions">
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener"
-          class="btn-primary">Star on GitHub</a>
-        <button class="btn-secondary" onclick="closeDonateModal()">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Footer -->
+  <!-- ═══════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════ -->
   <footer class="footer">
     <div class="footer-inner">
-      <div class="footer-brand">
-        <img src="icon.png" alt="IDH" class="footer-logo" />
-        <span>Internet Download Hub</span>
+      <div class="footer-row">
+        <div class="footer-brand">
+          <img src="icon.png" alt="" class="footer-logo" />
+          <span>Internet Download Hub</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases" target="_blank" rel="noopener">Releases</a>
+          <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues" target="_blank" rel="noopener">Report a Bug</a>
+          <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+        </div>
       </div>
-      <div class="footer-links">
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases" target="_blank"
-          rel="noopener">Releases</a>
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues" target="_blank"
-          rel="noopener">Report a Bug</a>
-        <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/blob/main/LICENSE" target="_blank"
-          rel="noopener">License</a>
-      </div>
-      <p class="footer-copy">
-        © 2026 Isaac Onyango · MIT License · Free and open source forever
-      </p>
+      <p class="footer-copy">© <span id="footer-year">2026</span> Isaac Onyango · MIT License · Free and open source forever</p>
     </div>
   </footer>
 
   <script src="script.js"></script>
 </body>
-
 </html>
