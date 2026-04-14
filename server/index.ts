@@ -169,36 +169,79 @@ app.get('/api/video-info', async (req, res) => {
   }
 
   try {
-    const args = [
-      '-J',
-      '--no-warnings',
-      '--no-playlist',
-      '--user-agent',
-      UA,
-      '--add-header',
-      'Accept-Language:en-US,en;q=0.9',
-      '--age-limit', '99',
-      '--',
-      url,
-    ];
+    const urlObj = new URL(url);
+    const isYouTube = ['youtube.com', 'youtu.be'].includes(urlObj.hostname) || urlObj.hostname.endsWith('.youtube.com');
 
-    const { stdout } = await execFileAsync(YT_DLP, args, {
-      timeout: 60000,
-      maxBuffer: 50 * 1024 * 1024,
-    });
+    // YouTube on datacenter IPs needs special handling — try multiple player clients
+    const playerClients = isYouTube
+      ? ['web', 'web_safari', 'ios', 'android', 'mediaconnect', 'tv']
+      : [];
 
-    const info = JSON.parse(stdout);
-    const data = parseYtDlpJson(info, url);
+    let lastErr: any = null;
 
-    return res.json({
-      success: true,
-      data,
-      meta: {
-        playlistDetected: false,
-        detectPlaylistsEnabled: false,
-        collapsedToSingle: false,
-      },
-    });
+    // Try each player client in sequence until one works
+    for (const client of playerClients.length > 0 ? playerClients : ['']) {
+      try {
+        const args = [
+          '-J',
+          '--no-warnings',
+          '--no-playlist',
+          '--user-agent',
+          UA,
+          '--add-header',
+          'Accept-Language:en-US,en;q=0.9',
+          '--age-limit', '99',
+        ];
+
+        if (client) {
+          args.push('--extractor-args', `youtube:player_client=${client}`);
+        }
+
+        args.push('--', url);
+
+        const { stdout } = await execFileAsync(YT_DLP, args, {
+          timeout: 60000,
+          maxBuffer: 50 * 1024 * 1024,
+        });
+
+        const info = JSON.parse(stdout);
+        const data = parseYtDlpJson(info, url);
+
+        if (client) console.log(`[video-info] YouTube extraction succeeded with player_client=${client}`);
+
+        return res.json({
+          success: true,
+          data,
+          meta: {
+            playlistDetected: false,
+            detectPlaylistsEnabled: false,
+            collapsedToSingle: false,
+          },
+        });
+      } catch (err: any) {
+        lastErr = err;
+        const msg = err.stderr || err.message || '';
+        // If error looks like bot detection or consent page, try next client
+        if (isYouTube && (
+          msg.includes('consent') ||
+          msg.includes('Sign in') ||
+          msg.includes('confirm you are human') ||
+          msg.includes('No video formats found') ||
+          msg.includes('bot') ||
+          msg.includes('robot') ||
+          msg.includes('CAPTCHA') ||
+          msg.includes('cookies')
+        )) {
+          console.warn(`[video-info] player_client=${client || 'default'} failed (bot detection), trying next...`);
+          continue;
+        }
+        // Non-bot-detection error — don't retry, fail immediately
+        throw err;
+      }
+    }
+
+    // All player clients failed
+    throw lastErr;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error('[video-info] error:', err.message?.slice(0, 300));
@@ -220,6 +263,13 @@ app.get('/api/download', (req, res) => {
 
   const safeFilename = filename.replace(/[^\w.\- ()]/g, '_');
 
+  // Detect YouTube for player client configuration
+  let isYouTube = false;
+  try {
+    const urlObj = new URL(url);
+    isYouTube = ['youtube.com', 'youtu.be'].includes(urlObj.hostname) || urlObj.hostname.endsWith('.youtube.com');
+  } catch { /* ignore */ }
+
   res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
   res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
 
@@ -232,6 +282,11 @@ app.get('/api/download', (req, res) => {
     '--no-playlist',
     '--ffmpeg-location', FFMPEG,
   ];
+
+  // Add YouTube player client args for datacenter IP compatibility
+  if (isYouTube) {
+    commonArgs.push('--extractor-args', 'youtube:player_client=web');
+  }
 
   if (isAudio) {
     args = [
