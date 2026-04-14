@@ -1828,7 +1828,6 @@ function SettingsPanel() {
             <p className="text-muted-foreground mt-1">Manage how your app downloads video files.</p>
           </div>
           <div className="text-right">
-            <span className="text-sm text-muted-foreground">Version {appVersion}</span>
             <Button
               variant="outline"
               size="sm"

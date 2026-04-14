@@ -45,7 +45,9 @@ export function ytDlpCommonArgs(
     args.push('--no-playlist');
   }
   if (isYouTubeUrl(url)) {
-    const client = options.youtubePlayerClient ?? 'android';
+    // Use 'tv' player client which returns full quality formats (1080p, 4K, etc.)
+    // 'android' client is limited to ~360p max
+    const client = options.youtubePlayerClient ?? 'tv';
     args.push('--extractor-args', `youtube:player_client=${client}`);
   }
   return args;

@@ -2789,12 +2789,21 @@ function spawnDownload(
   let aggregatedStderr = '';
   let actualFilePath = outputPath;
   let cleanedFilePathCandidate: string | null = null;
-  const formatArg =
-    formatId === 'bestvideo+bestaudio' || !formatId
-      ? 'bestvideo+bestaudio/best'
-      : formatId === 'bestaudio'
-        ? 'bestaudio/best'
-        : `${formatId}+bestaudio`;
+
+  // Build the yt-dlp format argument intelligently
+  let formatArg: string;
+  if (formatId === 'bestvideo+bestaudio' || !formatId) {
+    formatArg = 'bestvideo+bestaudio/best';
+  } else if (formatId === 'bestaudio') {
+    formatArg = 'bestaudio/best';
+  } else if (formatId.includes('+bestaudio') || formatId.includes('bestvideo[')) {
+    // Fallback formatIds like 'bestvideo[height=1080]+bestaudio/best[height=1080]'
+    // are already complete yt-dlp format expressions — use as-is
+    formatArg = formatId;
+  } else {
+    // Simple format ID (e.g., '137', '248') — append +bestaudio for merged output
+    formatArg = `${formatId}+bestaudio`;
+  }
 
   const saveFolder = path.dirname(outputPath);
   const outputTemplate = path.join(saveFolder, '%(title)s.%(ext)s');

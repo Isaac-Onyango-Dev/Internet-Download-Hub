@@ -169,6 +169,15 @@ app.get('/api/video-info', async (req, res) => {
   }
 
   try {
+    const isYouTubeUrl = (u: string): boolean => {
+      try {
+        const h = new URL(u).hostname.toLowerCase();
+        return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be';
+      } catch {
+        return false;
+      }
+    };
+
     const args = [
       '-J',
       '--no-warnings',
@@ -177,9 +186,14 @@ app.get('/api/video-info', async (req, res) => {
       UA,
       '--add-header',
       'Accept-Language:en-US,en;q=0.9',
-      '--',
-      url,
+      '--age-limit', '99',
     ];
+
+    if (isYouTubeUrl(url)) {
+      args.push('--extractor-args', 'youtube:player_client=tv');
+    }
+
+    args.push('--', url);
 
     const { stdout } = await execFileAsync(YT_DLP, args, {
       timeout: 60000,
@@ -219,10 +233,33 @@ app.get('/api/download', (req, res) => {
 
   const safeFilename = filename.replace(/[^\w.\- ()]/g, '_');
 
+  // Detect YouTube for player client configuration
+  const isYouTubeUrl = (u: string): boolean => {
+    try {
+      const h = new URL(u).hostname.toLowerCase();
+      return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be';
+    } catch {
+      return false;
+    }
+  };
+  const isYouTube = isYouTubeUrl(url);
+
   res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
   res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
 
   let args: string[];
+
+  const commonArgs = [
+    '--user-agent', UA,
+    '--add-header', 'Accept-Language:en-US,en;q=0.9',
+    '--no-warnings',
+    '--no-playlist',
+    '--ffmpeg-location', FFMPEG,
+  ];
+
+  if (isYouTube) {
+    commonArgs.push('--extractor-args', 'youtube:player_client=tv');
+  }
 
   if (isAudio) {
     args = [
@@ -230,30 +267,30 @@ app.get('/api/download', (req, res) => {
       '--extract-audio',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
-      '--user-agent', UA,
-      '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      '--no-warnings',
-      '--no-playlist',
-      '--ffmpeg-location', FFMPEG,
+      ...commonArgs,
       '-o', '-',
       '--', url,
     ];
   } else {
-    const formatArg =
-      formatId === 'bestvideo+bestaudio' || !formatId
-        ? 'bestvideo+bestaudio/best'
-        : formatId === 'bestaudio'
-          ? 'bestaudio/best'
-          : `${formatId}+bestaudio`;
+    // Build format argument intelligently
+    let formatArg: string;
+    if (formatId === 'bestvideo+bestaudio' || !formatId) {
+      formatArg = 'bestvideo+bestaudio/best';
+    } else if (formatId === 'bestaudio') {
+      formatArg = 'bestaudio/best';
+    } else if (formatId.includes('+bestaudio') || formatId.includes('bestvideo[')) {
+      // Fallback formatIds like 'bestvideo[height=1080]+bestaudio/best[height=1080]'
+      // are already complete yt-dlp format expressions — use as-is
+      formatArg = formatId;
+    } else {
+      // Simple format ID (e.g., '137', '248') — append +bestaudio for merged output
+      formatArg = `${formatId}+bestaudio`;
+    }
 
     args = [
       '-f', formatArg,
-      '--user-agent', UA,
-      '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      '--no-warnings',
-      '--no-playlist',
+      ...commonArgs,
       '--merge-output-format', 'mp4',
-      '--ffmpeg-location', FFMPEG,
       '-o', '-',
       '--', url,
     ];

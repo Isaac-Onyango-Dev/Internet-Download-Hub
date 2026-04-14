@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { cn } from '@/lib/utils';
 import { Download, HardDrive, Settings, Heart, ArrowRightLeft, Globe } from 'lucide-react';
@@ -9,6 +9,16 @@ interface LayoutShellProps {
 
 export function LayoutShell({ children }: LayoutShellProps) {
   const [location, navigate] = useHashLocation();
+  const [appVersion, setAppVersion] = useState('v1.1.3');
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.getAppVersion?.()
+      .then((versionInfo: { version: string }) => {
+        setAppVersion(`v${versionInfo.version}`);
+      })
+      .catch(() => {});
+  }, []);
 
   const navItems = [
     { href: '/', label: 'Downloader', icon: Download },
@@ -37,7 +47,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
             <span className="font-bold text-base tracking-tight text-foreground block leading-none truncate">
               Internet Download Hub
             </span>
-            <span className="text-xs text-muted-foreground/70">v1.1.2</span>
+            <span className="text-xs text-muted-foreground/70">{appVersion}</span>
           </div>
         </div>
 
