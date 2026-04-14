@@ -1,80 +1,10 @@
 /**
- * Cobalt API integration for the web version.
+ * Web-mode stubs and utilities.
  *
- * This module provides a Cobalt-based download path as a fallback
- * when the primary yt-dlp server endpoint is unavailable.
- * The primary web download flow uses api.ts (server yt-dlp).
- *
- * Cobalt docs: https://github.com/imputnet/cobalt/blob/main/docs/api.md
+ * Note: The primary web download flow uses api.ts which routes
+ * through the server's yt-dlp endpoint for all sites.
+ * This file provides Electron-API-compatible stubs for web mode.
  */
-
-// ── Cobalt Instances ──────────────────────────────────────────────────────
-// If the backend proxy is unavailable, these public instances are tried
-// as a direct fallback (they may require JWT auth).
-
-const COBALT_INSTANCES = [
-  'https://cobalt-api.meowing.de',
-  'https://api.cobalt.tools',
-  'https://cobalt-backend.canine.tools',
-];
-
-interface CobaltRequestBody {
-  url: string;
-  videoQuality?: string;
-  isAudioOnly?: boolean;
-  audioFormat?: string;
-}
-
-interface CobaltResponse {
-  status: 'redirect' | 'tunnel' | 'picker' | 'error';
-  url?: string;
-  filename?: string;
-  error?: { code: string };
-  picker?: Array<{ type: string; url: string; thumb?: string }>;
-}
-
-// ── Cobalt fetch with instance fallback ───────────────────────────────────
-
-async function cobaltFetchDirect(body: CobaltRequestBody): Promise<CobaltResponse> {
-  let lastError: unknown = null;
-
-  for (const instance of COBALT_INSTANCES) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      const resp = await fetch(`${instance}/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (!resp.ok) throw new Error(`Instance returned ${resp.status}`);
-      return resp.json();
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      lastError = err;
-    }
-  }
-
-  throw lastError || new Error('All Cobalt instances failed');
-}
-
-// ── Browser download helper ───────────────────────────────────────────────
-
-function triggerBrowserDownload(url: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    if (a.parentNode) a.parentNode.removeChild(a);
-  }, 1000);
-}
 
 // ── Local settings helpers ────────────────────────────────────────────────
 
@@ -90,71 +20,10 @@ function saveSettingsToStorage(updates: Record<string, unknown>) {
 }
 
 // ── Public webAPI object ──────────────────────────────────────────────────
+// Provides Electron-API-compatible stubs for web mode.
+// Primary download path is through api.ts → server yt-dlp endpoint.
 
 export const webAPI = {
-  // ── Cobalt video info (minimal metadata, fallback path) ───────────────
-  fetchVideoInfo: async (url: string) => {
-    const cobaltResp = await cobaltFetchDirect({ url, videoQuality: '1080' });
-
-    if (cobaltResp.status === 'error') {
-      throw new Error(
-        cobaltResp.error?.code === 'error.api.content.unavailable'
-          ? 'This URL is not supported by Cobalt. Try the desktop app for 1000+ sites.'
-          : `Could not fetch video info: ${cobaltResp.error?.code || 'unknown error'}`,
-      );
-    }
-
-    const downloadUrl = cobaltResp.url || cobaltResp.picker?.[0]?.url || url;
-    const thumbnail = cobaltResp.picker?.[0]?.thumb || '';
-
-    return {
-      success: true,
-      data: {
-        url,
-        extractedUrl: downloadUrl,
-        title: cobaltResp.filename || 'Video',
-        thumbnail,
-        duration: 0,
-        uploader: '',
-        extractionMethod: 'cobalt',
-        formats: [
-          { formatId: 'best-video', label: 'Best Video (1080p)', quality: '1080p', ext: 'mp4', filesize: null, height: 1080 },
-          { formatId: 'best-720', label: 'Standard Quality (720p)', quality: '720p', ext: 'mp4', filesize: null, height: 720 },
-          { formatId: 'audio-only', label: 'Audio Only (MP3)', quality: 'audio', ext: 'mp3', filesize: null, height: null },
-        ],
-      },
-      meta: { playlistDetected: false, detectPlaylistsEnabled: false, collapsedToSingle: false },
-    };
-  },
-
-  // ── Cobalt download (triggers browser download via redirect URL) ──────
-  startDownload: async (options: {
-    url: string;
-    filename: string;
-    formatId?: string;
-  }) => {
-    const { url, filename, formatId = 'best-video' } = options;
-    const isAudioOnly = formatId === 'audio-only' || formatId === 'bestaudio';
-    const videoQuality = isAudioOnly ? '720' : '1080';
-
-    const cobaltResp = await cobaltFetchDirect({
-      url,
-      videoQuality,
-      isAudioOnly,
-      audioFormat: isAudioOnly ? 'mp3' : undefined,
-    });
-
-    if (cobaltResp.status === 'error') {
-      throw new Error(`Download failed: ${cobaltResp.error?.code || 'unknown error'}`);
-    }
-
-    const downloadUrl = cobaltResp.url || cobaltResp.picker?.[0]?.url;
-    if (!downloadUrl) throw new Error('Cobalt did not return a download URL.');
-
-    triggerBrowserDownload(downloadUrl, filename);
-    return { id: Date.now(), success: true };
-  },
-
   // ── Settings (localStorage) ───────────────────────────────────────────
   getSettings: async () => {
     const s = loadSettings();

@@ -300,61 +300,6 @@ app.get('/api/download', (req, res) => {
   });
 });
 
-// ── Cobalt proxy — handles JWT auth for web version ────────────────────────────
-const COBALT_INSTANCES = [
-  'https://cobalt-api.meowing.de',
-  'https://api.cobalt.tools',
-  'https://cobalt-backend.canine.tools',
-];
-
-app.post('/api/cobalt', async (req, res) => {
-  const body = req.body;
-
-  if (!body || typeof body !== 'object' || !body.url) {
-    res.status(400).json({ error: { code: 'error.request.empty_url' } });
-    return;
-  }
-
-  let lastError: unknown = null;
-
-  for (const instance of COBALT_INSTANCES) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(`${instance}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'User-Agent': UA,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        lastError = new Error(`Instance ${instance} returned ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
-      res.json(data);
-      return;
-    } catch (err: unknown) {
-      lastError = err;
-    }
-  }
-
-  const finalMsg = lastError instanceof Error ? lastError.message : String(lastError || 'Unknown error');
-  res.status(503).json({
-    status: 'error',
-    error: { code: 'error.cobalt.unreachable', message: finalMsg },
-  });
-});
-
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, yt_dlp: YT_DLP });
