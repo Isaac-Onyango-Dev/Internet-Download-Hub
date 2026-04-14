@@ -63,6 +63,7 @@ jobs:
         with:
           name: v${{ steps.get_version.outputs.VERSION }}
           generate_release_notes: true
+          overwrite: true
           files: |
             release/*.exe
             release/*.blockmap
