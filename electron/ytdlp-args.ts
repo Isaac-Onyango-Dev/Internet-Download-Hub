@@ -31,10 +31,12 @@ export function isYouTubeUrl(url: string): boolean {
   }
 }
 
-export type YoutubePlayerClient = 'android' | 'tv_embedded';
+export type YoutubePlayerClient = 'android' | 'tv' | 'tv_embedded';
 
 /**
  * @param noPlaylist - false when fetching a real playlist (extractPlaylistInfo).
+ * @param youtubePlayerClient - Override YouTube player client (only needed for age-restricted content).
+ *   When omitted, yt-dlp uses its default multi-client strategy which returns full quality formats.
  */
 export function ytDlpCommonArgs(
   url: string,
@@ -44,11 +46,10 @@ export function ytDlpCommonArgs(
   if (options.noPlaylist) {
     args.push('--no-playlist');
   }
-  if (isYouTubeUrl(url)) {
-    // Use 'tv' player client which returns full quality formats (1080p, 4K, etc.)
-    // 'android' client is limited to ~360p max
-    const client = options.youtubePlayerClient ?? 'tv';
-    args.push('--extractor-args', `youtube:player_client=${client}`);
+  if (isYouTubeUrl(url) && options.youtubePlayerClient !== undefined) {
+    // Only override player client when explicitly specified (e.g., age-restricted fallback)
+    // Default yt-dlp behavior uses a multi-client strategy that returns full quality (1080p–4K)
+    args.push('--extractor-args', `youtube:player_client=${options.youtubePlayerClient}`);
   }
   return args;
 }

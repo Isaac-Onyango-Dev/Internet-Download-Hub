@@ -169,15 +169,6 @@ app.get('/api/video-info', async (req, res) => {
   }
 
   try {
-    const isYouTubeUrl = (u: string): boolean => {
-      try {
-        const h = new URL(u).hostname.toLowerCase();
-        return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be';
-      } catch {
-        return false;
-      }
-    };
-
     const args = [
       '-J',
       '--no-warnings',
@@ -187,13 +178,9 @@ app.get('/api/video-info', async (req, res) => {
       '--add-header',
       'Accept-Language:en-US,en;q=0.9',
       '--age-limit', '99',
+      '--',
+      url,
     ];
-
-    if (isYouTubeUrl(url)) {
-      args.push('--extractor-args', 'youtube:player_client=tv');
-    }
-
-    args.push('--', url);
 
     const { stdout } = await execFileAsync(YT_DLP, args, {
       timeout: 60000,
@@ -233,17 +220,6 @@ app.get('/api/download', (req, res) => {
 
   const safeFilename = filename.replace(/[^\w.\- ()]/g, '_');
 
-  // Detect YouTube for player client configuration
-  const isYouTubeUrl = (u: string): boolean => {
-    try {
-      const h = new URL(u).hostname.toLowerCase();
-      return h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtu.be';
-    } catch {
-      return false;
-    }
-  };
-  const isYouTube = isYouTubeUrl(url);
-
   res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
   res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
 
@@ -256,10 +232,6 @@ app.get('/api/download', (req, res) => {
     '--no-playlist',
     '--ffmpeg-location', FFMPEG,
   ];
-
-  if (isYouTube) {
-    commonArgs.push('--extractor-args', 'youtube:player_client=tv');
-  }
 
   if (isAudio) {
     args = [

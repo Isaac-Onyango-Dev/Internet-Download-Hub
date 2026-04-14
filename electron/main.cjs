@@ -2118,9 +2118,8 @@ function ytDlpCommonArgs(url, options) {
   if (options.noPlaylist) {
     args.push("--no-playlist");
   }
-  if (isYouTubeUrl(url)) {
-    const client = options.youtubePlayerClient ?? "tv";
-    args.push("--extractor-args", `youtube:player_client=${client}`);
+  if (isYouTubeUrl(url) && options.youtubePlayerClient !== void 0) {
+    args.push("--extractor-args", `youtube:player_client=${options.youtubePlayerClient}`);
   }
   return args;
 }
