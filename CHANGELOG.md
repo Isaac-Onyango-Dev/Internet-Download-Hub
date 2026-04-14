@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-04-14
+
+### Fixed
+
+- **Version Display** — App version now displays dynamically in the left sidebar (under "Internet Download Hub" header) instead of the Settings panel. Replaced hardcoded `v1.1.2` with live data from `electronAPI.getAppVersion()`.
+- **YouTube Quality Lock (360p)** — Switched YouTube `player_client` from `android` (limited to ~360p) to `tv` (full 1080p/4K/8K DASH formats). Applied to both desktop (`electron/ytdlp-args.ts`) and web version (`server/index.ts`).
+- **Format Argument Bug** — Fixed fallback format IDs (e.g., `bestvideo[height=1080]+bestaudio/best[height=1080]`) being incorrectly appended with `+bestaudio`, creating invalid yt-dlp syntax. Now detects complete format expressions and uses them as-is.
+- **Server YouTube Config** — Added `youtube:player_client=tv` and `--age-limit 99` to both `/api/video-info` and `/api/download` endpoints for consistent full-quality format retrieval.
+
+### Improved
+
+- **Quality Collection** — The `tv` player client returns the complete DASH format inventory including 2160p, 1440p, 1080p (60fps), 720p, 480p, 360p, and audio-only — matching modern yt-dlp best practices.
+- **Code Quality** — All changes pass TypeScript compilation (0 errors) and ESLint (0 errors, 0 warnings).
+
 ## [1.1.3] - 2026-04-10
 
 ### Added

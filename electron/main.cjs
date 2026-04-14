@@ -2119,7 +2119,7 @@ function ytDlpCommonArgs(url, options) {
     args.push("--no-playlist");
   }
   if (isYouTubeUrl(url)) {
-    const client = options.youtubePlayerClient ?? "android";
+    const client = options.youtubePlayerClient ?? "tv";
     args.push("--extractor-args", `youtube:player_client=${client}`);
   }
   return args;
@@ -4736,7 +4736,16 @@ function spawnDownload(downloadId, url, outputPath, formatId, isResume = false, 
   let aggregatedStderr = "";
   let actualFilePath = outputPath;
   let cleanedFilePathCandidate = null;
-  const formatArg = formatId === "bestvideo+bestaudio" || !formatId ? "bestvideo+bestaudio/best" : formatId === "bestaudio" ? "bestaudio/best" : `${formatId}+bestaudio`;
+  let formatArg;
+  if (formatId === "bestvideo+bestaudio" || !formatId) {
+    formatArg = "bestvideo+bestaudio/best";
+  } else if (formatId === "bestaudio") {
+    formatArg = "bestaudio/best";
+  } else if (formatId.includes("+bestaudio") || formatId.includes("bestvideo[")) {
+    formatArg = formatId;
+  } else {
+    formatArg = `${formatId}+bestaudio`;
+  }
   const saveFolder = import_path.default.dirname(outputPath);
   const outputTemplate = import_path.default.join(saveFolder, "%(title)s.%(ext)s");
   const cookiesPath = getResolvedCookiesPath();
