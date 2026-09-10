@@ -139,7 +139,7 @@ downloads (
 |--------|-----|---------------|
 | Desktop | GitHub Releases | Manual `npm run build:win` + GitHub tag trigger |
 | Web App | internet-download-hub.onrender.com | Render auto-deploy on `main` push |
-| Docs Site | isaac-onyango-dev.github.io/Internet-Download-Hub/ | GitHub Actions (pages.yml + deploy-web.yml) |
+| Docs Site | isaac-onyango-dev.github.io/Internet-Download-Hub/ | GitHub Actions (deploy-web.yml — uploads `docs/` as-is; `docs/web/` is a redirect stub to the Render web app, not a separately built SPA) |
 
 ## Build Commands
 ```bash

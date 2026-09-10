@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GitHub Pages deployment race condition** — `pages.yml` and `deploy-web.yml` both triggered on every push to `main`, both deployed to the same `github-pages` environment, and shared the same Actions concurrency group with contradictory settings. This caused `pages.yml` to be cancelled on nearly every push (confirmed across months of run history). `pages.yml` was redundant — `deploy-web.yml` already uploaded the full `docs/` tree — so it was removed and `deploy-web.yml` simplified to a single, race-free deploy step scoped to `docs/**` changes.
+- **Stale/orphaned `docs/web/` build output** — the committed `docs/web/index.html` is a redirect stub to the canonical Render-hosted web app, but `deploy-web.yml` was still rebuilding a full separate React SPA into that same path on every push, silently superseding the stub via the race above. The SPA rebuild step (`build:gh-pages`) has been removed; `docs/web/` is now deployed as the static redirect stub it's committed as, with orphaned build assets from an old SPA build (`docs/web/assets/*.js`, `*.css`, unreferenced by the stub) removed.
+
+### Removed
+
+- Unused dependencies: `zod`, `zod-validation-error`, `chai`, `supertest`, `@types/supertest` — no references anywhere in the codebase; the test-related ones were leftover from a test suite removed in an earlier cleanup pass.
+- Dead `@shared`/`@assets` path aliases (`vite.config.ts`, `tsconfig.json`) pointing to `shared/` and `attached_assets/` directories that don't exist in the repository.
+- `.qwen/settings.json.orig` (orphaned backup file) and `.antigravity/session_summary.md` (stale one-off AI session output).
+
+### Changed
+
+- Added `.gitattributes` to normalize line endings across the Windows development environment and the Linux-based CI runners.
+- Documented the previously-unreferenced `Dockerfile` in `README.md` as an optional self-hosting path for the web version.
+
 - **FFmpeg-Required Detection** — `checkFFmpegRequired()` failed to recognize that nearly every real download (default "best" quality, any specific-quality selection) triggers a video+audio merge in `spawnDownload()`. It previously only matched a couple of literal substrings, so the on-demand FFmpeg installer was skipped for most downloads when FFmpeg wasn't yet present, causing a confusing merge failure instead of the intended "downloading FFmpeg first" flow.
 - **`save_path` Never Reflected the Real Filename** — The database's `save_path` for yt-dlp downloads was set once at queue time and never updated to the actual on-disk filename (which yt-dlp derives from the video title). After an app restart, cleanup/delete actions referenced a file that never existed. Completion now persists the real resolved path.
 - **Stale "Failed" Downloads in Live Progress UI** — `useDownloadProgress()` only cleared a job from the live progress map on `status === 'error'`, but the app only ever emits `'failed'`. Failed downloads kept showing stale percent/speed/ETA in the UI indefinitely.

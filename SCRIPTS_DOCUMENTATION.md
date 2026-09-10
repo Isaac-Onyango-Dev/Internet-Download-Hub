@@ -111,11 +111,6 @@ This document explains the purpose and functionality of each script in `package.
 - **Steps**: Builds the Vite frontend targeting web mode, then bundles `server/index.ts` (the Express backend) as an ESM module
 - **Command**: `cross-env VITE_TARGET=web vite build && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express`
 
-### `build:gh-pages`
-
-- **Purpose**: Builds the static frontend for the GitHub Pages docs/marketing deployment
-- **Command**: `cross-env VITE_TARGET=gh-pages vite build`
-
 ### `start:web`
 
 - **Purpose**: Starts the built web server in production mode (what Render runs)

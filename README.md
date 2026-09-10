@@ -158,6 +158,17 @@ To build the Windows installer:
 npm run build:win
 ```
 
+### Self-hosting the web version with Docker
+
+The [Dockerfile](Dockerfile) builds a standalone container running the web version's Express server (the same one deployed on Render), with `ffmpeg` and `yt-dlp` installed automatically:
+
+```bash
+docker build -t internet-download-hub .
+docker run -p 3001:3001 internet-download-hub
+```
+
+This is an alternative to the hosted [web app](https://internet-download-hub.onrender.com/) for self-hosting; it is not used by the project's own CI/CD or deployments.
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute.
