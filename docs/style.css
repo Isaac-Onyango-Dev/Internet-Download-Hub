@@ -64,6 +64,25 @@ img { display: block; max-width: 100%; }
 button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 ul { list-style: none; }
 
+/* ── Focus & Press States (respond on input, not just hover) ─── */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.btn-primary:active,
+.btn-secondary:active,
+.btn-download:active,
+.comparison-card-cta:active,
+.share-btn:active,
+.carousel-btn:active,
+.nav-web-app:active {
+  transform: scale(0.97);
+  transition-duration: 0.1s;
+}
+
 /* ── Scroll-triggered Animations ──────────────── */
 .animate-in {
   opacity: 0;
@@ -191,8 +210,12 @@ section h2 {
 .nav-mobile-toggle {
   display: none;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   gap: 5px;
-  padding: 8px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   z-index: 1001;
 }
 .nav-mobile-toggle span {
@@ -628,8 +651,8 @@ section h2 {
   margin-top: 16px;
 }
 .carousel-btn {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1055,11 +1078,12 @@ section h2 {
 
   .stats-inner { gap: 24px; flex-wrap: wrap; }
 
-  .steps-row { grid-template-columns: 1fr; gap: 16px; max-width: 380px; }
+  .steps-row { grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 560px; }
+  .steps-row .step-card:last-child { grid-column: 1 / -1; }
 
-  .features-grid { grid-template-columns: 1fr; max-width: 480px; margin-left: auto; margin-right: auto; }
+  .features-grid { grid-template-columns: repeat(2, 1fr); max-width: 640px; margin-left: auto; margin-right: auto; }
 
-  .sites-grid { grid-template-columns: 1fr; max-width: 400px; }
+  .sites-grid { grid-template-columns: repeat(2, 1fr); max-width: 640px; }
 
   .download-card-main { padding: 28px 24px; }
   .download-card-main-inner { flex-direction: column; text-align: center; }
@@ -1074,6 +1098,15 @@ section h2 {
   .footer-links { justify-content: center; }
 }
 
+@media (max-width: 560px) {
+  .steps-row { grid-template-columns: 1fr; max-width: 380px; }
+  .steps-row .step-card:last-child { grid-column: auto; }
+
+  .features-grid { grid-template-columns: 1fr; max-width: 420px; }
+
+  .sites-grid { grid-template-columns: 1fr; max-width: 420px; }
+}
+
 @media (max-width: 480px) {
   .hero h1 { font-size: 2rem; }
   .hero-subtitle { font-size: 1rem; }
@@ -1081,4 +1114,63 @@ section h2 {
   .hero-actions .btn-primary,
   .hero-actions .btn-secondary { width: 100%; justify-content: center; }
   .hero-meta { font-size: 0.8rem; }
+}
+
+/* ═══════════════════════════════════════════════
+   ACCESSIBILITY & USER PREFERENCES
+   ═══════════════════════════════════════════════ */
+
+/* Reduced motion: swap slides/springs for a short cross-fade, drop transforms */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  .animate-in {
+    transform: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .carousel-track { transition: none; }
+
+  .btn-primary:hover,
+  .btn-secondary:hover,
+  .btn-download:hover,
+  .step-card:hover,
+  .feature-card:hover,
+  .comparison-card:hover,
+  .comparison-card-cta:hover,
+  .share-btn:hover {
+    transform: none;
+  }
+
+  .btn-primary:active,
+  .btn-secondary:active,
+  .btn-download:active,
+  .comparison-card-cta:active,
+  .share-btn:active,
+  .carousel-btn:active,
+  .nav-web-app:active {
+    transform: none;
+    opacity: 0.85;
+  }
+}
+
+/* Reduced transparency: make translucent chrome solid instead of blurred */
+@media (prefers-reduced-transparency: reduce) {
+  .navbar,
+  .navbar.scrolled {
+    background: var(--bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Higher contrast: near-solid surfaces with a defined border */
+@media (prefers-contrast: more) {
+  :root {
+    --text-secondary: #C4CDDA;
+    --text-muted: #94A3B8;
+    --border: #33415A;
+    --border-light: #445370;
+  }
+  .navbar { background: var(--bg); backdrop-filter: none; }
 }

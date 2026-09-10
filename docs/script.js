@@ -125,8 +125,11 @@ function initCarousel() {
     resetAutoPlay();
   }
 
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   function resetAutoPlay() {
     clearInterval(autoPlayTimer);
+    if (prefersReducedMotion) return;
     autoPlayTimer = setInterval(() => goTo(current + 1), 6000);
   }
 
