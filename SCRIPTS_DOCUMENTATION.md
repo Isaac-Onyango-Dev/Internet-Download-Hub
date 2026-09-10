@@ -4,12 +4,6 @@ This document explains the purpose and functionality of each script in `package.
 
 ## Development Scripts
 
-### `postinstall`
-
-- **Purpose**: Installs Playwright browser for web scraping functionality
-- **When**: Runs automatically after `npm install`
-- **Command**: `npx playwright install chromium`
-
 ### `generate:icons`
 
 - **Purpose**: Generates application icons in various sizes from source image
@@ -32,6 +26,23 @@ This document explains the purpose and functionality of each script in `package.
   4. Builds and launches Electron main process
   5. Waits for Vite to be ready before starting Electron
 - **Command**: `npx kill-port 5173 5005 && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron && concurrently --kill-others-on-fail "vite" "npm run dev:main && wait-on http://localhost:5173 && tsx scripts/dev-electron.ts"`
+
+### `dev:web`
+
+- **Purpose**: Development environment for the browser-based web version (not Electron)
+- **Steps**: Runs Vite (frontend) and the Express server (`server/index.ts`) concurrently
+- **Command**: `concurrently "cross-env VITE_TARGET=web vite" "tsx watch server/index.ts"`
+
+### `setup:playwright`
+
+- **Purpose**: Installs the Playwright Chromium browser used by the Playwright fallback extraction engine (`electron/extractor.ts`)
+- **When**: Run manually as needed — not wired to `postinstall`, so it does not run automatically after `npm install`
+- **Command**: `npx playwright install chromium`
+
+### `test`
+
+- **Purpose**: Runs the Vitest test suite
+- **Command**: `vitest run`
 
 ## Build Scripts
 
@@ -94,6 +105,22 @@ This document explains the purpose and functionality of each script in `package.
 - **Result**: Creates .AppImage for Linux
 - **Command**: `npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --linux`
 
+### `build:web`
+
+- **Purpose**: Builds the browser-based web version for deployment (used for the Render deployment)
+- **Steps**: Builds the Vite frontend targeting web mode, then bundles `server/index.ts` (the Express backend) as an ESM module
+- **Command**: `cross-env VITE_TARGET=web vite build && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express`
+
+### `build:gh-pages`
+
+- **Purpose**: Builds the static frontend for the GitHub Pages docs/marketing deployment
+- **Command**: `cross-env VITE_TARGET=gh-pages vite build`
+
+### `start:web`
+
+- **Purpose**: Starts the built web server in production mode (what Render runs)
+- **Command**: `cross-env NODE_ENV=production node dist/server.js`
+
 ## Utilities
 
 ### `check`
@@ -101,6 +128,16 @@ This document explains the purpose and functionality of each script in `package.
 - **Purpose**: TypeScript type checking without compilation
 - **Function**: Verifies type correctness across the codebase
 - **Command**: `tsc`
+
+### `lint`
+
+- **Purpose**: Runs ESLint across the client and Electron source
+- **Command**: `eslint "client/src/**/*.{ts,tsx}" "electron/**/*.ts"`
+
+### `format`
+
+- **Purpose**: Formats the codebase with Prettier
+- **Command**: `prettier --write "**/*.{ts,tsx,css,md}"`
 
 ## Usage Examples
 
@@ -112,6 +149,9 @@ npm run dev
 
 # Build only main process (faster iteration)
 npm run dev:main
+
+# Run the web version (frontend + Express server) locally
+npm run dev:web
 ```
 
 ### Production Build
@@ -144,4 +184,13 @@ npm run generate:icons
 ```bash
 # Type checking
 npm run check
+
+# Lint
+npm run lint
+
+# Format with Prettier
+npm run format
+
+# Run tests
+npm run test
 ```

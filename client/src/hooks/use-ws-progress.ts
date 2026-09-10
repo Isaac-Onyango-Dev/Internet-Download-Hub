@@ -30,7 +30,7 @@ export function useDownloadProgress() {
       const key = data.id ?? data.downloadId;
       setProgressMap((prev) => {
         // Remove completed / error / cancelled from live map
-        if (data.status === 'completed' || data.status === 'error' || data.status === 'cancelled') {
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
           const next = { ...prev };
           delete next[key];
           return next;

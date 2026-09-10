@@ -493,15 +493,13 @@ async function downloadFFmpeg() {
   return ffmpegDownloadPromise;
 }
 
-// Check if FFmpeg is needed for a download
-function checkFFmpegRequired(formatId: string): boolean {
-  if (!formatId) return false;
-  // Only trigger for explicit merge/audio-extract scenarios, not every format containing 'audio'
-  return (
-    formatId === 'bestaudio' ||
-    formatId.includes('bestvideo+bestaudio') ||
-    formatId.includes('merge')
-  );
+// Check if FFmpeg is needed for a download.
+// Must mirror spawnDownload's formatArg branching exactly: every branch there
+// either merges separate video+audio streams or requires audio extraction, so
+// ffmpeg is required for every formatId, including the empty/default case
+// (which becomes 'bestvideo+bestaudio/best').
+function checkFFmpegRequired(_formatId?: string | null): boolean {
+  return true;
 }
 
 // ── Filename Cleaning ────────────────────────────────────────────────────────
@@ -740,7 +738,13 @@ async function initDb() {
 async function getFreeSpace(targetPath: string): Promise<number> {
   return new Promise((resolve) => {
     let cmd: string;
-    if (os.platform() === 'win32') {
+    const isUncPath = os.platform() === 'win32' && (targetPath.startsWith('\\\\') || targetPath.startsWith('//'));
+    if (isUncPath) {
+      // UNC paths (e.g. \\server\share) have no drive letter — Get-PSDrive
+      // doesn't apply and would silently query the wrong/nonexistent drive.
+      // Query the volume directly via fsutil instead.
+      cmd = `fsutil volume diskfree "${targetPath}"`;
+    } else if (os.platform() === 'win32') {
       // Use drive letter only (e.g. "C")
       const driveLetter = targetPath.split(':')[0];
       cmd = `powershell -NoProfile -Command "(Get-PSDrive -Name '${driveLetter}').Free"`;
@@ -754,7 +758,13 @@ async function getFreeSpace(targetPath: string): Promise<number> {
         resolve(Number.MAX_SAFE_INTEGER);
         return;
       }
-      const parsed = parseInt(stdout.trim().replace(/[^0-9]/g, ''), 10);
+      let parsed: number;
+      if (isUncPath) {
+        const match = stdout.match(/free bytes\s*:\s*([\d,]+)/i);
+        parsed = match ? parseInt(match[1].replace(/,/g, ''), 10) : NaN;
+      } else {
+        parsed = parseInt(stdout.trim().replace(/[^0-9]/g, ''), 10);
+      }
       resolve(isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed);
     });
   });
@@ -780,11 +790,22 @@ function deletePartialFile(savePath: string | null) {
       fs.unlinkSync(savePath);
       log.info(`[Cleanup] Deleted partial file: ${savePath}`);
     }
-    // Also check for yt-dlp temp files (.part)
-    const partFile = savePath + '.part';
-    if (fs.existsSync(partFile)) {
-      fs.unlinkSync(partFile);
-      log.info(`[Cleanup] Deleted partial file: ${partFile}`);
+    // yt-dlp also leaves behind resume/fragment files alongside the destination
+    // (e.g. "<name>.part", "<name>.ytdl", "<name>.part-Frag12") — sweep the
+    // containing folder for anything sharing the base filename, matching the
+    // cleanup logic used in cancel-download.
+    const dir = path.dirname(savePath);
+    const ext = path.extname(savePath);
+    const fileBase = path.basename(savePath, ext);
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.includes(fileBase) && (file.endsWith('.part') || file.endsWith('.ytdl') || /\.part-Frag\d+$/.test(file))) {
+          const fullPath = path.join(dir, file);
+          fs.unlinkSync(fullPath);
+          log.info(`[Cleanup] Deleted partial file: ${fullPath}`);
+        }
+      }
     }
   } catch (err) {
     log.error(`[Cleanup] Failed to delete partial file:`, err);
@@ -1511,33 +1532,6 @@ function detectPlaylist(url: string): { isPlaylist: boolean } {
   }
 }
 
-// ── Playwright Browser Check ──────────────────────────────────────────────────
-let playwrightBrowser: any = null;
-
-async function getPlaywrightBrowser() {
-  if (!playwrightBrowser) {
-    try {
-      // @ts-expect-error — playwright-core is an optional peer dependency, loaded dynamically
-      const playwrightCore = await import('playwright-core');
-      const browserPath = playwrightCore.chromium.executablePath();
-      if (!fs.existsSync(browserPath)) {
-        log.info('[MAIN] Playwright Chromium not found, installing...');
-        execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 120000 });
-        log.info('[MAIN] Playwright Chromium installed successfully');
-      } else {
-        log.info('[MAIN] Playwright Chromium found at:', browserPath);
-      }
-
-      playwrightBrowser = await playwrightCore.chromium.launch({ headless: true });
-      log.info('[MAIN] Playwright browser launched successfully');
-    } catch (err: any) {
-      log.warn('[MAIN] Could not initialize Playwright browser:', err?.message ?? err);
-      throw err;
-    }
-  }
-  return playwrightBrowser;
-}
-
 // ── yt-dlp Helper Functions ───────────────────────────────────────────────
 
 /** Fetch a JSON URL with a User-Agent header (follows redirects for GitHub API) */
@@ -2063,7 +2057,7 @@ function setupIpcHandlers() {
     // Duplicate URL detection — warn if same URL is already downloading
     const existing = allQuery(
       db,
-      "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued')",
+      "SELECT id, state FROM downloads WHERE url = ? AND state IN ('downloading', 'queued', 'paused')",
       [url],
     );
     if (existing.length > 0) {
@@ -2913,8 +2907,9 @@ function spawnDownload(
           mainWindow.setProgressBar(progressData.percent / 100);
         }
 
-        const parseSize = (s: string): number => {
+        const parseSize = (s: string): number | null => {
           const num = parseFloat(s);
+          if (isNaN(num)) return null;
           const su = s.toLowerCase();
           if (su.includes('tib')) return num * 1024 * 1024 * 1024 * 1024;
           if (su.includes('gib')) return num * 1024 * 1024 * 1024;
@@ -2923,8 +2918,10 @@ function spawnDownload(
           return num;
         };
         const totalBytes = parseSize(totalSizeStr);
-        const receivedBytes = Math.floor(totalBytes * (progressData.percent / 100));
-        updateDownloadInDb(jobId, { totalBytes, receivedBytes });
+        if (totalBytes !== null) {
+          const receivedBytes = Math.floor(totalBytes * (progressData.percent / 100));
+          updateDownloadInDb(jobId, { totalBytes, receivedBytes });
+        }
         continue;
       }
 
@@ -3102,7 +3099,11 @@ function spawnDownload(
           // Best effort only.
         }
       }
-      updateDownloadInDb(downloadId, { state: 'completed', completedAt: new Date() });
+      updateDownloadInDb(downloadId, {
+        state: 'completed',
+        completedAt: new Date(),
+        savePath: actualFilePath,
+      });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
           jobId: String(downloadId),

@@ -9,7 +9,7 @@ A production-ready Electron + React + TypeScript desktop video download manager 
 - **Build**: Vite + esbuild + electron-builder
 - **Database**: SQL.js (SQLite in-memory, desktop only)
 - **Testing**: Vitest (passWithNoTests — test files removed per production cleanup)
-- **Download Engines**: yt-dlp, streamlink, gallery-dl, N_m3u8DL-RE, FFmpeg
+- **Download Engines**: yt-dlp, streamlink, gallery-dl, N_m3u8DL-RE, FFmpeg, Playwright (fallback extraction engine, `electron/extractor.ts`)
 - **Web Downloads**: Cobalt API (for YouTube) + server yt-dlp (for all other sites)
 
 ## Navigation Structure

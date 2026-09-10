@@ -86,8 +86,7 @@ Internet Download Hub supports downloading from **1000+ websites**, including:
 - Download queue with pause, resume, and cancel
 - Download history
 - Customizable save location
-- No installation of Python or yt-dlp required — core binaries are bundled
-- On-demand high-quality merging — FFmpeg is automatically downloaded on first use to keep the initial installer small (< 150MB)
+- No installation of Python or yt-dlp required — all engines (yt-dlp, FFmpeg, streamlink, gallery-dl, N_m3u8DL-RE) are bundled in the installer, fully functional immediately after install
 
 ## Download
 
@@ -124,9 +123,9 @@ Planned features and improvements:
 
 ## FAQ
 
-### Why does FFmpeg download on first use?
+### Do I need to download FFmpeg separately?
 
-FFmpeg is a large library (~80MB) used to merge separate video and audio tracks into a single file. To keep the initial installer small (< 150MB), FFmpeg is downloaded automatically the first time you need it for high-quality video merging. This only happens once.
+No. FFmpeg (and every other engine — yt-dlp, streamlink, gallery-dl, N_m3u8DL-RE) ships bundled inside the installer, so high-quality video/audio merging works immediately after install with no extra downloads. If the bundled FFmpeg is ever missing (e.g. manually deleted from the app's install folder), the app will automatically fetch a replacement on first use as a fallback.
 
 ### Do I need Python installed?
 

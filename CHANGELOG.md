@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **FFmpeg-Required Detection** — `checkFFmpegRequired()` failed to recognize that nearly every real download (default "best" quality, any specific-quality selection) triggers a video+audio merge in `spawnDownload()`. It previously only matched a couple of literal substrings, so the on-demand FFmpeg installer was skipped for most downloads when FFmpeg wasn't yet present, causing a confusing merge failure instead of the intended "downloading FFmpeg first" flow.
+- **`save_path` Never Reflected the Real Filename** — The database's `save_path` for yt-dlp downloads was set once at queue time and never updated to the actual on-disk filename (which yt-dlp derives from the video title). After an app restart, cleanup/delete actions referenced a file that never existed. Completion now persists the real resolved path.
+- **Stale "Failed" Downloads in Live Progress UI** — `useDownloadProgress()` only cleared a job from the live progress map on `status === 'error'`, but the app only ever emits `'failed'`. Failed downloads kept showing stale percent/speed/ETA in the UI indefinitely.
+- **Incomplete Partial-File Cleanup on Restart** — `deletePartialFile()` (used by `delete-download` and as a fallback in `cancel-download`) only removed a single `.part` file, missing `.ytdl` resume files and `.part-FragN` fragment files that yt-dlp also leaves behind. It now sweeps the containing folder the same way the live-process cleanup path already did.
+- **Disk-Space Guard Silently Disabled for Network Shares** — `getFreeSpace()` derived a Windows drive letter by splitting on `:`, which breaks for UNC paths (`\\server\share`) with no drive letter. The PowerShell `Get-PSDrive` command failed silently and the check always reported unlimited free space. Now detects UNC paths and queries them via `fsutil volume diskfree`.
+- **`NaN` Written to Downloaded-Bytes Columns** — When yt-dlp reports a progress line without a known total size, `total_bytes`/`received_bytes` were written to the database as `NaN`. The parser now skips the update when the size is unparseable instead of persisting `NaN`.
+- **Duplicate-Download Guard Missed Paused Downloads** — Resubmitting a URL that already had a `paused` entry created a second, independent row for the same output file instead of being rejected. `paused` is now included in the duplicate check.
+- **Removed Dead Playwright Browser-Launch Code** — `electron/main.ts` had an unused `getPlaywrightBrowser()` helper that duplicated (and was never called in favor of) the working Playwright fallback engine already implemented in `electron/extractor.ts`.
+
+### Documentation
+
+- **README** — Corrected the FFmpeg-bundling claim: the installer force-bundles FFmpeg/ffprobe (per the 1.0.5/1.0.6 "Force-Bundled Binaries" change) rather than downloading FFmpeg on first use to keep the installer under 150MB. The on-demand downloader now correctly described as a fallback recovery path for a missing binary, not the primary distribution strategy.
+- **SCRIPTS_DOCUMENTATION.md** — Removed a documented `postinstall` script that no longer exists in `package.json`; added missing entries for `dev:web`, `build:web`, `build:gh-pages`, `start:web`, `setup:playwright`, `test`, `lint`, and `format`.
+
 ## [1.1.4] - 2026-04-14
 
 ### Fixed
