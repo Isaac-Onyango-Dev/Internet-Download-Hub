@@ -5,37 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.5] - 2026-09-10
 
 ### Fixed
 
-- **GitHub Pages deployment race condition** — `pages.yml` and `deploy-web.yml` both triggered on every push to `main`, both deployed to the same `github-pages` environment, and shared the same Actions concurrency group with contradictory settings. This caused `pages.yml` to be cancelled on nearly every push (confirmed across months of run history). `pages.yml` was redundant — `deploy-web.yml` already uploaded the full `docs/` tree — so it was removed and `deploy-web.yml` simplified to a single, race-free deploy step scoped to `docs/**` changes.
-- **Stale/orphaned `docs/web/` build output** — the committed `docs/web/index.html` is a redirect stub to the canonical Render-hosted web app, but `deploy-web.yml` was still rebuilding a full separate React SPA into that same path on every push, silently superseding the stub via the race above. The SPA rebuild step (`build:gh-pages`) has been removed; `docs/web/` is now deployed as the static redirect stub it's committed as, with orphaned build assets from an old SPA build (`docs/web/assets/*.js`, `*.css`, unreferenced by the stub) removed.
-
-### Removed
-
-- Unused dependencies: `zod`, `zod-validation-error`, `chai`, `supertest`, `@types/supertest` — no references anywhere in the codebase; the test-related ones were leftover from a test suite removed in an earlier cleanup pass.
-- Dead `@shared`/`@assets` path aliases (`vite.config.ts`, `tsconfig.json`) pointing to `shared/` and `attached_assets/` directories that don't exist in the repository.
-- `.qwen/settings.json.orig` (orphaned backup file) and `.antigravity/session_summary.md` (stale one-off AI session output).
-
-### Changed
-
-- Added `.gitattributes` to normalize line endings across the Windows development environment and the Linux-based CI runners.
-- Documented the previously-unreferenced `Dockerfile` in `README.md` as an optional self-hosting path for the web version.
+**Desktop app (electron/main.ts):**
 
 - **FFmpeg-Required Detection** — `checkFFmpegRequired()` failed to recognize that nearly every real download (default "best" quality, any specific-quality selection) triggers a video+audio merge in `spawnDownload()`. It previously only matched a couple of literal substrings, so the on-demand FFmpeg installer was skipped for most downloads when FFmpeg wasn't yet present, causing a confusing merge failure instead of the intended "downloading FFmpeg first" flow.
 - **`save_path` Never Reflected the Real Filename** — The database's `save_path` for yt-dlp downloads was set once at queue time and never updated to the actual on-disk filename (which yt-dlp derives from the video title). After an app restart, cleanup/delete actions referenced a file that never existed. Completion now persists the real resolved path.
-- **Stale "Failed" Downloads in Live Progress UI** — `useDownloadProgress()` only cleared a job from the live progress map on `status === 'error'`, but the app only ever emits `'failed'`. Failed downloads kept showing stale percent/speed/ETA in the UI indefinitely.
 - **Incomplete Partial-File Cleanup on Restart** — `deletePartialFile()` (used by `delete-download` and as a fallback in `cancel-download`) only removed a single `.part` file, missing `.ytdl` resume files and `.part-FragN` fragment files that yt-dlp also leaves behind. It now sweeps the containing folder the same way the live-process cleanup path already did.
 - **Disk-Space Guard Silently Disabled for Network Shares** — `getFreeSpace()` derived a Windows drive letter by splitting on `:`, which breaks for UNC paths (`\\server\share`) with no drive letter. The PowerShell `Get-PSDrive` command failed silently and the check always reported unlimited free space. Now detects UNC paths and queries them via `fsutil volume diskfree`.
 - **`NaN` Written to Downloaded-Bytes Columns** — When yt-dlp reports a progress line without a known total size, `total_bytes`/`received_bytes` were written to the database as `NaN`. The parser now skips the update when the size is unparseable instead of persisting `NaN`.
 - **Duplicate-Download Guard Missed Paused Downloads** — Resubmitting a URL that already had a `paused` entry created a second, independent row for the same output file instead of being rejected. `paused` is now included in the duplicate check.
 - **Removed Dead Playwright Browser-Launch Code** — `electron/main.ts` had an unused `getPlaywrightBrowser()` helper that duplicated (and was never called in favor of) the working Playwright fallback engine already implemented in `electron/extractor.ts`.
+- Fixed the same class of stale-status bug in `client/src/hooks/use-ws-progress.ts` (checked for `status === 'error'` instead of `'failed'`); this hook is currently unused by the desktop UI (`Dashboard.tsx` has its own inline progress handler, which already checked the correct status), so this had no live user impact, but is corrected for correctness.
+
+**Web app (Render deployment, already live via continuous auto-deploy — included here for a complete record):**
+
+- Removed the broken Cobalt API integration — all public instances now require JWT authentication that this app didn't send, so those code paths never worked. Simplified `client/src/lib/api.ts`, `client/src/lib/web-api.ts`, and `server/index.ts` accordingly.
+- Added YouTube bot-detection retry logic to the server's video-info/download endpoints for the Render-hosted web version.
+
+**CI/CD & release infrastructure:**
+
+- **GitHub Pages deployment race condition** — `pages.yml` and `deploy-web.yml` both triggered on every push to `main`, both deployed to the same `github-pages` environment, and shared the same Actions concurrency group with contradictory settings. This caused `pages.yml` to be cancelled on nearly every push (confirmed across months of run history). `pages.yml` was redundant — `deploy-web.yml` already uploaded the full `docs/` tree — so it was removed and `deploy-web.yml` simplified to a single, race-free deploy step scoped to `docs/**` changes.
+- **Stale/orphaned `docs/web/` build output** — the committed `docs/web/index.html` is a redirect stub to the canonical Render-hosted web app, but `deploy-web.yml` was still rebuilding a full separate React SPA into that same path on every push, silently superseding the stub via the race above. The SPA rebuild step (`build:gh-pages`) has been removed; `docs/web/` is now deployed as the static redirect stub it's committed as, with orphaned build assets from an old SPA build (`docs/web/assets/*.js`, `*.css`, unreferenced by the stub) removed.
+- Added `overwrite: true` to the release-asset upload step to prevent duplicate assets on a re-run of the same tag.
+
+### Security
+
+- Ran a dependency audit: 37 vulnerabilities (4 critical, 24 high, 5 moderate, 4 low) down to 2 (both moderate). `npm audit fix` (non-force) and a patch-level `tsx` update resolved 34; `sharp` was bumped to `0.35.4` (verified compatible — `npm run generate:icons` re-run end-to-end). The remaining 2 (`vitest`/`@vitest/mocker`) require `vitest` 5.0.0, whose peer dependencies need a coordinated `@types/node` major bump this repo isn't ready for; deferred as low-risk (devDependency only, zero test files currently exist to exercise it).
+
+### Removed
+
+- Unused dependencies: `zod`, `zod-validation-error`, `chai`, `supertest`, `@types/supertest` — no references anywhere in the codebase; the test-related ones were leftover from a test suite removed in an earlier cleanup pass.
+- Dead `@shared`/`@assets` path aliases (`vite.config.ts`, `tsconfig.json`, `vitest.config.ts`) pointing to `shared/` and `attached_assets/` directories that don't exist in the repository.
+- `.qwen/settings.json.orig` (orphaned backup file) and `.antigravity/session_summary.md` (stale one-off AI session output).
+
+### Changed
+
+- Redesigned the static marketing/download page (`docs/index.html`) with Apple-inspired design refinements: fixed a layout gap at 560–768px widths, added `prefers-reduced-motion`/`prefers-reduced-transparency`/`prefers-contrast` support and `:focus-visible` states (previously missing entirely), bumped touch targets to ~44px.
+- Added `.gitattributes` to normalize line endings across the Windows development environment and the Linux-based CI runners.
+- Documented the previously-unreferenced `Dockerfile` in `README.md` as an optional self-hosting path for the web version.
 
 ### Documentation
 
 - **README** — Corrected the FFmpeg-bundling claim: the installer force-bundles FFmpeg/ffprobe (per the 1.0.5/1.0.6 "Force-Bundled Binaries" change) rather than downloading FFmpeg on first use to keep the installer under 150MB. The on-demand downloader now correctly described as a fallback recovery path for a missing binary, not the primary distribution strategy.
-- **SCRIPTS_DOCUMENTATION.md** — Removed a documented `postinstall` script that no longer exists in `package.json`; added missing entries for `dev:web`, `build:web`, `build:gh-pages`, `start:web`, `setup:playwright`, `test`, `lint`, and `format`.
+- **SCRIPTS_DOCUMENTATION.md** — Removed documented scripts that no longer exist (`postinstall`, `build:gh-pages`); added missing entries for `dev:web`, `build:web`, `start:web`, `setup:playwright`, `test`, `lint`, and `format`.
 
 ## [1.1.4] - 2026-04-14
 

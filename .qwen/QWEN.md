@@ -159,8 +159,8 @@ npm run lint             # ESLint checking
 - All builds passing: Vite, esbuild main, esbuild preload
 
 ## Release Information
-- **Current Version**: 1.1.4
-- **Tag**: `v1.1.4` (published on GitHub Releases)
+- **Current Version**: 1.1.5
+- **Tag**: `v1.1.5` (published on GitHub Releases)
 - **Platform**: Windows 10/11 (64-bit)
 - **License**: MIT
 - **Author**: Isaac Onyango
