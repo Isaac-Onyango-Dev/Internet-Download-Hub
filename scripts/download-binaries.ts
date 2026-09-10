@@ -15,6 +15,28 @@ import { pipeline } from 'node:stream/promises';
 const exec = promisify(execCallback);
 const BINARIES_DIR = 'binaries';
 
+/**
+ * gallery-dl moved off GitHub Releases to Codeberg (its GitHub releases
+ * stopped shipping binary assets entirely as of mid-2026 — see the release
+ * notes on https://github.com/mikf/gallery-dl/releases/latest). Codeberg
+ * (Forgejo) has no GitHub-style "/releases/latest/download/<name>" alias,
+ * so the current release's exact asset URL has to be resolved via its API
+ * first.
+ */
+async function resolveGalleryDlUrl(): Promise<string> {
+  const apiUrl = 'https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest';
+  const res = await fetch(apiUrl, { headers: { Accept: 'application/json' } });
+  if (!res.ok) {
+    throw new Error(`Failed to resolve gallery-dl latest release: ${res.status} ${res.statusText}`);
+  }
+  const release = (await res.json()) as { assets?: { name: string; browser_download_url: string }[] };
+  const asset = release.assets?.find((a) => a.name === 'gallery-dl.exe');
+  if (!asset) {
+    throw new Error('gallery-dl.exe asset not found in the latest Codeberg release');
+  }
+  return asset.browser_download_url;
+}
+
 const BINARIES = [
   {
     names: ['yt-dlp.exe'],
@@ -23,8 +45,11 @@ const BINARIES = [
   },
   {
     names: ['gallery-dl.exe'],
-    url: 'https://github.com/mikf/gallery-dl/releases/latest/download/gallery-dl.exe',
+    url: resolveGalleryDlUrl,
     isZip: false,
+    // Codeberg's bot-protection blocks the spoofed browser UA used for the
+    // GitHub-hosted downloads below; a default/no UA passes through fine.
+    noSpoofedUserAgent: true,
   },
   {
     names: ['ffmpeg.exe', 'ffprobe.exe'],
@@ -46,12 +71,14 @@ const BINARIES = [
   },
 ];
 
-async function downloadFile(url: string, dest: string): Promise<void> {
+async function downloadFile(url: string, dest: string, noSpoofedUserAgent = false): Promise<void> {
   console.log(`Downloading ${url} -> ${dest}...`);
   const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    },
+    headers: noSpoofedUserAgent
+      ? {}
+      : {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        },
   });
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
@@ -103,12 +130,14 @@ async function main() {
     }
 
     try {
+      const url: string = typeof binary.url === 'function' ? await binary.url() : binary.url;
+
       if (binary.isZip) {
         const baseName = binary.names[0].replace('.exe', '');
         const zipDest = join(BINARIES_DIR, `${baseName}.zip`);
         const tempExtractDir = join(BINARIES_DIR, `temp_${baseName}`);
 
-        await downloadFile(binary.url, zipDest);
+        await downloadFile(url, zipDest);
         if (existsSync(tempExtractDir)) {
           await exec(`powershell -Command "Remove-Item -Recurse -Force '${tempExtractDir}'"`);
         }
@@ -137,7 +166,7 @@ async function main() {
       } else {
         const finalDest = join(BINARIES_DIR, binary.names[0]);
         if (existsSync(finalDest)) unlinkSync(finalDest);
-        await downloadFile(binary.url, finalDest);
+        await downloadFile(url, finalDest, !!binary.noSpoofedUserAgent);
         console.log(`Downloaded ${binary.names[0]}`);
       }
     } catch (err) {
