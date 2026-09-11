@@ -237,14 +237,21 @@ export default function Support() {
     setNativeShareSupported(typeof navigator !== 'undefined' && !!navigator.share);
   }, []);
 
-  const handleShare = (platform: SharePlatform) => {
-    const url = platform.getUrl(APP_URL, SHARE_TEXT, SHARE_TITLE);
-    // Open in default browser from Electron
+  // openExternal rejects when the main process refuses a URL. Left uncaught it
+  // surfaced as an unhandled rejection and the button looked simply dead, so
+  // every caller goes through here.
+  const openInBrowser = (url: string) => {
     if (window.electronAPI?.openExternal) {
-      window.electronAPI.openExternal(url);
+      window.electronAPI.openExternal(url).catch((err: unknown) => {
+        console.error('Could not open link:', url, err);
+      });
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
+  };
+
+  const handleShare = (platform: SharePlatform) => {
+    openInBrowser(platform.getUrl(APP_URL, SHARE_TEXT, SHARE_TITLE));
   };
 
   const handleCopyLink = async () => {
@@ -285,12 +292,7 @@ export default function Support() {
   };
 
   const handleGitHubSponsors = () => {
-    const url = `${GITHUB_URL}`;
-    if (window.electronAPI?.openExternal) {
-      window.electronAPI.openExternal(url);
-    } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    }
+    openInBrowser(GITHUB_URL);
   };
 
   // Group payment options by region

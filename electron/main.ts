@@ -30,7 +30,9 @@ import {
   clipboard,
 } from 'electron';
 import path from 'path'; // File path utilities
-import { spawn, exec, execSync, ChildProcess } from 'child_process'; // Process spawning for downloads
+import crypto from 'crypto'; // Checksum verification for downloaded files
+import semver from 'semver'; // Version comparison that understands pre-releases
+import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process'; // Process spawning for downloads
 import execa from 'execa'; // Better process execution
 import { extractVideoInfo, streamPlaylistInfo } from './extractor'; // Video metadata extraction
 import fs from 'fs'; // File system operations
@@ -417,9 +419,11 @@ async function downloadFFmpeg() {
         fs.mkdirSync(tempDir, { recursive: true });
       }
 
-      // Use PowerShell to extract zip on Windows
-      const psCommand = `Expand-Archive -Path "${zipPath}" -DestinationPath "${tempDir}" -Force`;
-      await promisify(exec)(`powershell -Command "${psCommand}"`);
+      // Use PowerShell to extract zip on Windows. Paths go through the
+      // environment, never into the command text — see PS_EXPAND_ARCHIVE.
+      await promisify(execFile)('powershell', [...PS_FLAGS, '-Command', PS_EXPAND_ARCHIVE], {
+        env: { ...process.env, IDH_ARCHIVE: zipPath, IDH_DEST: tempDir },
+      });
 
       // Find ffmpeg.exe in extracted directory
       const findFfmpeg = (dir: string): string | null => {
@@ -735,25 +739,92 @@ async function initDb() {
   saveDatabase(db);
 }
 
+// ── External link policy ─────────────────────────────────────────────────────
+// The renderer cannot open arbitrary URLs. Everything it asks for is matched
+// against this table by exact hostname — prefix matching let
+// "https://isaac-onyango-dev.github.io.example.com/" through, because that
+// string does start with the allowed prefix.
+//
+// The share targets are here because the Support page offers those buttons;
+// without them every share threw "External URL not allowed" and did nothing.
+const ALLOWED_EXTERNAL_TARGETS: Array<{ host: string; pathPrefix?: string }> = [
+  // The project's own pages.
+  { host: 'github.com', pathPrefix: '/Isaac-Onyango-Dev' },
+  { host: 'isaac-onyango-dev.github.io' },
+  // Share targets offered on the Support page.
+  { host: 'twitter.com' },
+  { host: 'x.com' },
+  { host: 'reddit.com' },
+  { host: 'www.reddit.com' },
+  { host: 'wa.me' },
+  { host: 'facebook.com' },
+  { host: 'www.facebook.com' },
+  { host: 'linkedin.com' },
+  { host: 'www.linkedin.com' },
+  { host: 't.me' },
+  { host: 'threads.net' },
+  { host: 'www.threads.net' },
+  { host: 'mastodon.social' },
+  { host: 'news.ycombinator.com' },
+  { host: 'pinterest.com' },
+  { host: 'www.pinterest.com' },
+];
+
+/** True when the renderer is allowed to hand this URL to the OS browser. */
+function isAllowedExternalUrl(rawUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return ALLOWED_EXTERNAL_TARGETS.some(
+    (target) =>
+      target.host === host && (!target.pathPrefix || parsed.pathname.startsWith(target.pathPrefix)),
+  );
+}
+
 // ── Helper functions ─────────────────────────────────────────────────────────
+
+// Every PowerShell call below goes through execFile with an argument array, so
+// no shell parses the command line, and every runtime value reaches the script
+// through the environment. A value read from $env: is data to PowerShell — it
+// is never re-parsed as source — which is what stops a path or filename from
+// closing a quote and appending a command of its own.
+const PS_FLAGS = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass'];
+const PS_EXPAND_ARCHIVE =
+  'Expand-Archive -LiteralPath $env:IDH_ARCHIVE -DestinationPath $env:IDH_DEST -Force';
+const PS_DRIVE_FREE = '(Get-PSDrive -Name $env:IDH_DRIVE).Free';
+
 async function getFreeSpace(targetPath: string): Promise<number> {
   return new Promise((resolve) => {
-    let cmd: string;
+    let command: string;
+    let args: string[];
+    let env = process.env;
     const isUncPath = os.platform() === 'win32' && (targetPath.startsWith('\\\\') || targetPath.startsWith('//'));
     if (isUncPath) {
       // UNC paths (e.g. \\server\share) have no drive letter — Get-PSDrive
       // doesn't apply and would silently query the wrong/nonexistent drive.
       // Query the volume directly via fsutil instead.
-      cmd = `fsutil volume diskfree "${targetPath}"`;
+      command = 'fsutil';
+      args = ['volume', 'diskfree', targetPath];
     } else if (os.platform() === 'win32') {
-      // Use drive letter only (e.g. "C")
-      const driveLetter = targetPath.split(':')[0];
-      cmd = `powershell -NoProfile -Command "(Get-PSDrive -Name '${driveLetter}').Free"`;
+      // Use drive letter only (e.g. "C"). targetPath is the user's chosen save
+      // folder, so it must not be pasted into the command text.
+      command = 'powershell';
+      args = [...PS_FLAGS, '-Command', PS_DRIVE_FREE];
+      env = { ...process.env, IDH_DRIVE: targetPath.split(':')[0] };
     } else {
-      cmd = `df -b1 "${targetPath}" | tail -1 | awk '{print $4}'`;
+      // -k is the POSIX-portable block size; the pipeline this replaced used
+      // shell quoting around the path, and -b differs between GNU and BSD df.
+      command = 'df';
+      args = ['-k', targetPath];
     }
+    const isPosixDf = command === 'df';
 
-    exec(cmd, (err: any, stdout: string) => {
+    execFile(command, args, { env }, (err: any, stdout: string) => {
       if (err) {
         log.error('Failed to get free space:', err);
         resolve(Number.MAX_SAFE_INTEGER);
@@ -763,6 +834,13 @@ async function getFreeSpace(targetPath: string): Promise<number> {
       if (isUncPath) {
         const match = stdout.match(/free bytes\s*:\s*([\d,]+)/i);
         parsed = match ? parseInt(match[1].replace(/,/g, ''), 10) : NaN;
+      } else if (isPosixDf) {
+        // "Filesystem 1K-blocks Used Available Use% Mounted on" — take the
+        // Available column of the last row and convert from 1K blocks.
+        const rows = stdout.trim().split('\n');
+        const columns = (rows[rows.length - 1] || '').trim().split(/\s+/);
+        const availableBlocks = parseInt(columns[3], 10);
+        parsed = isNaN(availableBlocks) ? NaN : availableBlocks * 1024;
       } else {
         parsed = parseInt(stdout.trim().replace(/[^0-9]/g, ''), 10);
       }
@@ -1355,10 +1433,7 @@ function createWindow() {
 
   // Prevent in-app external navigation
   mainWindow.webContents.setWindowOpenHandler(({ url }: { url: string }) => {
-    // Allow only whitelisted domains
-    const allowed = ['https://github.com/Isaac-Onyango-Dev', 'https://isaac-onyango-dev.github.io'];
-
-    if (allowed.some((prefix) => url.startsWith(prefix))) {
+    if (isAllowedExternalUrl(url)) {
       shell.openExternal(url);
     } else {
       log.warn(`[MAIN] Blocked external navigation: ${url}`);
@@ -1464,38 +1539,171 @@ function detectPlaylist(url: string): { isPlaylist: boolean } {
 // ── yt-dlp Helper Functions ───────────────────────────────────────────────
 
 /** Fetch a JSON URL with a User-Agent header (follows redirects for GitHub API) */
+/**
+ * GitHub refused the request because this computer is out of API quota.
+ * Unauthenticated callers get 60 requests an hour per IP, and this app spends
+ * that budget in six places, so a shared or corporate NAT hits it in normal
+ * use. Distinguished from other failures so the UI can say "try again later"
+ * instead of blaming the user's connection.
+ */
+class GitHubRateLimitError extends Error {
+  readonly retryAfter: Date | null;
+
+  constructor(retryAfter: Date | null) {
+    super(
+      retryAfter
+        ? `GitHub is limiting requests from this network until ${retryAfter.toLocaleTimeString()}.`
+        : 'GitHub is limiting requests from this network.',
+    );
+    this.name = 'GitHubRateLimitError';
+    this.retryAfter = retryAfter;
+  }
+}
+
+/** When GitHub says the quota resets, from whichever header it sent. */
+function rateLimitResetAt(headers: any): Date | null {
+  const retryAfter = Number(headers['retry-after']);
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return new Date(Date.now() + retryAfter * 1000);
+  }
+  const reset = Number(headers['x-ratelimit-reset']);
+  if (Number.isFinite(reset) && reset > 0) return new Date(reset * 1000);
+  return null;
+}
+
+/**
+ * A 403 from GitHub is usually quota exhaustion, but not always. Only treat it
+ * as rate limiting when the headers say so; 429 always is.
+ */
+function isRateLimited(statusCode: number | undefined, headers: any): boolean {
+  if (statusCode === 429) return true;
+  if (statusCode !== 403) return false;
+  return headers['x-ratelimit-remaining'] === '0' || headers['retry-after'] != null;
+}
+
+const GITHUB_API_TIMEOUT_MS = 15000;
+
 async function fetchJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const doGet = (target: string) => {
-      https
-        .get(target, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
-          // Follow redirects
-          if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-            doGet(res.headers.location);
-            return;
-          }
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
-          res.on('end', () => {
-            try {
-              if (res.statusCode && res.statusCode >= 400) {
-                reject(new Error(`GitHub API returned HTTP ${res.statusCode}`));
-                return;
-              }
-              resolve(JSON.parse(data));
-            } catch {
-              reject(new Error('Failed to parse GitHub API response'));
+      const request = https
+        .get(
+          target,
+          {
+            headers: {
+              'User-Agent': 'Internet-Download-Hub',
+              // Pins the response schema; without it GitHub is free to serve a
+              // different default representation.
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          },
+          (res) => {
+            // Follow redirects
+            if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+              res.resume(); // drain, or the socket is never released
+              doGet(res.headers.location);
+              return;
             }
-          });
-        })
+            if (isRateLimited(res.statusCode, res.headers)) {
+              res.resume();
+              reject(new GitHubRateLimitError(rateLimitResetAt(res.headers)));
+              return;
+            }
+            let data = '';
+            res.on('data', (chunk) => (data += chunk));
+            res.on('end', () => {
+              try {
+                if (res.statusCode && res.statusCode >= 400) {
+                  reject(new Error(`GitHub API returned HTTP ${res.statusCode}`));
+                  return;
+                }
+                resolve(JSON.parse(data));
+              } catch {
+                reject(new Error('Failed to parse GitHub API response'));
+              }
+            });
+          },
+        )
         .on('error', reject);
+
+      // https.get has no default timeout, so a connection that opens and then
+      // stalls (captive-portal Wi-Fi is the usual cause) would hang the caller
+      // forever with no dialog and no way to cancel.
+      request.setTimeout(GITHUB_API_TIMEOUT_MS, () => {
+        request.destroy(new Error('The request to GitHub timed out.'));
+      });
     };
     doGet(url);
   });
 }
 
-/** Download a file, following redirects, into dest. */
-async function downloadFile(url: string, dest: string): Promise<void> {
+/**
+ * Verify a downloaded file against the checksum published beside it.
+ *
+ * GitHub release assets carry a `digest` field shaped `"sha256:<hex>"`. Pass it
+ * through and this throws on any mismatch. Pass nothing — because the publisher
+ * does not yet publish a checksum for that asset — and it logs and returns, so
+ * the check starts working the day a digest appears without any code change.
+ *
+ * The app's own update asset does not come through here: electron-updater
+ * downloads it and verifies the sha512 recorded in latest.yml, and refuses to
+ * install anything whose update metadata carries no checksum at all.
+ */
+async function verifyFileDigest(filePath: string, digest?: string | null): Promise<void> {
+  const name = path.basename(filePath);
+  if (!digest) {
+    log.warn(`[Integrity] No checksum published for ${name}; skipping verification.`);
+    return;
+  }
+
+  const parsed = /^\s*([a-z0-9-]+)[:=]([a-f0-9]+)\s*$/i.exec(digest);
+  if (!parsed) {
+    throw new Error(`Unrecognised checksum format for ${name}: "${digest}".`);
+  }
+  const algorithm = parsed[1].toLowerCase().replace(/-/g, '');
+  const expected = parsed[2].toLowerCase();
+
+  let actual: string;
+  try {
+    actual = await new Promise<string>((resolve, reject) => {
+      const hash = crypto.createHash(algorithm);
+      const stream = fs.createReadStream(filePath);
+      stream.on('error', reject);
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+    });
+  } catch (err: any) {
+    throw new Error(`Could not verify ${name} (${algorithm}): ${err?.message || err}`);
+  }
+
+  if (actual !== expected) {
+    throw new Error(
+      `Checksum mismatch for ${name} — expected ${algorithm} ${expected}, got ${actual}.`,
+    );
+  }
+  log.info(`[Integrity] ${name} matches its published ${algorithm} checksum.`);
+}
+
+/**
+ * Download a file, following redirects, into dest.
+ *
+ * When `digest` is supplied the file is verified before this resolves, and a
+ * file that fails verification is deleted rather than left on disk where a
+ * later step could execute it.
+ */
+async function downloadFile(url: string, dest: string, digest?: string | null): Promise<void> {
+  await downloadFileUnverified(url, dest);
+  try {
+    await verifyFileDigest(dest, digest);
+  } catch (err) {
+    fs.unlink(dest, () => {});
+    throw err;
+  }
+}
+
+/** The transfer itself, with no integrity check. Use downloadFile instead. */
+async function downloadFileUnverified(url: string, dest: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const doRequest = (redirectUrl: string) => {
       https
@@ -1664,15 +1872,33 @@ async function checkForAppUpdates(): Promise<void> {
     const latestVersion = latestTag.replace(/^v/, '');
     setStatus(null);
 
-    if (currentVersion === latestVersion) {
+    // Compare as versions, not as strings. String equality called every
+    // difference an update, so a local build ahead of the published tag
+    // (1.1.6 against a 1.1.5 release) was offered a downgrade, and a
+    // pre-release suffix never matched at all.
+    const installed = semver.valid(currentVersion);
+    const published = semver.valid(latestVersion);
+    const comparable = Boolean(installed && published);
+    // Unparseable on either side: fall back to the old exact-match behaviour
+    // rather than guessing which way round they go.
+    const updateAvailable = comparable
+      ? semver.gt(published as string, installed as string)
+      : currentVersion !== latestVersion;
+    const aheadOfRelease = comparable && semver.gt(installed as string, published as string);
+
+    if (!updateAvailable) {
       await dialog.showMessageBox(win, {
         type: 'info',
         title: 'You\'re up to date',
         message: 'Internet Download Hub is up to date.',
-        detail:
-          `Installed version: v${currentVersion}\n\n` +
-          `You're running the latest version. Check here again whenever you ` +
-          `want to see if a newer one has been released.`,
+        detail: aheadOfRelease
+          ? `Installed version: v${currentVersion}\n` +
+            `Latest release: v${latestVersion}\n\n` +
+            `This build is newer than the latest public release, so there is ` +
+            `nothing to install.`
+          : `Installed version: v${currentVersion}\n\n` +
+            `You're running the latest version. Check here again whenever you ` +
+            `want to see if a newer one has been released.`,
         buttons: ['OK'],
         defaultId: 0,
         noLink: true,
@@ -1728,13 +1954,27 @@ async function checkForAppUpdates(): Promise<void> {
   } catch (err: unknown) {
     log.error('[Menu] Update check failed:', err);
     setStatus(null);
+
+    // Being out of GitHub API quota is not a broken connection, and telling
+    // the user to check their internet would send them chasing the wrong
+    // thing. Say what actually happened and when it will work again.
+    const rateLimited = err instanceof GitHubRateLimitError;
+    const retryAfter = rateLimited ? (err as GitHubRateLimitError).retryAfter : null;
+
     const { response } = await dialog.showMessageBox(win, {
-      type: 'error',
+      type: rateLimited ? 'warning' : 'error',
       title: 'Update Check Failed',
-      message: 'Could not check for updates.',
-      detail:
-        'Please check your internet connection and try again.\n\n' +
-        'You can also download the latest version from our website.',
+      message: rateLimited
+        ? 'Could not check for updates right now — please try again later.'
+        : 'Could not check for updates.',
+      detail: rateLimited
+        ? `GitHub is temporarily limiting requests from this network` +
+          `${retryAfter ? `, and will accept them again after ${retryAfter.toLocaleTimeString()}` : ''}. ` +
+          `This is a limit on the network, not a problem with your computer or ` +
+          `your copy of the app.\n\n` +
+          `You can wait and try again, or download the latest version from our website.`
+        : 'Please check your internet connection and try again.\n\n' +
+          'You can also download the latest version from our website.',
       buttons: ['Open Download Page', 'Cancel'],
       defaultId: 0,
       cancelId: 1,
@@ -1854,7 +2094,7 @@ async function performYtDlpUpdate(): Promise<{ updated: boolean; version: string
   const tempPath = path.join(userDataBinariesPath, `yt-dlp-new-${Date.now()}.exe`);
 
   log.info(`[UPDATE] Downloading yt-dlp ${latestVersion} to: ${tempPath}`);
-  await downloadFile(asset.browser_download_url, tempPath);
+  await downloadFile(asset.browser_download_url, tempPath, asset.digest);
 
   // Sanity-check the downloaded file
   const stats = fs.statSync(tempPath);
@@ -1909,8 +2149,8 @@ async function getLatestYtDlpRelease(): Promise<{ url: string; version: string }
 }
 
 // Alias for old code that calls downloadYtDlp — now delegates to downloadFile
-async function downloadYtDlp(url: string, dest: string): Promise<void> {
-  return downloadFile(url, dest);
+async function downloadYtDlp(url: string, dest: string, digest?: string | null): Promise<void> {
+  return downloadFile(url, dest, digest);
 }
 
 /**
@@ -2531,13 +2771,7 @@ function setupIpcHandlers() {
   // ── open-external ─────────────────────────────────────────────────────────
   ipcMain.handle('open-external', async (_: any, url: string) => {
     try {
-      // Whitelist allowed domains for security
-      const allowed = [
-        'https://github.com/Isaac-Onyango-Dev',
-        'https://isaac-onyango-dev.github.io',
-      ];
-
-      if (allowed.some((prefix) => url.startsWith(prefix))) {
+      if (isAllowedExternalUrl(url)) {
         await shell.openExternal(url);
         return { success: true };
       } else {
@@ -2675,7 +2909,9 @@ function setupIpcHandlers() {
         return 'Not installed';
       }
 
-      const output = execSync(`"${binaryPath}" ${binary.versionFlag}`, { encoding: 'utf8' });
+      // execFileSync, not execSync: no shell parses this, so a path containing
+      // a quote cannot terminate the command and start another one.
+      const output = execFileSync(binaryPath, [binary.versionFlag], { encoding: 'utf8' });
       const version = output.split('\n')[0].trim();
       return version;
     } catch (error: any) {
@@ -2714,6 +2950,14 @@ function setupIpcHandlers() {
         downloadUrl = binary.downloadUrl(latestVersion);
       }
 
+      // The release listing carries a `digest` per asset ("sha256:<hex>"). Look
+      // up the one we are about to fetch so the bytes can be checked before
+      // anything executes them. Absent for publishers that don't emit digests,
+      // in which case verifyFileDigest logs and moves on.
+      const assetMeta = (release.assets || []).find(
+        (a: any) => a.browser_download_url === downloadUrl,
+      );
+
       const tempPath = path.join(app.getPath('temp'), `${binary.fileName}.tmp`);
 
       // Destination: userData/binaries (always writable, even in Program Files installs)
@@ -2732,6 +2976,13 @@ function setupIpcHandlers() {
       const buffer = await response.arrayBuffer();
       fs.writeFileSync(tempPath, Buffer.from(buffer));
 
+      try {
+        await verifyFileDigest(tempPath, assetMeta?.digest);
+      } catch (err) {
+        fs.unlinkSync(tempPath);
+        throw err;
+      }
+
       // Handle zip files
       if (binary.isZip) {
         const tempDir = path.join(app.getPath('temp'), `${binary.name}_extract`);
@@ -2739,11 +2990,14 @@ function setupIpcHandlers() {
           fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        // Extract using PowerShell (built-in)
-        execSync(
-          `powershell -Command "Expand-Archive -Path '${tempPath}' -DestinationPath '${tempDir}'"`,
-          { cwd: app.getPath('temp') },
-        );
+        // Extract using PowerShell (built-in). Paths travel in the environment
+        // rather than inside the command text: execFileSync skips the shell,
+        // and $env: lookups are values to PowerShell, not source it re-parses,
+        // so nothing in a path can close a quote and append a second command.
+        execFileSync('powershell', [...PS_FLAGS, '-Command', PS_EXPAND_ARCHIVE], {
+          cwd: app.getPath('temp'),
+          env: { ...process.env, IDH_ARCHIVE: tempPath, IDH_DEST: tempDir },
+        });
 
         // Find the specific .exe file in extracted files
         const findSpecificExe = (dir: string, fileName: string): string | null => {
