@@ -24,6 +24,7 @@
     "lint": "eslint \"client/src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
     "format": "prettier --write \"**/*.{ts,tsx,css,md}\"",
     "generate:icons": "tsx scripts/generate-icons.ts",
+    "generate:installer-art": "tsx scripts/generate-installer-art.ts",
     "dev:main": "npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core",
     "dev:web": "concurrently \"cross-env VITE_TARGET=web vite\" \"tsx watch server/index.ts\"",
     "build:web": "cross-env VITE_TARGET=web vite build && esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --external:express",
@@ -121,6 +122,9 @@
     "files": [
       "dist/**/*",
       "client/splash.html",
+      "client/brand.css",
+      "client/fonts/**/*",
+      "client/public/mark.svg",
       "electron/main.cjs",
       "electron/preload.cjs",
       "node_modules/sql.js/dist/sql-wasm.wasm",
@@ -173,6 +177,8 @@
       "deleteAppDataOnUninstall": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "license": "assets/license.txt",
       "multiLanguageInstaller": true,
       "installerLanguages": [

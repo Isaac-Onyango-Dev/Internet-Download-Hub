@@ -7,16 +7,24 @@ export default {
   content: ['./client/index.html', './client/src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
+      // Read off the site: icon tiles 14px, buttons 16px, disclosure panels
+      // 18px, cards 22px. The old scale topped out at 9px, which is most of
+      // why the app's panels read a generation older than the site.
       borderRadius: {
-        lg: '.5625rem' /* 9px */,
-        md: '.375rem' /* 6px */,
-        sm: '.1875rem' /* 3px */,
+        sm: 'var(--app-radius-sm)' /* 10px */,
+        md: 'var(--app-radius-md)' /* 14px */,
+        lg: 'var(--app-radius-lg)' /* 18px */,
+        xl: 'var(--app-radius-xl)' /* 22px */,
+        '2xl': '28px',
       },
       colors: {
         // Flat / base colors (regular buttons)
         background: 'hsl(var(--background) / <alpha-value>)',
         foreground: 'hsl(var(--foreground) / <alpha-value>)',
         border: 'hsl(var(--border) / <alpha-value>)',
+        'border-lift': 'hsl(var(--app-border-lift) / <alpha-value>)',
+        surface: 'hsl(var(--app-surface) / <alpha-value>)',
+        'surface-lift': 'hsl(var(--app-surface-lift) / <alpha-value>)',
         input: 'hsl(var(--input) / <alpha-value>)',
         card: {
           DEFAULT: 'hsl(var(--card) / <alpha-value>)',
@@ -77,17 +85,37 @@ export default {
           foreground: 'hsl(var(--sidebar-accent-foreground) / <alpha-value>)',
           border: 'var(--sidebar-accent-border)',
         },
+        // Status roles resolve to brand tokens rather than stray rgb() so
+        // they cannot drift away from the site palette again.
+        success: 'hsl(var(--success) / <alpha-value>)',
+        warning: 'hsl(var(--warning) / <alpha-value>)',
+        info: 'hsl(var(--info) / <alpha-value>)',
         status: {
-          online: 'rgb(34 197 94)',
-          away: 'rgb(245 158 11)',
-          busy: 'rgb(239 68 68)',
-          offline: 'rgb(156 163 175)',
+          online: 'hsl(var(--success) / <alpha-value>)',
+          away: 'hsl(var(--warning) / <alpha-value>)',
+          busy: 'hsl(var(--destructive) / <alpha-value>)',
+          offline: 'hsl(var(--muted-foreground) / <alpha-value>)',
         },
       },
       fontFamily: {
         sans: ['var(--font-sans)'],
-        serif: ['var(--font-serif)'],
+        display: ['var(--font-display)'],
         mono: ['var(--font-mono)'],
+      },
+      // The site's press/hover curve, exposed as ease-bounce / ease-brand.
+      transitionTimingFunction: {
+        bounce: 'var(--brand-bounce)',
+        brand: 'var(--brand-ease)',
+      },
+      boxShadow: {
+        lift: 'var(--brand-shadow-lift)',
+        hot: 'var(--brand-shadow-hot)',
+        'hot-lift': 'var(--brand-shadow-hot-lift)',
+      },
+      backgroundImage: {
+        prism: 'var(--brand-prism)',
+        'prism-soft': 'var(--brand-prism-soft)',
+        hot: 'var(--brand-hot-grad)',
       },
       keyframes: {
         'accordion-down': {

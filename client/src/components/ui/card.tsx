@@ -7,7 +7,11 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        'shadcn-card rounded-xl border bg-card border-card-border text-card-foreground shadow-sm',
+        // Card treatment from the site: a raised surface, a hairline and a
+        // generous 22px radius. The old 12px/9px radii are most of why the
+        // app's panels read a generation older than the page they came from.
+        'shadcn-card rounded-xl border border-border bg-card text-card-foreground',
+        'transition-[transform,border-color,box-shadow] duration-300 ease-bounce',
         className,
       )}
       {...props}

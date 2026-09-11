@@ -62,7 +62,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 An unexpected error occurred. Please try refreshing the page or contact support if
                 the problem persists.
                 {process.env.NODE_ENV === 'development' && (
-                  <div className="mt-4 p-3 bg-red-100 rounded border border-red-300 text-red-800">
+                  <div className="mt-4 p-3 bg-destructive rounded border border-destructive text-destructive">
                     <p className="font-semibold text-sm mb-2">Development Error Details:</p>
                     <pre className="text-xs whitespace-pre-wrap break-all">
                       {this.state.error?.toString()}

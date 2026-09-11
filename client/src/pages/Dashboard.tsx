@@ -731,7 +731,7 @@ function VideoCapturePanel({
     <div className="space-y-8">
       {/* yt-dlp update banner */}
       {showUpdateBanner && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 text-sm">
+        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-warning/30 bg-warning/10 text-warning dark:text-warning text-sm">
           <span className="flex items-center gap-2">
             <RefreshCw className="w-4 h-4 shrink-0" />A yt-dlp update is available (v
             {ytdlpLatestVersion}). Keep it updated for best compatibility.
@@ -740,14 +740,14 @@ function VideoCapturePanel({
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs border-yellow-500/40 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400"
+              className="h-7 text-xs border-warning/40 hover:bg-warning/20 text-warning dark:text-warning"
               onClick={onGoToSettings}
             >
               Update in Settings
             </Button>
             <button
               onClick={onDismissBanner}
-              className="p-1 rounded hover:bg-yellow-500/10 text-yellow-500 transition-colors"
+              className="p-1 rounded hover:bg-warning/10 text-warning transition-colors"
               aria-label="Dismiss"
             >
               <X className="w-4 h-4" />
@@ -796,8 +796,9 @@ function VideoCapturePanel({
             <Button
               type="submit"
               size="lg"
+              variant="hero"
               disabled={!scanUrl || loading}
-              className="h-14 px-8 text-base btn-primary rounded-lg shrink-0 min-w-[220px]"
+              className="h-14 px-8 text-base rounded-lg shrink-0 min-w-[220px]"
             >
               {loading ? (
                 <div className="flex flex-col items-center">
@@ -828,7 +829,7 @@ function VideoCapturePanel({
 
           {/* Success message */}
           {successMsg && (
-            <p className="mt-3 text-sm text-green-600 flex items-center gap-2">
+            <p className="mt-3 text-sm text-success flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               {successMsg}
             </p>
@@ -865,7 +866,7 @@ function VideoCapturePanel({
           )}
 
           {playlistBlocked && (
-            <Alert className="mt-4 border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300">
+            <Alert className="mt-4 border-warning/30 bg-warning/10 text-warning dark:text-warning">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex flex-col gap-3">
                 <span>
@@ -877,7 +878,7 @@ function VideoCapturePanel({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs border-yellow-500/40 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300"
+                    className="h-7 text-xs border-warning/40 hover:bg-warning/20 text-warning dark:text-warning"
                     onClick={onGoToSettings}
                   >
                     Open Settings
@@ -907,7 +908,7 @@ function VideoCapturePanel({
                   <p className="text-sm text-muted-foreground flex items-center gap-2">
                     {playlistVideoCount ?? videoInfo.length} videos
                     {isStreaming && (
-                      <span className="flex items-center gap-1 text-blue-500 font-medium ml-2">
+                      <span className="flex items-center gap-1 text-info font-medium ml-2">
                         <Loader2 className="w-3 h-3 animate-spin" /> Loading more...
                       </span>
                     )}
@@ -1044,8 +1045,9 @@ function VideoCapturePanel({
                     {!(playlistTitle && videoInfo.length > 1) && (
                       <Button
                         size="lg"
+                        variant="hero"
                         className={cn(
-                          'btn-primary w-full sm:w-auto h-11 px-8 shrink-0 transition-all duration-200',
+                          'w-full sm:w-auto h-11 px-8 shrink-0',
                           submittingDownloads.has(idx) && 'scale-95 opacity-80',
                         )}
                         onClick={() =>
@@ -1076,8 +1078,8 @@ function VideoCapturePanel({
             <div className="flex justify-end">
               <Button
                 size="lg"
+                variant="hero"
                 className={cn(
-                  'btn-primary transition-all duration-200',
                   (startingPlaylist || isSubmitting) && 'scale-95 opacity-80',
                 )}
                 disabled={
@@ -1152,11 +1154,11 @@ const DownloadCard = ({
   const isQueued = job.status === 'queued';
 
   const progressColor = isCompleted
-    ? 'bg-green-500'
+    ? 'bg-success'
     : isFailed
-      ? 'bg-red-500'
+      ? 'bg-destructive'
       : isPaused
-        ? 'bg-yellow-500'
+        ? 'bg-warning'
         : 'bg-primary';
 
   const statusLabel: Record<string, string> = {
@@ -1173,12 +1175,12 @@ const DownloadCard = ({
 
   const statusColor: Record<string, string> = {
     queued: 'text-muted-foreground',
-    downloading: 'text-blue-400',
-    merging: 'text-cyan-400',
-    paused: 'text-yellow-400',
-    completed: 'text-green-400',
+    downloading: 'text-info',
+    merging: 'text-accent',
+    paused: 'text-warning',
+    completed: 'text-success',
     failed: 'text-destructive',
-    cancelled: 'text-orange-500',
+    cancelled: 'text-muted-foreground',
   };
 
   const currentStatusColor = isCompleted
@@ -1259,7 +1261,7 @@ const DownloadCard = ({
 
         {/* Completed info */}
         {isCompleted && job.savePath && (
-          <p className="text-xs text-green-600 mb-2 truncate bg-green-500/10 px-2 py-1 rounded border border-green-500/20">
+          <p className="text-xs text-success mb-2 truncate bg-success/10 px-2 py-1 rounded border border-success/20">
             Saved to: {job.savePath}
           </p>
         )}
@@ -2110,14 +2112,14 @@ function SettingsPanel() {
                           Latest: {displayLatest}
                         </span>
                         {binary.needsUpdate && (
-                          <span className="text-xs font-semibold bg-yellow-500/15 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full ml-2">
+                          <span className="text-xs font-semibold bg-warning/15 text-warning border border-warning/30 px-2 py-0.5 rounded-full ml-2">
                             Update available
                           </span>
                         )}
                         {!binary.needsUpdate &&
                           binary.installedVersion !== 'Checking...' &&
                           binary.installedVersion !== 'Not installed' && (
-                            <span className="text-xs font-semibold bg-green-500/15 text-green-500 border border-green-500/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
+                            <span className="text-xs font-semibold bg-success/15 text-success border border-success/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Up to date
                             </span>
                           )}
@@ -2153,7 +2155,7 @@ function SettingsPanel() {
               <p
                 className={cn(
                   'text-sm flex items-center gap-1.5',
-                  updateStatus.includes('failed') ? 'text-destructive' : 'text-green-500',
+                  updateStatus.includes('failed') ? 'text-destructive' : 'text-success',
                 )}
               >
                 {updateStatus.includes('failed') ? (

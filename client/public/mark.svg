@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Internet Download Hub">
+  <defs>
+    <linearGradient id="prism" x1="4%" y1="0%" x2="96%" y2="100%">
+      <stop offset="0%" stop-color="#FF2E9A"/>
+      <stop offset="50%" stop-color="#8B2FE0"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <!-- irregular blob-squircle, deliberately not a circle -->
+  <path fill="url(#prism)" d="M258 10c116 0 180 36 214 102 30 58 34 116 28 178-8 84-48 156-120 192-64 32-152 26-216 4C88 460 30 402 12 320-2 256 6 182 42 122 82 54 154 10 258 10Z"/>
+  <!-- download arrow that doubles as a play mark when rotated -->
+  <path fill="#FFFFFF" d="M256 322c-8 0-15-3-21-9l-70-76c-9-10-8-25 2-33 10-9 25-8 33 2l33 36V150c0-13 10-23 23-23s23 10 23 23v92l33-36c8-10 23-11 33-2 10 8 11 23 2 33l-70 76c-6 6-13 9-21 9Z"/>
+  <rect x="160" y="356" width="192" height="34" rx="17" fill="#FFFFFF"/>
+</svg>

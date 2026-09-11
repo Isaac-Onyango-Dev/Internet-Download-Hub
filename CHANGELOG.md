@@ -7,9 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-11
+
+The app finally looks like its own download page. The site was rebuilt on a
+new "Prism Pop" identity in 1.2.0, but that work landed entirely under
+`docs/`, so every shipped build kept the old blue arrow and the old palette.
+This release brings the identity into the application itself.
+
+### Added
+
+- **Shared brand tokens** (`client/brand.css`) — a single source of truth for the app's visual identity, extracted from the live site rather than approximated by eye. Two layers: raw identity values copied verbatim from the site, and semantic roles derived from them for a dense desktop tool. Read by `client/src/index.css`, by `tailwind.config.ts`, and directly by `client/splash.html`, which opens before the bundle exists and so links the file rather than importing it.
+- **Bundled typefaces** (`client/fonts/`) — Bricolage Grotesque and Inter as latin-subset variable fonts, 125 KB for the pair. The desktop app runs over `file://` and now holds its identity with no network. This replaces a Google Fonts request for 25 font families, of which the app rendered one.
+- **Branded NSIS installer artwork** on the welcome and finish pages, generated from the same tokens, fonts and mark as the app by `npm run generate:installer-art`. The bitmaps are checked into `build/` because regenerating them needs a local Chromium, and the release runner should not have to install a browser to package an installer.
+- A `hero` button variant carrying the site's warm gradient call to action, plus `hover-elevate` and `active-elevate-2` — utilities the Button and Badge primitives had referenced since they were written but which were never defined anywhere, so every button in the app previously had no hover or press feedback at all.
+
+### Changed
+
+- **The app now matches the download site.** Near-black `#0B0B12` canvas, the prism used as brand fill and a single restrained glow, one warm coral reserved for primary actions, Bricolage Grotesque for headings and Inter for body. Radii moved from a 9px-and-under scale to the site's 10/14/18/22, which was most of why the app's panels read a generation older than the page they came from. Focus rings are the site's cyan, and buttons and nav items carry its bouncy press.
+- In-app branding is the site's wordmark — an all-caps kicker over a gradient-filled name whose "o" is a play-button notch — in the desktop sidebar, the web header and the splash window.
+- 77 hardcoded Tailwind palette colours across the pages (`blue-500`, `yellow-400`, `green-500` and so on) now resolve to semantic tokens, so the palette has one place to change instead of eighty. Third-party brand colours on the Support page's share buttons are deliberately left alone.
+- The splash screen was rebuilt on the shared tokens: prism glow on the near-black canvas, the wordmark, and an indeterminate gradient sweep in place of the old blue spinner.
+
 ### Fixed
 
 - **The release pipeline no longer ends in a failed job.** `release.yml`'s `publish-site` job called `deploy-web.yml` to redeploy the site after a release, but it never once ran: the `github-pages` environment only permits deployments from `main`, and a release runs on a tag ref, so the job was rejected at the environment gate before a runner started. It was redundant in any case — the site resolves its version, download link and "What's new" section from the GitHub API in the browser, so a newly published release is visible without a redeploy. The job and `deploy-web.yml`'s `workflow_call` trigger are both removed; pushes to `main` touching `docs/**` still deploy, and `workflow_dispatch` still allows a manual redeploy.
+- **Two broken image paths in the app.** `client/index.html` pointed its favicon at `./icons/icon-128.png` and the sidebar pointed its logo at `./icon.png`. Neither path existed in the build output, so the favicon 404'd and the sidebar logo silently hid itself via its `onError` handler. Both now resolve to the brand mark, which Vite copies to the build root.
+- Undefined CSS variables the component tree referenced: `--button-outline`, `--badge-outline`, `--card-border` and the `sidebar-*` family. Outline buttons had been falling back to `currentColor`.
+- **A malformed Facebook icon path** in `Support.tsx` was missing a coordinate, so the browser rejected the whole `d` attribute, drew the icon wrong and logged an error every time the Support tab opened. It was the only console error the app produced.
+- The sidebar showed a hardcoded `v1.1.3` until the main process reported the real version, which had been wrong since 1.1.4 shipped. It now renders nothing until the answer arrives, since `package.json` is the only source of truth for the version.
+
+### Removed
+
+- The old blue download-arrow branding: `assets/logo-clear.svg`, `assets/logo-bold.svg`, `assets/logo-simple.svg`, `assets/icon-source-simple.svg` and `client/public/favicon.png`. The window, taskbar, tray, installer and executable icons are all regenerated from `client/public/mark.svg`, which is also what the UI renders, so there is one vector and no second copy to drift out of sync.
 
 ## [1.2.0] - 2026-09-11
 
@@ -19,7 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A fallback that goes somewhere useful.** If the in-app path cannot run — a non-Windows build, a development build, missing update metadata, GitHub refusing the request, a failed download — the app says so, names the reason, and opens <https://isaac-onyango-dev.github.io/Internet-Download-Hub/> in the default browser. It never sends anyone to the GitHub releases or tags page. If the browser itself will not open, the address is shown with a **Copy Link** button.
 - **Update metadata is published.** `build.publish` declares the GitHub provider, which is what makes electron-builder emit `latest.yml` and embed `app-update.yml` in the packaged app; `release.yml` uploads `latest.yml` alongside the installer. With `fail_on_unmatched_files` already on, a build that fails to produce it now fails the release instead of silently shipping one that cannot update.
 - **Downloaded engine binaries are checksummed.** `downloadFile()` takes the `digest` GitHub publishes per release asset, verifies it by streaming the file, and deletes anything that fails rather than leaving it on disk for a later step to run. Wired into the yt-dlp update and `performBinaryUpdate()`. Publishers that emit no digest log and pass, so the check starts working the day one appears. The app's own installer is covered separately: `electron-updater` verifies the SHA-512 recorded in `latest.yml` and refuses update metadata that carries no checksum at all.
-
 - **New download site** (`docs/`), rebuilt from scratch on an original "Prism Pop" identity: a near-black canvas with a magenta → violet → cyan gradient used only as a glow and as the brand fill, one warm coral reserved for the primary call to action, Bricolage Grotesque for display type and Inter for body. New wordmark (the "o" of *Download* is a play-button notch), new mark, favicon set, web manifest and Open Graph image, all generated from `docs/brand/mark.svg`.
 - **"What's new" section** on the site, rendered live from GitHub Releases. Release bodies render in full — no fixed-height container, no `line-clamp`, no `overflow: hidden` anywhere in that subtree. The newest release is open by default; older ones sit behind a disclosure that expands to their full height.
 - **`docs/404.html`**, styled to match the rest of the site.
@@ -32,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The download counter now sums `assets[].download_count` across every release, caches the result in `localStorage` for 8 minutes to stay inside GitHub's unauthenticated rate limit, and falls back to a static shields.io badge when the API is unreachable or returns nothing. It never renders `0` or `NaN`.
 - The primary call to action detects the visitor's platform: Windows gets the installer, macOS and Linux get an honest "no build yet" note with the platform picker already open, and mobile is pointed at the hosted web version.
 - Screenshots are now a horizontally scrolling strip at their natural aspect ratios rather than a fixed-height carousel, which is what caused the height mismatch fixed in the previous round.
-- `release.yml` now fails before building if `CHANGELOG.md` has no section for the tag, publishes that section as the release body (v1.1.5 shipped with an empty one), and redeploys the GitHub Pages site as its final step via `deploy-web.yml`'s new `workflow_call` trigger.
+- `release.yml` now fails before building if `CHANGELOG.md` has no section for the tag, and publishes that section as the release body (v1.1.5 shipped with an empty one).
 - README documents the release process and the reasoning behind tag-push over `semantic-release`; its badges were recoloured to the new palette.
 - Generated artifacts are no longer tracked in git: the two Electron bundles and the icon set built by `npm run generate:icons`.
 - Added `.github/workflows/ci.yml` running lint, typecheck, and tests on every push and pull request. Release builds now use `npm ci` instead of `npm install`.
@@ -51,6 +79,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`npm run setup:playwright` installed the wrong package.** `electron/extractor.ts` dynamically imports `playwright-core`, which was never declared as a dependency, so the Playwright fallback extraction engine could never run. `playwright-core` is now an `optionalDependency` (still excluded from the packaged installer) and the script invokes its CLI.
 - **`scripts/download-binaries.ts` leaked scratch files on failure.** A missing file inside a downloaded archive threw before the cleanup step, leaving a `temp_*/` directory and its zip behind. Extraction is now wrapped in `try`/`finally`.
 
+### Security
+
+- **PowerShell commands no longer interpolate runtime values.** Three calls pasted paths straight into a command string that a shell then parsed — the archive paths in `performBinaryUpdate()` and the FFmpeg extractor come from release asset names, and the drive letter in `getFreeSpace()` comes from the user's chosen save folder. All three now use `execFile` with an argument array, passing values through the environment and reading them back as `$env:` lookups, which PowerShell treats as data and never re-parses as source. `getBinaryVersion()` drops its shell for the same reason.
+- **External links are matched by hostname, not by string prefix.** The old check accepted any URL starting with an allowed prefix, so `https://isaac-onyango-dev.github.io.evil.com/` passed — it does start with the allowed prefix. Matching is now exact-hostname over HTTPS, and `github.com` keeps its path restriction.
+
 ### Removed
 
 - Unused code: 25 unreferenced shadcn/ui components, plus `download-item.tsx`, `not-found.tsx`, `web-api.ts`, `api-config.ts`, `formatting.ts`, `use-ws-progress.ts`, `use-settings.ts`, `types/index.ts`, and `electron/utils/logger.ts` — none had an importer.
@@ -60,10 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tsconfig.server.json`: unreferenced; `server/**/*` is already covered by the root `tsconfig.json`.
 - 25 unused npm packages, including `framer-motion`, `ws`, `recharts`, `date-fns`, `cmdk`, `vaul`, and 12 unused Radix primitives. (`electron-updater` was dropped in the same sweep and brought back later in this release, now that the app actually uses it.)
 
-### Security
-
-- **PowerShell commands no longer interpolate runtime values.** Three calls pasted paths straight into a command string that a shell then parsed — the archive paths in `performBinaryUpdate()` and the FFmpeg extractor come from release asset names, and the drive letter in `getFreeSpace()` comes from the user's chosen save folder. All three now use `execFile` with an argument array, passing values through the environment and reading them back as `$env:` lookups, which PowerShell treats as data and never re-parses as source. `getBinaryVersion()` drops its shell for the same reason.
-- **External links are matched by hostname, not by string prefix.** The old check accepted any URL starting with an allowed prefix, so `https://isaac-onyango-dev.github.io.evil.com/` passed — it does start with the allowed prefix. Matching is now exact-hostname over HTTPS, and `github.com` keeps its path restriction.
 
 ## [1.1.5] - 2026-09-10
 

@@ -1268,6 +1268,7 @@ function createApplicationMenu() {
               title: 'About Internet Download Hub',
               message: 'Internet Download Hub',
               detail:
+                `Grab any video, anywhere.\n\n` +
                 `Version: ${version}\n\n` +
                 `A free, open-source desktop video downloader for Windows.\n` +
                 `Supports 1000+ sites via yt-dlp, streamlink, gallery-dl & more.\n\n` +
@@ -1277,6 +1278,7 @@ function createApplicationMenu() {
                 `streamlink:   ${streamlinkVersion}\n\n` +
                 `© ${new Date().getFullYear()} Isaac Onyango\n` +
                 `Licensed under MIT\n` +
+                `https://isaac-onyango-dev.github.io/Internet-Download-Hub/\n` +
                 `https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub`,
               buttons: ['OK', 'Copy Info'],
               defaultId: 0,

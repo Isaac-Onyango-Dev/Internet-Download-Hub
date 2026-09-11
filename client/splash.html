@@ -1,97 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Loading Internet Download Hub</title>
+
+    <!--
+      This window opens before the Vite bundle exists, so it cannot import
+      from the app's CSS graph. It links the shared token file directly
+      instead, which electron-builder ships alongside this file (see the
+      `files` list in package.json). Every colour, radius and easing below
+      therefore comes from client/brand.css, same as the rest of the app.
+    -->
+    <link rel="stylesheet" href="brand.css" />
+
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            color: white;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background: var(--brand-ink);
+        color: var(--brand-text);
+        font-family: var(--brand-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* The prism reads as a glow against the near-black canvas, never as a
+         full-bleed wash. Same rule the site follows. */
+      .glow {
+        position: fixed;
+        border-radius: 58% 42% 37% 63% / 46% 55% 45% 54%;
+        filter: blur(70px);
+        pointer-events: none;
+      }
+      .glow-a {
+        width: 260px;
+        height: 220px;
+        background: var(--brand-magenta);
+        opacity: 0.26;
+        top: -70px;
+        left: -60px;
+      }
+      .glow-b {
+        width: 240px;
+        height: 260px;
+        background: var(--brand-cyan);
+        opacity: 0.18;
+        bottom: -90px;
+        right: -60px;
+      }
+
+      .stage {
+        position: relative;
+        text-align: center;
+        animation: rise 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+
+      .mark {
+        width: 76px;
+        height: 76px;
+        margin: 0 auto 22px;
+        filter: drop-shadow(0 12px 28px rgba(139, 47, 224, 0.55));
+        animation: bob 3.2s ease-in-out infinite;
+      }
+
+      .kicker {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--brand-text-faint);
+        margin-bottom: 5px;
+      }
+
+      .name {
+        font-family: var(--brand-display);
+        font-weight: 800;
+        font-size: 26px;
+        letter-spacing: -0.035em;
+        line-height: 1;
+        background: var(--brand-prism);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      /* The wordmark's custom letterform: the "o" is a play-button notch. */
+      .o {
+        display: inline-block;
+        width: 0.64em;
+        height: 0.64em;
+        border-radius: 50%;
+        background: var(--brand-prism);
+        position: relative;
+        vertical-align: -0.03em;
+        margin: 0 0.035em;
+      }
+      .o::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 0;
+        height: 0;
+        border-left: 0.21em solid var(--brand-ink);
+        border-top: 0.125em solid transparent;
+        border-bottom: 0.125em solid transparent;
+        transform: translateX(0.04em);
+      }
+
+      .tagline {
+        margin: 14px 0 26px;
+        font-size: 13px;
+        color: var(--brand-text-dim);
+      }
+
+      /* An indeterminate prism sweep rather than a spinner, so the loading
+         state carries the palette too. */
+      .track {
+        width: 190px;
+        height: 4px;
+        margin: 0 auto;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.07);
+        overflow: hidden;
+      }
+      .track i {
+        display: block;
+        width: 42%;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--brand-prism);
+        animation: sweep 1.25s var(--brand-ease) infinite;
+      }
+
+      .status {
+        margin-top: 14px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: var(--brand-text-faint);
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
         }
-        
-        .container {
-            text-align: center;
-            animation: fadeIn 0.5s ease-out;
+      }
+      @keyframes bob {
+        50% {
+          transform: translateY(-6px);
         }
-        
-        .logo {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(45deg, #3b82f6, #8b5cf6);
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 24px;
-            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3);
+      }
+      @keyframes sweep {
+        from {
+          transform: translateX(-110%);
         }
-        
-        .logo-icon {
-            font-size: 36px;
-            font-weight: bold;
+        to {
+          transform: translateX(345%);
         }
-        
-        .title {
-            font-size: 24px;
-            font-weight: 600;
-            margin: 0 0 8px;
-            background: linear-gradient(45deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .stage,
+        .mark,
+        .track i {
+          animation: none;
         }
-        
-        .subtitle {
-            font-size: 14px;
-            color: #94a3b8;
-            margin: 0 0 32px;
+        .track i {
+          width: 100%;
         }
-        
-        .spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid rgba(59, 130, 246, 0.2);
-            border-top: 3px solid #3b82f6;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        
-        .loading-text {
-            font-size: 12px;
-            color: #64748b;
-            margin-top: 16px;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+      }
     </style>
-</head>
-<body>
-    <div class="container">
-        <div class="logo">
-            <div class="logo-icon">⬇</div>
-        </div>
-        <h1 class="title">Internet Download Hub</h1>
-        <p class="subtitle">Loading your download manager...</p>
-        <div class="spinner"></div>
-        <p class="loading-text">Initializing application</p>
+  </head>
+  <body>
+    <div class="glow glow-a"></div>
+    <div class="glow glow-b"></div>
+
+    <div class="stage">
+      <img class="mark" src="public/mark.svg" alt="" />
+      <div class="kicker">Internet</div>
+      <div class="name">D<span class="o"></span>wnload Hub</div>
+      <p class="tagline">Grab any video, anywhere.</p>
+      <div class="track"><i></i></div>
+      <p class="status">Starting up</p>
     </div>
-</body>
+  </body>
 </html>

@@ -60,25 +60,25 @@ export default function SupportedSites() {
             <h3 className="text-sm font-medium mb-3">Download Engines</h3>
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <div className="w-3 h-3 rounded-full bg-info" />
                 <span className="text-sm">
                   <strong>yt-dlp</strong> - 1000+ video sites
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <div className="w-3 h-3 rounded-full bg-success" />
                 <span className="text-sm">
                   <strong>streamlink</strong> - Live streams
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-purple-500" />
+                <div className="w-3 h-3 rounded-full bg-accent" />
                 <span className="text-sm">
                   <strong>gallery-dl</strong> - Image galleries
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-orange-500" />
+                <div className="w-3 h-3 rounded-full bg-primary" />
                 <span className="text-sm">
                   <strong>N_m3u8DL-RE</strong> - HLS/M3U8 streams
                 </span>
@@ -155,10 +155,10 @@ export default function SupportedSites() {
                         <div className="flex gap-1.5 shrink-0 flex-wrap">
                           {site.engines.map((engine) => {
                             const engineColors: Record<string, string> = {
-                              'yt-dlp': 'bg-blue-500/15 text-blue-500 border-blue-500/30',
-                              'streamlink': 'bg-green-500/15 text-green-500 border-green-500/30',
-                              'gallery-dl': 'bg-purple-500/15 text-purple-500 border-purple-500/30',
-                              'N_m3u8DL-RE': 'bg-orange-500/15 text-orange-500 border-orange-500/30',
+                              'yt-dlp': 'bg-info/15 text-info border-info/30',
+                              'streamlink': 'bg-success/15 text-success border-success/30',
+                              'gallery-dl': 'bg-accent/15 text-accent border-accent/30',
+                              'N_m3u8DL-RE': 'bg-primary/15 text-primary border-primary/30',
                             };
                             return (
                               <span

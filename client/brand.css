@@ -1,0 +1,169 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   INTERNET DOWNLOAD HUB — BRAND TOKENS
+   ──────────────────────────────────────────────────────────────────────────
+   Single source of truth for the app's visual identity.
+
+   Every value below is extracted from the live download site at
+   https://isaac-onyango-dev.github.io/Internet-Download-Hub/ (docs/style.css
+   in this repo). The site is the canonical brand reference; when the two
+   disagree, the site wins and this file gets corrected, not the other way
+   around.
+
+   Who reads this file:
+     - client/src/index.css        (imported first, so Tailwind sees the vars)
+     - client/splash.html          (<link>ed directly — the splash window opens
+                                    before the bundle exists, so it cannot
+                                    import from the app's CSS graph)
+     - tailwind.config.ts          (maps semantic utility names onto --app-*)
+
+   Two layers live here:
+     1. --brand-*  raw identity values, copied verbatim from the site.
+     2. --app-*    semantic roles for a dense desktop tool, derived from (1).
+   Components should reach for layer 2 (usually via a Tailwind utility) and
+   only touch layer 1 for gradients, which have no utility equivalent.
+
+   Colour format note: semantic tokens are space-separated HSL channels rather
+   than hex so Tailwind's alpha modifiers keep working (`bg-primary/10`,
+   `border-border/50`). Hex equivalents sit in a comment beside each one.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 0. Typefaces ────────────────────────────────────────────────────────
+   Bundled rather than pulled from Google Fonts. The desktop app loads over
+   file:// and has to hold its identity with no network, and the splash
+   window paints before anything could have been fetched anyway. Both are
+   latin-subset variable fonts, 125 KB for the pair. */
+
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('./fonts/bricolage-grotesque-var.woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('./fonts/inter-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  /* ── 1. Raw brand identity ─────────────────────────────────────────────
+     Verbatim from the site. Do not round, adjust or "improve" these. */
+
+  /* canvas */
+  --brand-ink: #0b0b12;
+  --brand-ink-raise: #12121c;
+  --brand-ink-sink: #08080e;
+
+  /* the prism: magenta → violet → cyan */
+  --brand-magenta: #ff2e9a;
+  --brand-violet: #8b2fe0;
+  --brand-cyan: #22d3ee;
+  --brand-prism: linear-gradient(112deg, #ff2e9a 0%, #8b2fe0 52%, #22d3ee 100%);
+  --brand-prism-soft: linear-gradient(112deg, #ff2e9a33 0%, #8b2fe033 52%, #22d3ee33 100%);
+
+  /* the one warm accent, reserved for primary actions so they pop
+     against the cool gradient — same rule the site follows */
+  --brand-hot: #ff7a2f;
+  --brand-hot-lift: #ffb13d;
+  --brand-hot-deep: #f2542d;
+  --brand-hot-grad: linear-gradient(135deg, #ffb13d 0%, #ff7a2f 58%, #f2542d 100%);
+  --brand-on-hot: #2a0f00;
+
+  /* text */
+  --brand-text: #f4f2ff;
+  --brand-text-dim: #aba7c4;
+  --brand-text-faint: #726e8c;
+
+  /* hairlines and translucent panes, as authored on the site */
+  --brand-line: rgba(255, 255, 255, 0.085);
+  --brand-line-lift: rgba(255, 255, 255, 0.17);
+  --brand-pane: rgba(255, 255, 255, 0.034);
+  --brand-pane-lift: rgba(255, 255, 255, 0.06);
+
+  /* the live-status pip green, the site's only non-prism accent */
+  --brand-pip: #4ade80;
+
+  /* type */
+  --brand-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --brand-body: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* motion — the site's bouncy press/hover is the signature feel */
+  --brand-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --brand-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* elevation */
+  --brand-shadow-lift: 0 26px 60px -22px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.17);
+  --brand-shadow-hot: 0 14px 30px -14px rgba(255, 122, 47, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --brand-shadow-hot-lift: 0 26px 48px -18px rgba(255, 122, 47, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+
+  /* ── 2. Semantic roles for the app ────────────────────────────────────
+     The site floats translucent panes over a drifting blob field. A dense
+     desktop tool has no blob field behind its panels, so each translucent
+     pane is flattened here against #0B0B12 to the exact colour it resolves
+     to on the site. Same result on screen, no stacking-order surprises. */
+
+  --app-background: 240 24.1% 5.7%; /* #0B0B12  brand-ink */
+  --app-foreground: 249.2 100% 97.5%; /* #F4F2FF  brand-text */
+
+  --app-card: 240 21.7% 9%; /* #12121C  brand-ink-raise */
+  --app-card-foreground: 249.2 100% 97.5%; /* #F4F2FF */
+
+  --app-popover: 240 21.7% 9%; /* #12121C */
+  --app-popover-foreground: 249.2 100% 97.5%; /* #F4F2FF */
+
+  --app-surface: 240 15.6% 8.8%; /* #13131A  brand-pane over ink */
+  --app-surface-lift: 240 10.3% 11.4%; /* #1A1A20  brand-pane-lift over ink */
+
+  --app-muted: 240 15.6% 8.8%; /* #13131A */
+  --app-muted-foreground: 248.3 19.7% 71.2%; /* #ABA7C4  brand-text-dim */
+  --app-faint: 248 12% 49%; /* #726E8C  brand-text-faint */
+
+  --app-border: 240 8.6% 13.7%; /* #202026  brand-line over ink */
+  --app-border-lift: 240 5.5% 21.6%; /* #34343A  brand-line-lift over ink */
+  --app-input: 240 15.6% 8.8%; /* #13131A */
+
+  /* Primary is the warm accent, exactly as on the site: it is the colour of
+     "do the thing" (Get Video Info, Download) and nothing else. */
+  --app-primary: 21.6 100% 59.2%; /* #FF7A2F  brand-hot */
+  --app-primary-foreground: 21.4 100% 8.2%; /* #2A0F00  brand-on-hot */
+
+  /* Brand/selected state uses the prism's middle stop. */
+  --app-accent: 271.2 74.1% 53.1%; /* #8B2FE0  brand-violet */
+  --app-accent-foreground: 249.2 100% 97.5%; /* #F4F2FF */
+
+  --app-secondary: 240 10.3% 11.4%; /* #1A1A20 */
+  --app-secondary-foreground: 249.2 100% 97.5%; /* #F4F2FF */
+
+  /* Focus rings are cyan, matching the site's :focus-visible. */
+  --app-ring: 187.9 85.7% 53.3%; /* #22D3EE  brand-cyan */
+
+  /* Status. Green is the site's pip; amber is the warm accent's light stop;
+     info is the prism's cyan stop.
+
+     --app-destructive is the ONE colour in this file with no counterpart on
+     the site: the site has no danger state, because it has no destructive
+     actions, while the app has cancel and delete. #E5484D was picked to sit
+     clearly apart from both --brand-hot (#FF7A2F, which means "go") and
+     --brand-magenta (#FF2E9A). If a danger colour is ever added to the site,
+     replace this with it rather than keeping the two in parallel. */
+  --app-success: 141.9 69.2% 58%; /* #4ADE80  brand-pip */
+  --app-warning: 35.9 100% 62%; /* #FFB13D  brand-hot-lift */
+  --app-info: 187.9 85.7% 53.3%; /* #22D3EE  brand-cyan */
+  --app-destructive: 358.1 75.1% 59%; /* #E5484D */
+  --app-destructive-foreground: 0 0% 100%;
+
+  /* ── 3. Shape and rhythm ──────────────────────────────────────────────
+     Radii read off the site: chips 999px, icon tiles 14px, buttons 16px,
+     disclosure panels 18px, cards 22px. The app's old scale topped out at
+     9px, which is why its panels read a generation older than the site. */
+  --app-radius-sm: 10px;
+  --app-radius-md: 14px;
+  --app-radius-lg: 18px;
+  --app-radius-xl: 22px;
+  --app-radius-pill: 999px;
+}

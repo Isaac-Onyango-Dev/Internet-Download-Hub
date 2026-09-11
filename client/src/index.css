@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Brand tokens first: Tailwind and every rule below read from these.
+   See client/brand.css for where the values come from. */
+@import '../brand.css';
 
 @tailwind base;
 @tailwind components;
@@ -13,44 +15,71 @@ body,
 }
 
 @layer base {
+  /* ── Semantic aliases ───────────────────────────────────────────────────
+     The component tree addresses colours by these names (and by the Tailwind
+     utilities built on them). Each one is a pointer into brand.css, so the
+     palette has exactly one place to change. */
   :root {
-    --font-sans: 'Inter', sans-serif;
+    --font-sans: var(--brand-body);
+    --font-display: var(--brand-display);
+    --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-    /* Base Colors - Clean Dark Theme */
-    --background: 220 15% 10%;
-    --foreground: 0 0% 98%;
+    --background: var(--app-background);
+    --foreground: var(--app-foreground);
 
-    /* Bright Primary Accent (Blue) for clear calls to action */
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    --card: var(--app-card);
+    --card-foreground: var(--app-card-foreground);
+    --card-border: var(--app-border);
 
-    /* Subtle Secondary text/elements */
-    --secondary: 220 15% 16%;
-    --secondary-foreground: 0 0% 98%;
+    --popover: var(--app-popover);
+    --popover-foreground: var(--app-popover-foreground);
+    --popover-border: var(--app-border);
 
-    /* Card/Surface Colors - Solid and clear */
-    --card: 220 15% 13%;
-    --card-foreground: 0 0% 98%;
+    --primary: var(--app-primary);
+    --primary-foreground: var(--app-primary-foreground);
 
-    --popover: 220 15% 13%;
-    --popover-foreground: 0 0% 98%;
+    --secondary: var(--app-secondary);
+    --secondary-foreground: var(--app-secondary-foreground);
 
-    /* Muted / Neutral Elements */
-    --muted: 220 15% 16%;
-    --muted-foreground: 220 10% 65%;
+    --muted: var(--app-muted);
+    --muted-foreground: var(--app-muted-foreground);
 
-    --accent: 220 15% 20%;
-    --accent-foreground: 0 0% 98%;
+    --accent: var(--app-accent);
+    --accent-foreground: var(--app-accent-foreground);
 
-    /* Utilities - Standard Red for Danger/Cancel */
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: var(--app-destructive);
+    --destructive-foreground: var(--app-destructive-foreground);
 
-    --border: 220 15% 20%;
-    --input: 220 15% 16%;
-    --ring: 217 91% 60%;
+    --success: var(--app-success);
+    --warning: var(--app-warning);
+    --info: var(--app-info);
 
-    --radius: 0.75rem;
+    --border: var(--app-border);
+    --input: var(--app-input);
+    --ring: var(--app-ring);
+
+    /* Sidebar surfaces. The shell used to be a flat card colour; the site's
+       chrome is a touch deeper than its content, so the sidebar sinks. */
+    --sidebar: var(--app-background);
+    --sidebar-foreground: var(--app-foreground);
+    --sidebar-border: var(--app-border);
+    --sidebar-primary: var(--app-primary);
+    --sidebar-primary-foreground: var(--app-primary-foreground);
+    --sidebar-accent: var(--app-accent);
+    --sidebar-accent-foreground: var(--app-accent-foreground);
+    --sidebar-ring: var(--app-ring);
+
+    /* Outline colours for the button and badge `outline` variants. Both were
+       referenced by those components and never defined, so outline buttons
+       fell back to currentColor. */
+    --button-outline: hsl(var(--app-border-lift));
+    --badge-outline: hsl(var(--app-border-lift));
+
+    --radius: var(--app-radius-lg);
+  }
+
+  * {
+    border-color: hsl(var(--border));
   }
 
   body {
@@ -58,36 +87,178 @@ body,
     font-family: var(--font-sans);
   }
 
+  /* Display face for headings, matching the site. */
   h1,
   h2,
   h3,
   h4,
   h5,
   h6 {
-    @apply font-bold tracking-tight text-white;
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.04;
+    @apply text-foreground;
+  }
+
+  /* The site's focus ring is cyan and offset, not a tight blue halo. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--brand-magenta);
+    color: #fff;
+  }
+}
+
+@layer components {
+  /* ── Brand lockup ─────────────────────────────────────────────────────
+     The wordmark from the site: an all-caps kicker over a gradient-filled
+     name whose "o" is a play-button notch. */
+  .wordmark {
+    display: grid;
+    line-height: 1;
+  }
+
+  .wordmark-kicker {
+    font-family: var(--font-sans);
+    font-size: 0.5rem;
+    font-weight: 700;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--brand-text-faint);
+    margin-bottom: 0.17em;
+  }
+
+  .wordmark-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: -0.035em;
+    white-space: nowrap;
+    background: var(--brand-prism);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* The custom letterform. Sized in em so it tracks the font size. */
+  .wordmark-o {
+    display: inline-block;
+    width: 0.64em;
+    height: 0.64em;
+    border-radius: 50%;
+    background: var(--brand-prism);
+    position: relative;
+    vertical-align: -0.03em;
+    margin: 0 0.035em;
+  }
+
+  .wordmark-o::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0;
+    height: 0;
+    border-left: 0.21em solid var(--brand-ink);
+    border-top: 0.125em solid transparent;
+    border-bottom: 0.125em solid transparent;
+    transform: translateX(0.04em);
   }
 }
 
 @layer utilities {
-  /* Minimal glass effect for sidebars/headers, without heavy glow */
-  .glass-panel {
-    @apply bg-card/90 backdrop-blur-md border border-white/5 shadow-sm;
+  /* ── Signature interactions ───────────────────────────────────────────
+     `hover-elevate` and `active-elevate-2` are applied by the Button and
+     Badge primitives but were never defined anywhere in the project, so
+     every button in the app had no hover or press feedback at all. They now
+     carry the site's bouncy lift, scaled down for a dense desktop tool
+     where a 4px jump on every small control would be too much. */
+  .hover-elevate {
+    transition:
+      transform 0.24s var(--brand-bounce),
+      box-shadow 0.24s var(--brand-ease),
+      background-color 0.2s var(--brand-ease),
+      border-color 0.2s var(--brand-ease),
+      color 0.2s var(--brand-ease);
   }
 
-  /* Clear button styling */
-  .btn-primary {
-    @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm font-medium transition-colors;
+  .hover-elevate:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.1);
   }
 
-  /* Scrollbar Styling */
+  .active-elevate-2:active:not(:disabled) {
+    transform: translateY(0) scale(0.975);
+    filter: brightness(0.96);
+  }
+
+  /* Gradient text. Gradients have no Tailwind utility equivalent, so this
+     is the sanctioned way to reach layer 1 of brand.css from a component. */
+  .prism-text {
+    background: var(--brand-prism);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* A single, very restrained prism wash behind the main content area. The
+     site reads as near-black with the gradient as a glow; this keeps that
+     relationship without costing contrast in a dense tool. */
+  .brand-ambient {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .brand-ambient::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    top: -12%;
+    right: -6%;
+    width: 48%;
+    aspect-ratio: 1;
+    border-radius: 58% 42% 37% 63% / 46% 55% 45% 54%;
+    background: var(--brand-violet);
+    opacity: 0.07;
+    filter: blur(90px);
+    pointer-events: none;
+  }
+
+  /* Scrollbars, matched to the site's hairline treatment. */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+    background: hsl(var(--app-border-lift));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--app-muted-foreground) / 0.5);
+    background-clip: content-box;
+  }
+}
+
+/* Respect the OS setting. The bounce is decoration, never information. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .hover-elevate:hover:not(:disabled) {
+    transform: none;
   }
 }

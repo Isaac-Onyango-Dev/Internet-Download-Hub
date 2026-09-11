@@ -8,8 +8,18 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SOURCE_IMAGE = path.join(__dirname, '../assets/logo-clear.svg');
+/**
+ * The brand mark lives in exactly one place. client/public/ is inside the
+ * Vite root, so the same file is what the in-app UI renders at runtime and
+ * what the window, tray, installer and executable icons are cut from. There
+ * is deliberately no second copy to fall out of sync.
+ */
+const SOURCE_IMAGE = path.join(__dirname, '../client/public/mark.svg');
 const OUTPUT_DIR = path.join(__dirname, '../assets/icons');
+
+// The mark is authored on a 512 viewBox. Rasterising it at a high density
+// before downscaling keeps the 16px tray icon from turning to mush.
+const SVG_DENSITY = 600;
 
 const sizes = [16, 32, 48, 64, 96, 128, 256, 512, 1024];
 
@@ -19,7 +29,7 @@ async function generateIcons() {
   }
 
   for (const size of sizes) {
-    await sharp(SOURCE_IMAGE)
+    await sharp(SOURCE_IMAGE, { density: SVG_DENSITY })
       .resize(size, size, {
         fit: 'contain',
         background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -55,7 +65,7 @@ async function generateWindowsIco() {
     const icoSizes = [16, 32, 48, 64, 128, 256];
     const pngBuffers = await Promise.all(
       icoSizes.map((size) =>
-        sharp(SOURCE_IMAGE)
+        sharp(SOURCE_IMAGE, { density: SVG_DENSITY })
           .resize(size, size, {
             fit: 'contain',
             background: { r: 0, g: 0, b: 0, alpha: 0 },

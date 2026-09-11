@@ -182,7 +182,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
         {/* ── Header ── */}
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
-            <List className="h-5 w-5 text-blue-400 shrink-0" />
+            <List className="h-5 w-5 text-info shrink-0" />
             Playlist Detected
           </DialogTitle>
           <DialogDescription asChild>
@@ -190,7 +190,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
               <p className="font-medium text-white/80 truncate max-w-lg">{title}</p>
               <p className="flex items-center gap-2">
                 {streaming ? (
-                  <span className="flex items-center gap-1 text-blue-400">
+                  <span className="flex items-center gap-1 text-info">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Loading videos... ({loadedCount} found{total > 0 ? ` of ~${total}` : ''})
                   </span>
@@ -206,9 +206,9 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
 
         {/* ── Large-playlist warning ── */}
         {total >= 500 && (
-          <Alert className="border-yellow-500/30 bg-yellow-500/10">
-            <AlertTriangle className="h-4 w-4 text-yellow-400" />
-            <AlertDescription className="text-yellow-300 text-sm">
+          <Alert className="border-warning/30 bg-warning/10">
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            <AlertDescription className="text-warning text-sm">
               This playlist has {total}+ videos. Loading the full list may take a moment.
             </AlertDescription>
           </Alert>
@@ -277,7 +277,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                 </div>
               )}
               {mode === 'range' && rangeError && (
-                <p className="mt-2 pl-7 text-red-400 text-xs">{rangeError}</p>
+                <p className="mt-2 pl-7 text-destructive text-xs">{rangeError}</p>
               )}
             </div>
 
@@ -343,7 +343,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
 
                   {/* No selection warning */}
                   {selected.size === 0 && (
-                    <p className="text-xs text-yellow-400 pl-2">
+                    <p className="text-xs text-warning pl-2">
                       Select at least one video to continue
                     </p>
                   )}
@@ -364,7 +364,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
             Cancel
           </Button>
           <Button
-            className="bg-blue-600 hover:bg-blue-500 text-white"
+            className="bg-info hover:bg-info text-white"
             onClick={handleConfirm}
             disabled={!canConfirm}
             aria-label="Add selected videos to download queue"

@@ -76,7 +76,7 @@ const SHARE_PLATFORMS: SharePlatform[] = [
     name: 'Facebook',
     color: '#1877F2',
     textColor: '#ffffff',
-    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
+    icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
     getUrl: (url) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
   },
   {
@@ -391,7 +391,7 @@ export default function Support() {
                 variant="outline"
                 className="gap-2 h-11"
               >
-                {copiedId === 'link' ? <Check className="h-4 w-4 text-green-500" /> : <Link2 className="h-4 w-4" />}
+                {copiedId === 'link' ? <Check className="h-4 w-4 text-success" /> : <Link2 className="h-4 w-4" />}
                 {copiedId === 'link' ? 'Link Copied!' : 'Copy App Link'}
               </Button>
               <Button
@@ -399,7 +399,7 @@ export default function Support() {
                 variant="outline"
                 className="gap-2 h-11"
               >
-                {copiedId === 'message' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copiedId === 'message' ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
                 {copiedId === 'message' ? 'Message Copied!' : 'Copy Share Message'}
               </Button>
             </div>
@@ -410,7 +410,7 @@ export default function Support() {
             <CardContent className="p-4 flex items-center justify-between gap-4">
               <div>
                 <p className="text-foreground font-semibold text-sm flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
+                  <Star className="h-4 w-4 text-warning" />
                   Star on GitHub
                 </p>
                 <p className="text-muted-foreground text-xs mt-1">
@@ -433,15 +433,15 @@ export default function Support() {
 
         {/* ── DONATION TAB ──────────────────────────────────────── */}
         <TabsContent value="support" className="space-y-6 mt-6">
-          <Card className="border-amber-500/30 bg-amber-500/10">
+          <Card className="border-warning/30 bg-warning/10">
             <CardContent className="pt-5">
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg bg-amber-500/20 shrink-0">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <div className="p-2 rounded-lg bg-warning/20 shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-warning" />
                 </div>
                 <div>
-                  <p className="text-amber-200 font-semibold text-sm">Donation Support Coming Soon</p>
-                  <p className="text-amber-300/90 text-xs mt-1 leading-relaxed">
+                  <p className="text-warning font-semibold text-sm">Donation Support Coming Soon</p>
+                  <p className="text-warning/90 text-xs mt-1 leading-relaxed">
                     Payment integrations are currently under development. All options below will be
                     fully active in a future update. In the meantime, sharing the app is the best way
                     to help.
@@ -509,8 +509,8 @@ export default function Support() {
           <div
             className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in-95 duration-200"
           >
-            <div className="p-3 rounded-xl bg-amber-500/20 w-fit mx-auto mb-4">
-              <AlertTriangle className="h-8 w-8 text-amber-500" />
+            <div className="p-3 rounded-xl bg-warning/20 w-fit mx-auto mb-4">
+              <AlertTriangle className="h-8 w-8 text-warning" />
             </div>
             <h3 className="text-foreground font-bold text-lg mb-2">
               {selectedPayment.name} — Coming Soon

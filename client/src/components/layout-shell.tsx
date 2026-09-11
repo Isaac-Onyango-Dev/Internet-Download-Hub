@@ -7,9 +7,47 @@ interface LayoutShellProps {
   children: ReactNode;
 }
 
+/**
+ * The brand lockup, matching the wordmark on the download site: an all-caps
+ * kicker above a gradient-filled name whose "o" is a play-button notch. The
+ * decorative spelling is hidden from assistive tech and the real name is
+ * exposed alongside it.
+ */
+function Wordmark({ version }: { version: string }) {
+  return (
+    <div className="flex items-center gap-2.5 px-2 pt-1">
+      <img
+        src="./mark.svg"
+        alt=""
+        aria-hidden="true"
+        className="h-9 w-9 shrink-0 drop-shadow-[0_6px_16px_rgba(139,47,224,0.45)]"
+      />
+      <div className="min-w-0">
+        <span className="wordmark" aria-hidden="true">
+          <span className="wordmark-kicker">Internet</span>
+          <span className="wordmark-name">
+            D<i className="wordmark-o" />
+            wnload Hub
+          </span>
+        </span>
+        <span className="sr-only">Internet Download Hub</span>
+        {/* Rendered only once the main process has reported the real version.
+            A hardcoded placeholder here went stale the moment it was written. */}
+        {version && (
+          <span className="mt-1 block text-[10px] font-medium tracking-wide text-muted-foreground/70">
+            {version}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function LayoutShell({ children }: LayoutShellProps) {
   const [location, navigate] = useHashLocation();
-  const [appVersion, setAppVersion] = useState('v1.1.3');
+  // Empty until the main process answers. package.json is the only source of
+  // truth for the version, so nothing here should guess at it.
+  const [appVersion, setAppVersion] = useState('');
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -31,27 +69,13 @@ export function LayoutShell({ children }: LayoutShellProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground font-sans">
       {/* Sidebar — fixed, never moves */}
-      <aside className="w-64 min-w-64 h-screen flex-shrink-0 overflow-hidden sticky top-0 border-r border-border bg-card p-4 flex flex-col gap-6 z-50">
-        <div className="flex items-center gap-3 px-2 mt-2">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground shadow-sm overflow-hidden">
-            <img
-              src="./icon.png"
-              alt="Internet Download Hub"
-              className="w-6 h-6 object-contain"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          </div>
-          <div className="min-w-0">
-            <span className="font-bold text-base tracking-tight text-foreground block leading-none truncate">
-              Internet Download Hub
-            </span>
-            <span className="text-xs text-muted-foreground/70">{appVersion}</span>
-          </div>
-        </div>
+      <aside
+        className="z-50 flex h-screen w-64 min-w-64 shrink-0 flex-col gap-6 overflow-hidden
+                   sticky top-0 border-r border-border bg-sidebar p-4"
+      >
+        <Wordmark version={appVersion} />
 
-        <nav className="flex-1 space-y-1 mt-4">
+        <nav className="mt-2 flex-1 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             // Use exact matching for routes with common prefixes
@@ -65,16 +89,25 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 key={item.href}
                 onClick={() => navigate(item.href)}
                 className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 font-medium cursor-pointer text-left group relative',
+                  'group relative flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5',
+                  'text-left text-sm font-medium',
+                  'transition-[color,background-color,transform] duration-200 ease-bounce',
                   isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    ? 'bg-accent/15 text-foreground'
+                    : 'text-muted-foreground hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
                 )}
               >
+                {/* Active rail carries the prism, the way the site marks its
+                    current release and section headings. */}
                 {isActive && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-r-full" />
+                  <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-prism" />
                 )}
-                <Icon className={cn('w-5 h-5 transition-transform duration-200 group-hover:scale-110', isActive ? 'text-primary' : '')} />
+                <Icon
+                  className={cn(
+                    'h-[18px] w-[18px] transition-transform duration-200 ease-bounce group-hover:scale-110',
+                    isActive && 'text-accent',
+                  )}
+                />
                 <span>{item.label}</span>
               </button>
             );
@@ -82,24 +115,25 @@ export function LayoutShell({ children }: LayoutShellProps) {
         </nav>
 
         {/* Sidebar footer */}
-        <div className="pt-4 border-t border-border/50 space-y-2">
+        <div className="space-y-2 border-t border-border/60 pt-4">
           <button
             onClick={() => window.location.href = 'https://internet-download-hub.onrender.com/'}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm
-                       text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-200"
+            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm
+                       text-muted-foreground transition-[color,background-color,transform] duration-200
+                       ease-bounce hover:translate-x-0.5 hover:bg-muted hover:text-foreground"
           >
-            <ArrowRightLeft className="w-4 h-4" />
+            <ArrowRightLeft className="h-4 w-4" />
             <span className="truncate">Try Web Version</span>
           </button>
-          <p className="text-[10px] text-muted-foreground/50 px-3 leading-tight">
+          <p className="px-3 text-[10px] leading-tight text-muted-foreground/50">
             © {new Date().getFullYear()} Isaac Onyango
           </p>
         </div>
       </aside>
 
       {/* Only this scrolls */}
-      <main className="flex-1 h-screen overflow-y-auto overflow-x-hidden">
-        <div className="w-full h-full p-4 md:p-8 max-w-5xl mx-auto">{children}</div>
+      <main className="brand-ambient h-screen flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="mx-auto h-full w-full max-w-5xl p-4 md:p-8">{children}</div>
       </main>
     </div>
   );

@@ -208,15 +208,24 @@ export default function DashboardWeb() {
     <div className="min-h-screen bg-background">
       {/* ── Top Bar ─────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <Globe className="h-5 w-5 text-primary" />
-            <span className="font-bold text-foreground">Internet Download Hub</span>
-            <Badge variant="secondary" className="text-xs">Web</Badge>
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+          {/* Same brand lockup as the desktop shell and the download site. */}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <img src="./mark.svg" alt="" aria-hidden="true" className="h-7 w-7 shrink-0" />
+            <span className="wordmark" aria-hidden="true">
+              {/* The kicker is the first thing to go when space is tight. */}
+              <span className="wordmark-kicker hidden sm:block">Internet</span>
+              <span className="wordmark-name">
+                D<i className="wordmark-o" />
+                wnload Hub
+              </span>
+            </span>
+            <span className="sr-only">Internet Download Hub</span>
+            <Badge variant="secondary" className="hidden text-xs sm:inline-flex">Web</Badge>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <Link href="/supported-sites">
-              <a className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <a className="hidden whitespace-nowrap text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline">
                 Supported Sites
               </a>
             </Link>
@@ -224,7 +233,7 @@ export default function DashboardWeb() {
               href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-primary hover:underline"
+              className="whitespace-nowrap text-sm font-medium text-primary hover:underline"
             >
               Get Desktop App
             </a>
@@ -238,7 +247,7 @@ export default function DashboardWeb() {
         {/* ── Hero ────────────────────────────────────────────────────── */}
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Download any video, <span className="text-primary">instantly</span>
+            Grab any video, <span className="prism-text">anywhere</span>
           </h1>
           <p className="text-muted-foreground text-lg max-w-md mx-auto">
             Paste a link. Pick your quality. The file downloads to your browser.
@@ -262,6 +271,7 @@ export default function DashboardWeb() {
               disabled={isLoading || !urlInput.trim()}
               className="h-12 px-6 min-w-28"
               size="lg"
+              variant="hero"
             >
               {isLoading ? (
                 <>
@@ -334,6 +344,7 @@ export default function DashboardWeb() {
               onClick={handleDownload}
               disabled={isDownloading || !selectedFormat}
               size="lg"
+              variant="hero"
               className="w-full h-12 text-base"
             >
               {isDownloading ? (
