@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-11
+
 ### Added
+
+- **The app updates itself.** "Check for Updates" used to end at the GitHub releases page, which redirects to a tag page where the installer is one row of five behind a collapsed "Assets" disclosure — a dead end for anyone who is not a developer. The button is now **Install Update** and hands the work to `electron-updater`: it downloads the release installer, verifies it, and restarts into it. Download progress appears in the window title.
+- **A fallback that goes somewhere useful.** If the in-app path cannot run — a non-Windows build, a development build, missing update metadata, GitHub refusing the request, a failed download — the app says so, names the reason, and opens <https://isaac-onyango-dev.github.io/Internet-Download-Hub/> in the default browser. It never sends anyone to the GitHub releases or tags page. If the browser itself will not open, the address is shown with a **Copy Link** button.
+- **Update metadata is published.** `build.publish` declares the GitHub provider, which is what makes electron-builder emit `latest.yml` and embed `app-update.yml` in the packaged app; `release.yml` uploads `latest.yml` alongside the installer. With `fail_on_unmatched_files` already on, a build that fails to produce it now fails the release instead of silently shipping one that cannot update.
+- **Downloaded engine binaries are checksummed.** `downloadFile()` takes the `digest` GitHub publishes per release asset, verifies it by streaming the file, and deletes anything that fails rather than leaving it on disk for a later step to run. Wired into the yt-dlp update and `performBinaryUpdate()`. Publishers that emit no digest log and pass, so the check starts working the day one appears. The app's own installer is covered separately: `electron-updater` verifies the SHA-512 recorded in `latest.yml` and refuses update metadata that carries no checksum at all.
 
 - **New download site** (`docs/`), rebuilt from scratch on an original "Prism Pop" identity: a near-black canvas with a magenta → violet → cyan gradient used only as a glow and as the brand fill, one warm coral reserved for the primary call to action, Bricolage Grotesque for display type and Inter for body. New wordmark (the "o" of *Download* is a play-button notch), new mark, favicon set, web manifest and Open Graph image, all generated from `docs/brand/mark.svg`.
 - **"What's new" section** on the site, rendered live from GitHub Releases. Release bodies render in full — no fixed-height container, no `line-clamp`, no `overflow: hidden` anywhere in that subtree. The newest release is open by default; older ones sit behind a disclosure that expands to their full height.
@@ -16,14 +23,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Windows installers are now named `Internet-Download-Hub-Setup-<version>.exe`. GitHub rewrites spaces to dots on upload, so the previous default (`Internet Download Hub Setup <version>.exe`) would have made `latest.yml` name a file the CDN does not serve.
+- `fetchJson()` sends `Accept: application/vnd.github+json` and pins the API version, so GitHub is not free to change the response shape underneath us. It also drains redirect responses, so the socket is released, and times out after 15 seconds instead of hanging forever on a stalled connection.
 - The download counter now sums `assets[].download_count` across every release, caches the result in `localStorage` for 8 minutes to stay inside GitHub's unauthenticated rate limit, and falls back to a static shields.io badge when the API is unreachable or returns nothing. It never renders `0` or `NaN`.
 - The primary call to action detects the visitor's platform: Windows gets the installer, macOS and Linux get an honest "no build yet" note with the platform picker already open, and mobile is pointed at the hosted web version.
 - Screenshots are now a horizontally scrolling strip at their natural aspect ratios rather than a fixed-height carousel, which is what caused the height mismatch fixed in the previous round.
 - `release.yml` now fails before building if `CHANGELOG.md` has no section for the tag, publishes that section as the release body (v1.1.5 shipped with an empty one), and redeploys the GitHub Pages site as its final step via `deploy-web.yml`'s new `workflow_call` trigger.
 - README documents the release process and the reasoning behind tag-push over `semantic-release`; its badges were recoloured to the new palette.
+- Generated artifacts are no longer tracked in git: the two Electron bundles and the icon set built by `npm run generate:icons`.
+- Added `.github/workflows/ci.yml` running lint, typecheck, and tests on every push and pull request. Release builds now use `npm ci` instead of `npm install`.
+- Enabled `eslint-plugin-react-hooks`, which was installed but never wired into the lint config.
 
 ### Fixed
 
+- **"Check for Updates" mis-read version numbers.** It compared the installed and published versions as strings, so every difference read as "newer": a local build ahead of the published tag was offered a downgrade, 1.1.10 looked merely *different* from 1.1.9 with no idea which way round, and a pre-release suffix never matched at all. It now compares with `semver`, and a build ahead of the latest release is told there is nothing to install.
+- **Every share button on the Support page was dead.** The page offers ten of them, and the main process allowed exactly two hostnames, so each click threw "External URL not allowed" into an uncaught promise rejection and the button simply did nothing. The share targets are now on the allowlist, and the renderer logs a refusal instead of dropping it.
+- **The disk-space check was wrong on macOS and Linux.** `getFreeSpace()` ran `df -b1`, but `-b` is not a size flag on GNU `df` and means 512-byte blocks on BSD. It now runs `df -k` and reads the Available column.
+- **Repeated update checks stacked up.** Clicking "Check for Updates" several times fired concurrent API calls and queued a dialog for each. A check in flight now ignores further clicks.
+- **The up-to-date dialog claimed updates "will be automatically downloaded when new releases are published".** Nothing was automatic — there was no background check and no download code at all. The text now describes what the app actually does.
+- **Running out of GitHub API quota looked like a broken connection.** Unauthenticated callers get 60 requests an hour per IP and the app spends that in six places, so a shared or corporate network hits it in normal use. A rate-limited response is now recognised and reported as a temporary network limit, with the time it clears, instead of telling the user to check their internet.
 - **Releases shipped a stale main process.** `electron/main.cjs` is an esbuild bundle of `electron/main.ts`, but it was committed to the repository and the release workflow never rebuilt it — electron-builder packaged whichever bundle happened to be in the tagged commit. Because the v1.1.5 release commit changed `main.ts` without rebuilding, **the v1.1.5 installer shipped the v1.1.4 main process and none of the 1.1.5 desktop fixes**. Both `.cjs` bundles are now generated-only and gitignored, and `.github/workflows/release.yml` runs `npm run build:electron` before packaging.
 - **Splash screen never appeared in the installed app.** `createSplashWindow()` looked for `splash.html` under `app.asar.unpacked/dist/`, but the builder packs it inside the asar at `client/splash.html` and does not unpack it, so a blank always-on-top window was shown. It now resolves the file relative to `app.getAppPath()`.
 - **`npm run setup:playwright` installed the wrong package.** `electron/extractor.ts` dynamically imports `playwright-core`, which was never declared as a dependency, so the Playwright fallback extraction engine could never run. `playwright-core` is now an `optionalDependency` (still excluded from the packaged installer) and the script invokes its CLI.
@@ -36,13 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `prebuild:win` script: npm ran it automatically before `build:win`, then `build:electron` immediately rebuilt and overwrote both bundles, discarding its output.
 - `scripts/dev-electron.cjs`: an unreferenced duplicate of `dev-electron.ts`.
 - `tsconfig.server.json`: unreferenced; `server/**/*` is already covered by the root `tsconfig.json`.
-- 26 unused npm packages, including `framer-motion`, `electron-updater`, `ws`, `recharts`, `date-fns`, `cmdk`, `vaul`, and 12 unused Radix primitives.
+- 25 unused npm packages, including `framer-motion`, `ws`, `recharts`, `date-fns`, `cmdk`, `vaul`, and 12 unused Radix primitives. (`electron-updater` was dropped in the same sweep and brought back later in this release, now that the app actually uses it.)
 
-### Changed
+### Security
 
-- Generated artifacts are no longer tracked in git: the two Electron bundles and the icon set built by `npm run generate:icons`.
-- Added `.github/workflows/ci.yml` running lint, typecheck, and tests on every push and pull request. Release builds now use `npm ci` instead of `npm install`.
-- Enabled `eslint-plugin-react-hooks`, which was installed but never wired into the lint config.
+- **PowerShell commands no longer interpolate runtime values.** Three calls pasted paths straight into a command string that a shell then parsed — the archive paths in `performBinaryUpdate()` and the FFmpeg extractor come from release asset names, and the drive letter in `getFreeSpace()` comes from the user's chosen save folder. All three now use `execFile` with an argument array, passing values through the environment and reading them back as `$env:` lookups, which PowerShell treats as data and never re-parses as source. `getBinaryVersion()` drops its shell for the same reason.
+- **External links are matched by hostname, not by string prefix.** The old check accepted any URL starting with an allowed prefix, so `https://isaac-onyango-dev.github.io.evil.com/` passed — it does start with the allowed prefix. Matching is now exact-hostname over HTTPS, and `github.com` keeps its path restriction.
 
 ## [1.1.5] - 2026-09-10
 
