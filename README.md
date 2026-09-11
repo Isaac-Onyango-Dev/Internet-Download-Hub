@@ -74,9 +74,16 @@ Internet Download Hub supports downloading from **1000+ websites**, including:
 
 ## Screenshots
 
-|                   Downloader                   |                Active Queue                 |                 Empty Queue                 |                  Settings                  |
-| :--------------------------------------------: | :-----------------------------------------: | :-----------------------------------------: | :----------------------------------------: |
-| ![Downloader](docs/screenshots/downloader.jpg) | ![Active Queue](docs/screenshots/queue.jpg) | ![Empty Queue](docs/screenshots/queue2.jpg) | ![Settings](docs/screenshots/settings.jpg) |
+Paste a link and the app fetches the title, the length and every quality the
+source actually offers:
+
+![Fetched video with its title, duration and a quality dropdown](docs/screenshots/video-ready.png)
+
+|                    Open it, paste a link                     |                 Playlists are caught automatically                  |
+| :----------------------------------------------------------: | :-----------------------------------------------------------------: |
+|     ![Downloader](docs/screenshots/downloader.png)           |    ![Playlist detected](docs/screenshots/playlist.png)              |
+|         **Several at once, with pause and cancel**           |            **Folder, cookies and concurrency**                      |
+|     ![Download queue](docs/screenshots/queue.png)            |    ![Settings](docs/screenshots/settings.png)                       |
 
 ## Features
 

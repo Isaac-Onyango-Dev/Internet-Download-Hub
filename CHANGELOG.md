@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **New screenshots** on the download page and in the README, taken from 1.3.0 so they show the current identity rather than the old blue one. Five shots replace the previous four: the empty downloader, a fetched video with its quality picker, the playlist dialog, the queue running several downloads at once, and settings. All five are 1920x1030, so the site's strip no longer has to accommodate one odd aspect ratio. Re-encoded losslessly, which cut them from 825 KB to 275 KB for the set.
+
 ### Fixed
 
 - **The Render web deployment had been silently failing, and had been for some time.** `render.yaml` sets `NODE_ENV=production` for the whole service, and npm honours that during the build by omitting `devDependencies` — which is where `vite`, `esbuild`, `tailwindcss`, `@vitejs/plugin-react` and `cross-env` all live. A clean install produced 123 packages instead of roughly 800, `cross-env` was not found, `vite build` never ran, no `dist/` was produced, and Render went on serving whichever build last succeeded. The deployed site was therefore stuck on a pre-rebrand bundle: old palette, no logo, the broken `./icons/icon-128.png` favicon and a Google Fonts request for 25 families. The build command is now `npm install --include=dev && npm run build:web`. The Dockerfile was never affected because it installs before it sets `ENV NODE_ENV=production`.
