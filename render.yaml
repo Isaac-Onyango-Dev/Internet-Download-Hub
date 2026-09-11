@@ -3,9 +3,19 @@ services:
     name: internet-download-hub
     env: node
     plan: free
-    buildCommand: npm install && npm run build:web
+    # --include=dev is required. NODE_ENV=production below is set for the whole
+    # service, build included, and npm honours it by omitting devDependencies —
+    # which is where vite, esbuild, tailwindcss and cross-env all live. Without
+    # this flag the build installs 123 packages instead of ~800, `cross-env` is
+    # not found, `vite build` never runs, no dist/ is produced, and Render keeps
+    # serving whichever build last succeeded. That is exactly what happened:
+    # the deployed site sat on a pre-rebrand bundle while main moved on.
+    # The Dockerfile avoids this by accident, installing before it sets
+    # ENV NODE_ENV=production.
+    buildCommand: npm install --include=dev && npm run build:web
     startCommand: npm run start:web
     envVars:
+      # Read at runtime by server/index.ts to decide whether to serve dist/.
       - key: NODE_ENV
         value: production
       - key: PORT
