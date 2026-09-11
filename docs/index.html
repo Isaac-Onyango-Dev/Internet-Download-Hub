@@ -286,30 +286,42 @@
   <header class="sec-head sec-head--left">
     <p class="eyebrow">The actual app</p>
     <h2>Not a render. Screenshots.</h2>
-    <p class="sec-sub">Scroll or swipe sideways.</p>
+    <p class="sec-sub">They move on their own. Arrows to browse.</p>
   </header>
 
-  <div class="shot-strip" id="shot-strip" tabindex="0" role="region" aria-label="Application screenshots">
-    <figure class="shot">
-      <img src="screenshots/downloader.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The downloader screen with an empty URL field and a Get Video Info button" />
-      <figcaption>Open it, paste a link</figcaption>
-    </figure>
-    <figure class="shot">
-      <img src="screenshots/video-ready.png" width="1920" height="1030" loading="lazy" decoding="async" alt="A fetched video showing its title, duration and a quality dropdown set to Best Quality" />
-      <figcaption>Title, length, quality picker</figcaption>
-    </figure>
-    <figure class="shot">
-      <img src="screenshots/playlist.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The Playlist Detected dialog offering the whole playlist, a range, or hand-picked videos" />
-      <figcaption>Playlists are caught automatically</figcaption>
-    </figure>
-    <figure class="shot">
-      <img src="screenshots/queue.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The download queue with several videos downloading at once, each with progress, speed and time remaining" />
-      <figcaption>The queue, mid-flight</figcaption>
-    </figure>
-    <figure class="shot">
-      <img src="screenshots/settings.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The settings panel showing save location, age and cookie options, and concurrent download count" />
-      <figcaption>Folder, cookies, concurrency</figcaption>
-    </figure>
+  <!-- data-tilt rather than :nth-child so the JS-cloned copies keep the same
+       angle as the originals and the loop seam stays invisible. -->
+  <div class="shot-frame">
+    <button class="shot-nav shot-nav--prev" id="shot-prev" type="button" aria-label="Previous screenshot" aria-controls="shot-strip">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+    </button>
+
+    <div class="shot-strip" id="shot-strip" tabindex="0" role="region" aria-label="Application screenshots">
+      <figure class="shot" data-tilt="a">
+        <img src="screenshots/downloader.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The downloader screen with an empty URL field and a Get Video Info button" />
+        <figcaption>Open it, paste a link</figcaption>
+      </figure>
+      <figure class="shot" data-tilt="b">
+        <img src="screenshots/video-ready.png" width="1920" height="1030" loading="lazy" decoding="async" alt="A fetched video showing its title, duration and a quality dropdown set to Best Quality" />
+        <figcaption>Title, length, quality picker</figcaption>
+      </figure>
+      <figure class="shot" data-tilt="a">
+        <img src="screenshots/playlist.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The Playlist Detected dialog offering the whole playlist, a range, or hand-picked videos" />
+        <figcaption>Playlists are caught automatically</figcaption>
+      </figure>
+      <figure class="shot" data-tilt="b">
+        <img src="screenshots/queue.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The download queue with several videos downloading at once, each with progress, speed and time remaining" />
+        <figcaption>The queue, mid-flight</figcaption>
+      </figure>
+      <figure class="shot" data-tilt="a">
+        <img src="screenshots/settings.png" width="1920" height="1030" loading="lazy" decoding="async" alt="The settings panel showing save location, age and cookie options, and concurrent download count" />
+        <figcaption>Folder, cookies, concurrency</figcaption>
+      </figure>
+    </div>
+
+    <button class="shot-nav shot-nav--next" id="shot-next" type="button" aria-label="Next screenshot" aria-controls="shot-strip">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+    </button>
   </div>
 </section>
 

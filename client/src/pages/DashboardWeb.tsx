@@ -55,6 +55,15 @@ interface DownloadRecord {
 
 const WEB_DOWNLOADS_KEY = 'idh_web_downloads_v2';
 
+/**
+ * Both "get the desktop app" links point here rather than at GitHub Releases.
+ * The releases page redirects to a tag page where the installer is one row of
+ * several behind a collapsed "Assets" disclosure, which is a dead end for
+ * anyone who does not already know what a release asset is. This page offers
+ * the installer as its primary button.
+ */
+const DOWNLOAD_PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/';
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isValidUrl(str: string): boolean {
@@ -230,7 +239,7 @@ export default function DashboardWeb() {
               </a>
             </Link>
             <a
-              href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
+              href={DOWNLOAD_PAGE_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="whitespace-nowrap text-sm font-medium text-primary hover:underline"
@@ -425,11 +434,7 @@ export default function DashboardWeb() {
             The desktop app adds playlist downloads, parallel queues, MP3 extraction, and 1,000+ sites.
           </p>
           <Button variant="outline" size="sm" asChild>
-            <a
-              href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            <a href={DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4 mr-2" />
               Download for Windows
             </a>

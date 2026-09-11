@@ -551,6 +551,133 @@ function initShare() {
   });
 }
 
+/* ── screenshot carousel ────────────────────────────────────────
+   The strip drifts right-to-left on its own and loops seamlessly. The slides
+   are duplicated once, so when the scroll position passes the width of one
+   full set it is rewound by exactly that width: the pixels under the viewport
+   are identical either side of the rewind, so there is nothing to see.
+
+   One rAF loop owns the scroll position. Arrow presses become an eased tween
+   inside that same loop rather than a competing scrollTo, which is what keeps
+   a manual press from fighting the drift or snapping. Native swipe and
+   trackpad scrolling still work and are detected, not blocked.        */
+function initShots() {
+  const strip = $('shot-strip');
+  const prev = $('shot-prev');
+  const next = $('shot-next');
+  if (!strip) return;
+
+  const originals = [...strip.querySelectorAll('.shot')];
+  if (originals.length < 2) return;
+
+  // A second set to loop through. Hidden from assistive tech so the list is
+  // not read out twice.
+  for (const node of originals) {
+    const copy = node.cloneNode(true);
+    copy.setAttribute('aria-hidden', 'true');
+    copy.classList.add('shot--clone');
+    strip.appendChild(copy);
+  }
+
+  const DRIFT = 50; // px per second — slow enough to read a slide as it passes
+  const TWEEN_MS = 620;
+
+  let period = 0; // width of one full set, including the gap that follows it
+  let step = 0; // one slide plus its gap
+  let pos = 0;
+  let lastWritten = -1;
+  let paused = false;
+  let tween = null;
+  let last = 0;
+
+  const measure = () => {
+    const slides = strip.querySelectorAll('.shot');
+    const firstClone = strip.querySelector('.shot--clone');
+    if (!firstClone || slides.length < 2) return;
+    period = firstClone.offsetLeft - slides[0].offsetLeft;
+    step = slides[1].offsetLeft - slides[0].offsetLeft;
+  };
+
+  const norm = (p) => (period > 0 ? ((p % period) + period) % period : p);
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+  const nudge = (direction) => {
+    if (!step) measure();
+    if (!step) return;
+    const from = tween ? tween.to : pos; // chain presses instead of restarting
+    tween = { from, to: from + direction * step, start: performance.now() };
+  };
+
+  const frame = (now) => {
+    const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+    last = now;
+
+    if (!period) measure();
+
+    if (period > 0) {
+      // Someone scrolled or swiped: adopt their position rather than fight it.
+      if (lastWritten >= 0 && Math.abs(strip.scrollLeft - lastWritten) > 1) {
+        pos = strip.scrollLeft;
+        tween = null;
+      }
+
+      if (tween) {
+        const t = Math.min((now - tween.start) / TWEEN_MS, 1);
+        pos = tween.from + (tween.to - tween.from) * easeOutCubic(t);
+        if (t >= 1) {
+          pos = tween.to;
+          tween = null;
+        }
+      } else if (!paused && !REDUCED) {
+        pos += DRIFT * dt;
+      }
+
+      pos = norm(pos);
+      strip.scrollLeft = pos;
+      lastWritten = strip.scrollLeft;
+    }
+
+    requestAnimationFrame(frame);
+  };
+
+  const setPaused = (v) => { paused = v; };
+
+  // Stop while someone is looking at, touching or tabbing through the strip.
+  const frameEl = strip.parentElement;
+  if (frameEl) {
+    frameEl.addEventListener('pointerenter', () => setPaused(true));
+    frameEl.addEventListener('pointerleave', () => setPaused(false));
+    frameEl.addEventListener('focusin', () => setPaused(true));
+    frameEl.addEventListener('focusout', () => setPaused(false));
+  }
+  strip.addEventListener('touchstart', () => setPaused(true), { passive: true });
+  strip.addEventListener('touchend', () => setPaused(false), { passive: true });
+  document.addEventListener('visibilitychange', () => setPaused(document.hidden));
+
+  if (prev) prev.addEventListener('click', () => nudge(-1));
+  if (next) next.addEventListener('click', () => nudge(1));
+
+  // Arrow keys when the strip itself has focus.
+  strip.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { e.preventDefault(); nudge(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-1); }
+  });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const before = period ? pos / period : 0;
+      measure();
+      pos = norm(before * period); // hold the same place in the loop
+    }, 150);
+  });
+  window.addEventListener('load', measure);
+
+  measure();
+  requestAnimationFrame(frame);
+}
+
 /* ── boot ───────────────────────────────────────────────────── */
 function boot() {
   const year = $('year');
@@ -560,6 +687,7 @@ function boot() {
   initScrollFx();
   initSheet();
   initPlatform();
+  initShots();
   initShare();
   loadGitHub();
 }

@@ -777,32 +777,68 @@ section { padding-inline: var(--gut); }
 /* natural aspect ratios, uniform height — no clamped carousel box */
 .shots { padding-block: var(--sec); }
 
+.shot-frame { position: relative; }
+
 .shot-strip {
   display: flex;
   gap: clamp(1rem, 2vw, 1.5rem);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
   padding: 1.5rem calc(50vw - var(--max) / 2) 2rem;
   margin-inline: calc(var(--gut) * -1);
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-lift) transparent;
+  /* The strip advances on its own and has arrows, so the scrollbar is no
+     longer an affordance anyone needs to drag. Scrolling still works. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 @media (max-width: 1340px) {
   .shot-strip { padding-inline: var(--gut); }
 }
-.shot-strip::-webkit-scrollbar { height: 7px; }
-.shot-strip::-webkit-scrollbar-thumb { background: var(--line-lift); border-radius: 99px; }
+.shot-strip::-webkit-scrollbar { display: none; }
 
 .shot {
   flex: none;
   margin: 0;
-  scroll-snap-align: center;
   transition: transform .4s var(--bounce);
 }
-.shot:nth-child(odd)  { transform: rotate(-1deg); }
-.shot:nth-child(even) { transform: rotate(1.2deg); }
+.shot[data-tilt="a"] { transform: rotate(-1deg); }
+.shot[data-tilt="b"] { transform: rotate(1.2deg); }
 .shot:hover { transform: rotate(0deg) translateY(-8px) scale(1.015); }
+
+/* ── arrows ── */
+.shot-nav {
+  position: absolute;
+  top: calc(50% - 1rem);
+  z-index: 3;
+  display: grid; place-items: center;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--line-lift);
+  background: rgba(11, 11, 18, .72);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 14px 32px -14px rgba(0, 0, 0, .9);
+  transition: transform .34s var(--bounce), background .3s, border-color .3s, color .3s;
+}
+.shot-nav:hover {
+  transform: scale(1.1);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(11, 11, 18, .9);
+}
+.shot-nav:active { transform: scale(.94); }
+.shot-nav--prev { left: 0; transform: translateX(-25%); }
+.shot-nav--next { right: 0; transform: translateX(25%); }
+.shot-nav--prev:hover, .shot-nav--next:hover { transform: scale(1.1); }
+
+@media (max-width: 700px) {
+  .shot-nav { width: 44px; height: 44px; }
+  .shot-nav svg { width: 21px; height: 21px; }
+  .shot-nav--prev { left: .25rem; transform: none; }
+  .shot-nav--next { right: .25rem; transform: none; }
+}
 
 .shot img {
   height: clamp(210px, 30vw, 400px);

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Both "get the desktop app" links in the web version now open the download page** rather than GitHub Releases. The releases page redirects to a tag page where the installer sits behind a collapsed "Assets" disclosure, which is a dead end for anyone who does not already know what a release asset is. Both the header link and the "Need more power?" button read from one constant so they cannot drift apart again.
+- **The screenshot gallery on the download page scrolls itself.** It drifts right to left at 50px a second, slow enough to read a slide as it passes, and loops without stopping: the slides are duplicated once and the scroll position is rewound by exactly one set's width, so the pixels either side of the seam are identical and there is nothing to see. Clear previous and next arrows sit at each end. A press becomes an eased tween inside the same animation loop rather than a competing scroll, so manual navigation blends with the drift instead of fighting it. The strip pauses while hovered, touched, focused or off-screen, holds still under `prefers-reduced-motion` with the arrows still working, and the scrollbar is hidden because nobody needs to drag it any more.
+
 - **New screenshots** on the download page and in the README, taken from 1.3.0 so they show the current identity rather than the old blue one. Five shots replace the previous four: the empty downloader, a fetched video with its quality picker, the playlist dialog, the queue running several downloads at once, and settings. All five are 1920x1030, so the site's strip no longer has to accommodate one odd aspect ratio. Re-encoded losslessly, which cut them from 825 KB to 275 KB for the set.
 
 ### Fixed
