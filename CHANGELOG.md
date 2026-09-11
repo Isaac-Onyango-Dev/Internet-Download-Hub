@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The release pipeline no longer ends in a failed job.** `release.yml`'s `publish-site` job called `deploy-web.yml` to redeploy the site after a release, but it never once ran: the `github-pages` environment only permits deployments from `main`, and a release runs on a tag ref, so the job was rejected at the environment gate before a runner started. It was redundant in any case — the site resolves its version, download link and "What's new" section from the GitHub API in the browser, so a newly published release is visible without a redeploy. The job and `deploy-web.yml`'s `workflow_call` trigger are both removed; pushes to `main` touching `docs/**` still deploy, and `workflow_dispatch` still allows a manual redeploy.
+
 ## [1.2.0] - 2026-09-11
 
 ### Added

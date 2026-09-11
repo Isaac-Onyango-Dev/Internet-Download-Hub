@@ -6,17 +6,16 @@ name: Deploy GitHub Pages
 # no longer hosts a rebuilt copy of the SPA; Render is the single source
 # of truth for the live web app).
 #
-# workflow_call exists so the release pipeline can redeploy the site as its
-# last step: publishing a release changes what the site's version display,
-# download button and "What's new" section resolve to, and nothing under
-# docs/ has to change for that to be true.
+# A release does not need to redeploy this site: the version display,
+# download button and "What's new" section are resolved from the GitHub API
+# in the browser, so a newly published release changes what visitors see
+# with no redeploy at all. workflow_dispatch stays for a manual redeploy.
 on:
   push:
     branches:
       - main
     paths:
       - 'docs/**'
-  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -24,9 +23,9 @@ permissions:
   pages: write
   id-token: write
 
-# Only one Pages deployment can run at a time. A release triggers this
-# workflow as well, so cancel-in-progress keeps the newest deploy and drops
-# any older one still queued.
+# Only one Pages deployment can run at a time. cancel-in-progress keeps the
+# newest deploy and drops any older one still queued, so a burst of pushes
+# to docs/ settles on the latest content.
 concurrency:
   group: pages
   cancel-in-progress: true

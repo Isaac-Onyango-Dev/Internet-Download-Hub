@@ -5,8 +5,8 @@ on:
     tags:
       - 'v*'
 
-# Job-level permissions below; the site-deploy job needs pages/id-token, which
-# the build job must not have.
+# No workflow-level grant: the one job below asks for exactly the scope it
+# needs (contents: write, to publish the release).
 permissions: {}
 
 # Two tags pushed in quick succession must not race on the same GitHub Release.
@@ -104,15 +104,3 @@ jobs:
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # The site reads its version, download link and changelog from the GitHub
-  # API at runtime, so a release changes what it shows without any file under
-  # docs/ changing. Redeploying here means there is never a manual step
-  # between "release published" and "site is current".
-  publish-site:
-    needs: build-windows
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/deploy-web.yml
