@@ -1,439 +1,567 @@
-/* ═══════════════════════════════════════════════
-   INTERNET DOWNLOAD HUB — DOCS SITE SCRIPT
-   ═══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   INTERNET DOWNLOAD HUB — site behaviour
+   Static, no build step, no dependencies.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Scroll reveals start hidden only once this file is running. If it fails to
+   load or throws before boot, every section stays visible instead of fading
+   to nothing. */
+document.documentElement.classList.add('js-motion');
 
 const REPO = 'Isaac-Onyango-Dev/Internet-Download-Hub';
-const PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub';
-const SHARE_TEXT = 'Check out Internet Download Hub — a free desktop app that downloads videos from YouTube, TikTok, Instagram and 1000+ sites. Completely free and open source.';
+const REPO_URL = `https://github.com/${REPO}`;
+const PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/';
+const WEB_APP_URL = 'https://internet-download-hub.onrender.com/';
+const SHARE_TEXT =
+  'Internet Download Hub — a free, open source Windows app that grabs video from YouTube, TikTok, Instagram and 1000+ other sites. No ads, no account.';
 
-const GITHUB_API_HEADERS = {
-  Accept: 'application/vnd.github.v3+json',
-  'X-GitHub-Api-Version': '2022-11-28',
-  'User-Agent': 'Internet-Download-Hub-docs-page'
-};
+/* GitHub's unauthenticated limit is 60 requests per hour per IP, so the
+   whole payload is cached and reused rather than refetched per visit. */
+const CACHE_KEY = 'idh.releases.v2';
+const CACHE_TTL = 8 * 60 * 1000; // 8 minutes
+const MAX_PAGES = 5;
+const NEWS_COUNT = 5;
 
-// ── Intersection Observer: Scroll Animations ───
-function initScrollAnimations() {
-  const els = document.querySelectorAll('.animate-in');
-  if (!('IntersectionObserver' in window)) {
-    els.forEach(el => el.classList.add('visible'));
+const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = (id) => document.getElementById(id);
+
+/* ── storage helpers (private mode can throw on both read and write) ── */
+function cacheRead() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.releases)) return null;
+    return { releases: parsed.releases, fresh: Date.now() - parsed.t < CACHE_TTL };
+  } catch {
+    return null;
+  }
+}
+
+function cacheWrite(releases) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), releases }));
+  } catch {
+    /* quota or private mode — the page works fine without it */
+  }
+}
+
+/* ── scroll reveals ─────────────────────────────────────────── */
+function initReveals() {
+  const nodes = document.querySelectorAll('.reveal');
+  if (REDUCED || !('IntersectionObserver' in window)) {
+    nodes.forEach((n) => n.classList.add('seen'));
     return;
   }
-
-  const observer = new IntersectionObserver(
+  const io = new IntersectionObserver(
     (entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const delay = parseInt(entry.target.dataset.delay || '0', 10);
-          setTimeout(() => {
-            entry.target.classList.add('visible');
-          }, delay);
-          observer.unobserve(entry.target);
-        }
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const wait = Number(e.target.dataset.delay || 0);
+        setTimeout(() => e.target.classList.add('seen'), wait);
+        io.unobserve(e.target);
       });
     },
-    { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+    { threshold: 0.05, rootMargin: '0px 0px -50px 0px' },
   );
-
-  els.forEach(el => observer.observe(el));
+  nodes.forEach((n) => io.observe(n));
 }
 
-// ── Navbar Scroll Effect ───────────────────────
-function initNavbarScroll() {
-  const navbar = document.getElementById('navbar');
-  if (!navbar) return;
+/* ── blob parallax + sticky nav, one rAF loop ───────────────── */
+function initScrollFx() {
+  const topbar = $('topbar');
+  const blobs = REDUCED ? [] : [...document.querySelectorAll('.blob')];
+  let pending = false;
 
-  let ticking = false;
-  window.addEventListener('scroll', () => {
-    if (!ticking) {
-      requestAnimationFrame(() => {
-        navbar.classList.toggle('scrolled', window.scrollY > 20);
-        ticking = false;
-      });
-      ticking = true;
+  const paint = () => {
+    const y = window.scrollY;
+    if (topbar) topbar.dataset.stuck = y > 14 ? '1' : '0';
+    for (const b of blobs) {
+      b.style.setProperty('--py', `${(y * Number(b.dataset.drift || 0.15) * -1).toFixed(1)}px`);
     }
-  }, { passive: true });
+    pending = false;
+  };
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(paint);
+    },
+    { passive: true },
+  );
+  paint();
 }
 
-// ── Mobile Menu ────────────────────────────────
-function initMobileMenu() {
-  const toggle = document.getElementById('mobile-toggle');
-  const menu = document.getElementById('mobile-menu');
-  if (!toggle || !menu) return;
+/* ── mobile sheet ───────────────────────────────────────────── */
+function initSheet() {
+  const burger = $('burger');
+  const sheet = $('sheet');
+  if (!burger || !sheet) return;
 
-  toggle.addEventListener('click', () => {
-    toggle.classList.toggle('active');
-    menu.classList.toggle('open');
+  const setOpen = (open) => {
+    sheet.hidden = !open;
+    burger.setAttribute('aria-expanded', String(open));
+    burger.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    document.body.style.overflow = open ? 'hidden' : '';
+  };
+
+  burger.addEventListener('click', () => setOpen(sheet.hidden));
+  sheet.addEventListener('click', (e) => {
+    if (e.target.tagName === 'A') setOpen(false);
   });
-
-  // Close on link click
-  menu.querySelectorAll('.mobile-link').forEach(link => {
-    link.addEventListener('click', () => {
-      toggle.classList.remove('active');
-      menu.classList.remove('open');
-    });
-  });
-
-  // Close on Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      toggle.classList.remove('active');
-      menu.classList.remove('open');
+    if (e.key === 'Escape' && !sheet.hidden) {
+      setOpen(false);
+      burger.focus();
     }
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900 && !sheet.hidden) setOpen(false);
   });
 }
 
-// ── Screenshot Carousel ────────────────────────
-function initCarousel() {
-  const track = document.getElementById('carousel-track');
-  const dotsContainer = document.getElementById('carousel-dots');
-  const prevBtn = document.getElementById('carousel-prev');
-  const nextBtn = document.getElementById('carousel-next');
-  if (!track) return;
+/* ── platform detection & picker ────────────────────────────── */
+function detectPlatform() {
+  const ua = navigator.userAgent || '';
+  const uaPlat = navigator.userAgentData?.platform || navigator.platform || '';
+  const hay = `${ua} ${uaPlat}`;
 
-  const slides = track.querySelectorAll('.carousel-slide');
-  const totalSlides = slides.length;
-  let current = 0;
-  let autoPlayTimer;
+  if (/Android/i.test(hay)) return 'android';
+  if (/iPhone|iPad|iPod/i.test(hay) || (/Mac/i.test(hay) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Win/i.test(hay)) return 'windows';
+  if (/Mac/i.test(hay)) return 'mac';
+  if (/Linux|X11|CrOS/i.test(hay)) return 'linux';
+  return 'unknown';
+}
 
-  // Build dots
-  if (dotsContainer) {
-    slides.forEach((_, i) => {
-      const dot = document.createElement('button');
-      dot.className = `carousel-dot${i === 0 ? ' active' : ''}`;
-      dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
-      dot.addEventListener('click', () => goTo(i));
-      dotsContainer.appendChild(dot);
+function initPlatform() {
+  const toggle = $('platform-toggle');
+  const picker = $('platform-picker');
+  const label = $('cta-label');
+  const meta = $('cta-meta');
+  const primary = $('cta-primary');
+
+  if (toggle && picker) {
+    toggle.addEventListener('click', () => {
+      const open = picker.hidden;
+      picker.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.textContent = open ? 'Hide platforms' : 'Other platforms';
     });
   }
 
-  function goTo(index) {
-    current = ((index % totalSlides) + totalSlides) % totalSlides;
-    track.style.transform = `translateX(-${current * 100}%)`;
+  const os = detectPlatform();
+  const expand = () => {
+    if (picker && toggle && picker.hidden) toggle.click();
+  };
 
-    // Update dots
-    if (dotsContainer) {
-      dotsContainer.querySelectorAll('.carousel-dot').forEach((d, i) => {
-        d.classList.toggle('active', i === current);
-      });
+  if (os === 'windows') return; // the happy path, copy already says Windows
+
+  if (os === 'android' || os === 'ios') {
+    // No mobile build exists, so send them somewhere that actually works.
+    if (primary) {
+      primary.href = WEB_APP_URL;
+      primary.dataset.webapp = '1';
     }
-
-    // Update buttons
-    if (prevBtn) prevBtn.disabled = current === 0;
-    if (nextBtn) nextBtn.disabled = current === totalSlides - 1;
-
-    resetAutoPlay();
-  }
-
-  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function resetAutoPlay() {
-    clearInterval(autoPlayTimer);
-    if (prefersReducedMotion) return;
-    autoPlayTimer = setInterval(() => goTo(current + 1), 6000);
-  }
-
-  if (prevBtn) prevBtn.addEventListener('click', () => goTo(current - 1));
-  if (nextBtn) nextBtn.addEventListener('click', () => goTo(current + 1));
-
-  // Touch/swipe support
-  let startX = 0;
-  let isDragging = false;
-
-  track.addEventListener('touchstart', (e) => {
-    startX = e.touches[0].clientX;
-    isDragging = true;
-  }, { passive: true });
-
-  track.addEventListener('touchend', (e) => {
-    if (!isDragging) return;
-    isDragging = false;
-    const diff = startX - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      goTo(current + (diff > 0 ? 1 : -1));
-    }
-  }, { passive: true });
-
-  goTo(0);
-  resetAutoPlay();
-}
-
-// ── Counter Animation ──────────────────────────
-function animateCounter(el, target, duration = 1500) {
-  const start = performance.now();
-  const initial = 0;
-
-  function tick(now) {
-    const elapsed = now - start;
-    const progress = Math.min(elapsed / duration, 1);
-    // Ease out cubic
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const current = Math.floor(initial + (target - initial) * eased);
-
-    el.textContent = current.toLocaleString();
-
-    if (progress < 1) {
-      requestAnimationFrame(tick);
-    } else {
-      el.textContent = target.toLocaleString();
-    }
-  }
-
-  requestAnimationFrame(tick);
-}
-
-function initCounters() {
-  const counters = document.querySelectorAll('[data-count]');
-  if (!('IntersectionObserver' in window)) {
-    counters.forEach(el => {
-      const target = parseInt(el.dataset.count, 10);
-      el.textContent = target.toLocaleString();
-    });
+    if (label) label.textContent = 'Open the web app';
+    if (meta) meta.textContent = 'The desktop app is Windows-only';
     return;
   }
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const target = parseInt(entry.target.dataset.count, 10);
-        animateCounter(entry.target, target);
-        observer.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.5 });
-
-  counters.forEach(el => observer.observe(el));
+  if (label) label.textContent = 'Get the Windows build';
+  if (meta) {
+    meta.textContent =
+      os === 'mac'
+        ? 'No macOS build yet — it is on the roadmap'
+        : 'No native Linux build — self-host the web version instead';
+  }
+  expand();
 }
 
-// ── GitHub Release API ─────────────────────────
-async function fetchAllReleases() {
-  const all = [];
-  let page = 1;
-  const maxPages = 30;
-  while (page <= maxPages) {
+/* ── GitHub releases ────────────────────────────────────────── */
+async function fetchReleases() {
+  const out = [];
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
     const res = await fetch(
       `https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`,
-      { headers: GITHUB_API_HEADERS }
+      { headers: { Accept: 'application/vnd.github+json' } },
     );
-    if (!res.ok) return { ok: false, status: res.status, releases: all };
+    if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
     const batch = await res.json();
     if (!Array.isArray(batch) || batch.length === 0) break;
-    all.push(...batch);
+    out.push(
+      ...batch.map((r) => ({
+        tag_name: r.tag_name,
+        name: r.name,
+        body: r.body,
+        draft: r.draft,
+        prerelease: r.prerelease,
+        published_at: r.published_at,
+        html_url: r.html_url,
+        assets: (r.assets || []).map((a) => ({
+          name: a.name,
+          size: a.size,
+          download_count: a.download_count,
+          browser_download_url: a.browser_download_url,
+        })),
+      })),
+    );
     if (batch.length < 100) break;
-    page += 1;
   }
-  return { ok: true, releases: all };
+  return out;
 }
 
-function sumAllAssetDownloads(releases) {
-  return releases.reduce((sum, r) => {
-    const assets = r.assets || [];
-    return sum + assets.reduce((s, a) => s + (a.download_count || 0), 0);
-  }, 0);
+const totalDownloads = (releases) =>
+  releases.reduce(
+    (sum, r) => sum + (r.assets || []).reduce((s, a) => s + (a.download_count || 0), 0),
+    0,
+  );
+
+const publicReleases = (releases) => releases.filter((r) => !r.draft && !r.prerelease);
+
+function installerAsset(release) {
+  return (release.assets || []).find(
+    (a) =>
+      /\.exe$/i.test(a.name) &&
+      !/blockmap/i.test(a.name) &&
+      !/uninstall/i.test(a.name),
+  );
 }
 
-async function loadReleaseInfo() {
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${REPO}/releases/latest`,
-      { headers: GITHUB_API_HEADERS }
-    );
-
-    if (res.status === 403 || res.status === 429) return;
-    if (res.status === 404) {
-      updateVersionText('Latest version');
-      updateDownloadCounter(0);
-      return;
-    }
-    if (!res.ok) return;
-
-    const data = await res.json();
-
-    // Update version text
-    updateVersionText(data.tag_name || 'Latest version');
-
-    // Find installer asset
-    const exeAsset = data.assets?.find(a =>
-      a.name.toLowerCase().endsWith('.exe') &&
-      !a.name.includes('blockmap') &&
-      !a.name.includes('uninstaller')
-    );
-
-    if (exeAsset) {
-      // Update all download buttons to point directly to the installer
-      const btns = [
-        document.getElementById('download-btn'),
-        document.getElementById('hero-download-btn')
-      ];
-      btns.forEach(btn => {
-        if (btn) btn.href = exeAsset.browser_download_url;
-      });
-
-      // Update file size display
-      const sizeEl = document.getElementById('download-size');
-      if (sizeEl && exeAsset.size) {
-        const mb = (exeAsset.size / (1024 * 1024)).toFixed(0);
-        sizeEl.textContent = `~${mb} MB installer`;
-      }
-    }
-
-    // Total download count
-    const { ok, releases: allReleases } = await fetchAllReleases();
-    if (ok && allReleases.length > 0) {
-      const total = sumAllAssetDownloads(allReleases);
-      updateDownloadCounter(total);
-    } else if (exeAsset) {
-      updateDownloadCounter(exeAsset.download_count || 0);
-    }
-
-  } catch {
-    // Silently fail — page works without API
+/* ── counter ────────────────────────────────────────────────── */
+function countUp(el, target) {
+  if (REDUCED) {
+    el.textContent = target.toLocaleString();
+    return;
   }
-}
-
-function updateVersionText(text) {
-  const el = document.getElementById('version-text');
-  if (el) el.textContent = text;
-  const el2 = document.getElementById('download-version');
-  if (el2) el2.textContent = `${text} · Windows 10 / 11 (64-bit)`;
-}
-
-function updateDownloadCounter(count) {
-  const el = document.getElementById('total-downloads');
-  if (el) {
-    el.textContent = count > 0 ? count.toLocaleString() : '—';
-  }
-}
-
-// ── Share Buttons ──────────────────────────────
-function setupShareButtons() {
-  const encoded = encodeURIComponent(PAGE_URL);
-  const encodedText = encodeURIComponent(SHARE_TEXT);
-
-  const twitter = document.getElementById('share-twitter');
-  if (twitter) twitter.href = `https://twitter.com/intent/tweet?text=${encodedText}&url=${encoded}`;
-
-  const reddit = document.getElementById('share-reddit');
-  if (reddit) reddit.href = `https://reddit.com/submit?url=${encoded}&title=${encodeURIComponent('Internet Download Hub — Free Video Downloader')}`;
-}
-
-function copyLink() {
-  navigator.clipboard.writeText(PAGE_URL).then(() => {
-    const label = document.getElementById('copy-label');
-    if (label) {
-      const original = label.textContent;
-      label.textContent = 'Copied!';
-      setTimeout(() => { label.textContent = original; }, 2500);
-    }
-  }).catch(() => {
-    // Fallback for older browsers
-    prompt('Copy this link:', PAGE_URL);
-  });
-}
-
-// ── Refresh download count after user clicks ───
-function refreshCountAfterDownload() {
-  const btns = [
-    document.getElementById('download-btn'),
-    document.getElementById('hero-download-btn')
-  ];
-  btns.forEach(btn => {
-    if (btn) {
-      btn.addEventListener('click', () => {
-        setTimeout(() => loadReleaseInfo(), 3000);
-      });
-    }
-  });
-}
-
-// ── FAQ Accordion: close others when one opens ──
-function initFaqAccordion() {
-  document.querySelectorAll('.faq-item').forEach(item => {
-    item.addEventListener('toggle', () => {
-      if (item.open) {
-        document.querySelectorAll('.faq-item').forEach(other => {
-          if (other !== item && other.open) other.open = false;
-        });
-      }
-    });
-  });
-}
-
-// ── Favicon Protection ─────────────────────────
-function protectFavicon() {
-  const faviconUrls = {
-    ico: 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/favicon.ico',
-    png32: 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/favicon-32x32.png',
-    png16: 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/favicon-16x16.png'
+  const ms = 1400;
+  const t0 = performance.now();
+  const step = (now) => {
+    const p = Math.min((now - t0) / ms, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(target * eased).toLocaleString();
+    if (p < 1) requestAnimationFrame(step);
+    else el.textContent = target.toLocaleString();
   };
-
-  function ensureFavicon() {
-    let icoLink = document.querySelector('link[rel="icon"][type="image/x-icon"]');
-    let png32Link = document.querySelector('link[rel="icon"][sizes="32x32"]');
-    let png16Link = document.querySelector('link[rel="icon"][sizes="16x16"]');
-
-    if (!icoLink) {
-      icoLink = document.createElement('link');
-      icoLink.rel = 'icon';
-      icoLink.type = 'image/x-icon';
-      icoLink.href = faviconUrls.ico;
-      document.head.appendChild(icoLink);
-    }
-
-    if (!png32Link) {
-      png32Link = document.createElement('link');
-      png32Link.rel = 'icon';
-      png32Link.type = 'image/png';
-      png32Link.setAttribute('sizes', '32x32');
-      png32Link.href = faviconUrls.png32;
-      document.head.appendChild(png32Link);
-    }
-
-    if (!png16Link) {
-      png16Link = document.createElement('link');
-      png16Link.rel = 'icon';
-      png16Link.type = 'image/png';
-      png16Link.setAttribute('sizes', '16x16');
-      png16Link.href = faviconUrls.png16;
-      document.head.appendChild(png16Link);
-    }
-
-    const timestamp = Date.now();
-    icoLink.href = `${faviconUrls.ico}?v=${timestamp}`;
-    png32Link.href = `${faviconUrls.png32}?v=${timestamp}`;
-    png16Link.href = `${faviconUrls.png16}?v=${timestamp}`;
-  }
-
-  ensureFavicon();
-
-  const observer = new MutationObserver((mutations) => {
-    const faviconRemoved = mutations.some(mutation =>
-      Array.from(mutation.removedNodes).some(node =>
-        node.nodeName === 'LINK' && node.rel?.includes('icon')
-      )
-    );
-    if (faviconRemoved) ensureFavicon();
-  });
-
-  observer.observe(document.head, { childList: true, subtree: false });
+  requestAnimationFrame(step);
 }
 
-// ── Boot ───────────────────────────────────────
-function boot() {
-  initScrollAnimations();
-  initNavbarScroll();
-  initMobileMenu();
-  initCarousel();
-  initCounters();
-  initFaqAccordion();
-  setupShareButtons();
-  protectFavicon();
-  loadReleaseInfo();
-  refreshCountAfterDownload();
+function showCounter(total) {
+  const wrap = $('counter');
+  const num = $('counter-num');
+  if (!wrap || !num) return;
 
-  // Set footer year
-  const yearEl = document.getElementById('footer-year');
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
+  // Never render 0 or NaN — fall back to the static shields.io badge.
+  if (!Number.isFinite(total) || total <= 0) {
+    showCounterBadge();
+    return;
+  }
+
+  wrap.dataset.state = 'ready';
+  if (!('IntersectionObserver' in window)) {
+    countUp(num, total);
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        countUp(num, total);
+        io.disconnect();
+      });
+    },
+    { threshold: 0.4 },
+  );
+  io.observe(wrap);
+}
+
+function showCounterBadge() {
+  const wrap = $('counter');
+  const badge = $('counter-badge');
+  if (!wrap || !badge) return;
+  wrap.dataset.state = 'badge';
+  badge.hidden = false;
+}
+
+/* ── release notes: a small, escape-first markdown subset ───── */
+const esc = (s) =>
+  String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const safeHref = (url) => (/^https?:\/\//i.test(url) ? url : null);
+
+function inline(text) {
+  const code = [];
+  // Park code spans so their contents are never treated as markup.
+  let s = text.replace(/`([^`]+)`/g, (_, c) => `\u0000${code.push(c) - 1}\u0000`);
+
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, label, url) => {
+    const href = safeHref(url);
+    return href ? `<a href="${href}" target="_blank" rel="noopener">${label}</a>` : m;
+  });
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, lead, url) => {
+    const trimmed = url.replace(/[.,;:]+$/, '');
+    return `${lead}<a href="${trimmed}" target="_blank" rel="noopener">${trimmed}</a>`;
+  });
+  s = s.replace(/(^|\s)@([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\b/g,
+    (_, lead, user) => `${lead}<a href="https://github.com/${user}" target="_blank" rel="noopener">@${user}</a>`);
+  s = s.replace(/(^|\s)#(\d+)\b/g,
+    (_, lead, num) => `${lead}<a href="${REPO_URL}/issues/${num}" target="_blank" rel="noopener">#${num}</a>`);
+
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${code[Number(i)]}</code>`);
+}
+
+function renderNotes(markdown) {
+  const src = esc(markdown || '').replace(/\r\n/g, '\n');
+  const lines = src.split('\n');
+  const html = [];
+  let list = null;      // 'ul' | 'ol' | null
+  let fence = null;     // buffered code-block lines
+  let para = [];
+
+  const flushPara = () => {
+    if (para.length) {
+      html.push(`<p>${inline(para.join(' '))}</p>`);
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (list) {
+      html.push(`</${list}>`);
+      list = null;
+    }
+  };
+  const flushAll = () => { flushPara(); flushList(); };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    if (/^\s*```/.test(line)) {
+      if (fence === null) {
+        flushAll();
+        fence = [];
+      } else {
+        html.push(`<pre><code>${fence.join('\n')}</code></pre>`);
+        fence = null;
+      }
+      continue;
+    }
+    if (fence !== null) { fence.push(raw); continue; }
+
+    if (!line.trim()) { flushAll(); continue; }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushAll();
+      const level = Math.min(heading[1].length + 1, 4); // never emit an h1
+      html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^\s*([-*_])\s*\1\s*\1[-\s*_]*$/.test(line)) {
+      flushAll();
+      html.push('<hr />');
+      continue;
+    }
+
+    const bullet = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (bullet) {
+      flushPara();
+      if (list !== 'ul') { flushList(); html.push('<ul>'); list = 'ul'; }
+      html.push(`<li>${inline(bullet[1])}</li>`);
+      continue;
+    }
+
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (numbered) {
+      flushPara();
+      if (list !== 'ol') { flushList(); html.push('<ol>'); list = 'ol'; }
+      html.push(`<li>${inline(numbered[1])}</li>`);
+      continue;
+    }
+
+    flushList();
+    para.push(line.trim());
+  }
+
+  if (fence !== null) html.push(`<pre><code>${fence.join('\n')}</code></pre>`);
+  flushAll();
+  return html.join('\n');
+}
+
+const prettyDate = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+function renderNews(releases) {
+  const feed = $('news-feed');
+  if (!feed) return;
+  feed.setAttribute('aria-busy', 'false');
+
+  const list = publicReleases(releases).slice(0, NEWS_COUNT);
+  if (!list.length) {
+    feed.innerHTML =
+      '<div class="news-empty">Couldn\'t reach the GitHub API just now. ' +
+      '<a href="' + REPO_URL + '/releases" target="_blank" rel="noopener">Read the release notes on GitHub</a>.</div>';
+    return;
+  }
+
+  /* The newest release renders open and in full. Older ones sit behind a
+     disclosure the reader controls. Nothing anywhere is clipped, line-clamped
+     or capped in height — that failure mode is the whole reason for this
+     section's markup. */
+  feed.innerHTML = list.map((r, i) => releaseCard(r, i === 0)).join('');
+}
+
+function releaseCard(r, latest) {
+  const tag = esc(r.tag_name || r.name || 'Release');
+  const url = safeHref(r.html_url) || `${REPO_URL}/releases`;
+  // GitHub usually sets name to the tag minus its leading "v". That isn't a
+  // title, so only show it when it actually says something different.
+  const bare = (v) => String(v || '').replace(/^v/i, '').trim();
+  const named =
+    r.name && bare(r.name) !== bare(r.tag_name)
+      ? `<span class="release-name">${esc(r.name)}</span>`
+      : '';
+  const body =
+    renderNotes(r.body) ||
+    `<p class="release-none">No notes were published against this tag.
+       <a href="${url}" target="_blank" rel="noopener">See the commits on GitHub</a>.</p>`;
+
+  const head =
+    `<a class="release-tag" href="${url}" target="_blank" rel="noopener">${tag}</a>
+     ${latest ? '<span class="release-new">Latest</span>' : ''}
+     <span class="release-date">${prettyDate(r.published_at)}</span>${named}`;
+
+  if (latest) {
+    return `<article class="release release--latest">
+      <div class="release-head">${head}</div>
+      <div class="release-body">${body}</div>
+    </article>`;
+  }
+
+  return `<details class="release release--older">
+    <summary class="release-head">${head}<i aria-hidden="true"></i></summary>
+    <div class="release-body">${body}</div>
+  </details>`;
+}
+
+function applyRelease(releases) {
+  const live = publicReleases(releases);
+  const latest = live[0] || releases[0];
+  if (!latest) return;
+
+  const tag = latest.tag_name || latest.name || '';
+  const pill = $('pill-version');
+  if (pill) pill.textContent = `${tag} is out — see what changed`;
+  const footVer = $('foot-version');
+  if (footVer) footVer.textContent = tag || '—';
+  const getMeta = $('get-meta');
+  if (getMeta && tag) getMeta.textContent = `${tag} · Windows 10 / 11 · 64-bit · MIT licensed`;
+
+  const exe = installerAsset(latest);
+  if (!exe) return;
+
+  for (const id of ['cta-primary', 'cta-secondary']) {
+    const btn = $(id);
+    // Don't hijack the button if platform detection pointed it at the web app.
+    if (btn && !btn.dataset.webapp) btn.href = exe.browser_download_url;
+  }
+
+  const size = $('get-size');
+  if (size && exe.size) {
+    size.textContent = `${Math.round(exe.size / 1048576)} MB installer · every engine included`;
+  }
+}
+
+async function loadGitHub() {
+  const cached = cacheRead();
+
+  if (cached?.fresh) {
+    applyRelease(cached.releases);
+    renderNews(cached.releases);
+    showCounter(totalDownloads(cached.releases));
+    return;
+  }
+
+  try {
+    const releases = await fetchReleases();
+    if (!releases.length) throw new Error('no releases');
+    cacheWrite(releases);
+    applyRelease(releases);
+    renderNews(releases);
+    showCounter(totalDownloads(releases));
+  } catch {
+    // Rate-limited, offline, or the API is having a day. Use whatever we have.
+    if (cached) {
+      applyRelease(cached.releases);
+      renderNews(cached.releases);
+      showCounter(totalDownloads(cached.releases));
+    } else {
+      showCounterBadge();
+      renderNews([]);
+      const pill = $('pill-version');
+      if (pill) pill.textContent = 'See the latest release';
+    }
+  }
+}
+
+/* ── sharing ────────────────────────────────────────────────── */
+function initShare() {
+  const url = encodeURIComponent(PAGE_URL);
+  const x = $('share-x');
+  if (x) x.href = `https://x.com/intent/post?text=${encodeURIComponent(SHARE_TEXT)}&url=${url}`;
+
+  const reddit = $('share-reddit');
+  if (reddit) {
+    reddit.href = `https://www.reddit.com/submit?url=${url}&title=${encodeURIComponent(
+      'Internet Download Hub — free, open source video downloader for Windows',
+    )}`;
+  }
+
+  const btn = $('copy-btn');
+  const label = $('copy-label');
+  if (!btn || !label) return;
+
+  btn.addEventListener('click', async () => {
+    const done = (text) => {
+      label.textContent = text;
+      setTimeout(() => { label.textContent = 'Copy link'; }, 2200);
+    };
+    try {
+      await navigator.clipboard.writeText(PAGE_URL);
+      done('Copied');
+    } catch {
+      window.prompt('Copy this link:', PAGE_URL);
+      done('Copy link');
+    }
+  });
+}
+
+/* ── boot ───────────────────────────────────────────────────── */
+function boot() {
+  const year = $('year');
+  if (year) year.textContent = String(new Date().getFullYear());
+
+  initReveals();
+  initScrollFx();
+  initSheet();
+  initPlatform();
+  initShare();
+  loadGitHub();
 }
 
 if (document.readyState === 'loading') {

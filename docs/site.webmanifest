@@ -1,0 +1,15 @@
+{
+  "name": "Internet Download Hub",
+  "short_name": "Download Hub",
+  "description": "Free, open source video downloader for Windows. 1000+ sites, four engines bundled, no ads.",
+  "start_url": "/Internet-Download-Hub/",
+  "scope": "/Internet-Download-Hub/",
+  "display": "standalone",
+  "background_color": "#0B0B12",
+  "theme_color": "#0B0B12",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
