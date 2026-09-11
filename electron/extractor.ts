@@ -534,12 +534,12 @@ async function extractWithPlaywright(
   cookiesFile?: string | null,
 ): Promise<VideoInfo> {
   // Dynamically import playwright-core so it is never required at startup.
-  // The package is NOT bundled inside the installer — it is an optional dependency
-  // that is present only in the development node_modules tree.
+  // It is declared in optionalDependencies and excluded from the installer's
+  // "files" list, so it is present in development but absent in the packaged app.
+  // Run `npm run setup:playwright` once to fetch the Chromium build it drives.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chromium: any; // playwright-core types are not available at runtime in the packaged app
   try {
-    // @ts-expect-error — playwright-core is an optional peer dependency loaded at runtime
     const playwrightCore = await import('playwright-core');
     chromium = playwrightCore.chromium;
   } catch {

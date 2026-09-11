@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Releases shipped a stale main process.** `electron/main.cjs` is an esbuild bundle of `electron/main.ts`, but it was committed to the repository and the release workflow never rebuilt it — electron-builder packaged whichever bundle happened to be in the tagged commit. Because the v1.1.5 release commit changed `main.ts` without rebuilding, **the v1.1.5 installer shipped the v1.1.4 main process and none of the 1.1.5 desktop fixes**. Both `.cjs` bundles are now generated-only and gitignored, and `.github/workflows/release.yml` runs `npm run build:electron` before packaging.
+- **Splash screen never appeared in the installed app.** `createSplashWindow()` looked for `splash.html` under `app.asar.unpacked/dist/`, but the builder packs it inside the asar at `client/splash.html` and does not unpack it, so a blank always-on-top window was shown. It now resolves the file relative to `app.getAppPath()`.
+- **`npm run setup:playwright` installed the wrong package.** `electron/extractor.ts` dynamically imports `playwright-core`, which was never declared as a dependency, so the Playwright fallback extraction engine could never run. `playwright-core` is now an `optionalDependency` (still excluded from the packaged installer) and the script invokes its CLI.
+- **`scripts/download-binaries.ts` leaked scratch files on failure.** A missing file inside a downloaded archive threw before the cleanup step, leaving a `temp_*/` directory and its zip behind. Extraction is now wrapped in `try`/`finally`.
+
+### Removed
+
+- Unused code: 25 unreferenced shadcn/ui components, plus `download-item.tsx`, `not-found.tsx`, `web-api.ts`, `api-config.ts`, `formatting.ts`, `use-ws-progress.ts`, `use-settings.ts`, `types/index.ts`, and `electron/utils/logger.ts` — none had an importer.
+- `scripts/build.ts` and the `build` script: it emitted `dist/main.cjs` and `dist/preload.cjs`, which electron-builder never packaged. Use `build:win` / `build:mac` / `build:linux`.
+- The `prebuild:win` script: npm ran it automatically before `build:win`, then `build:electron` immediately rebuilt and overwrote both bundles, discarding its output.
+- `scripts/dev-electron.cjs`: an unreferenced duplicate of `dev-electron.ts`.
+- `tsconfig.server.json`: unreferenced; `server/**/*` is already covered by the root `tsconfig.json`.
+- 26 unused npm packages, including `framer-motion`, `electron-updater`, `ws`, `recharts`, `date-fns`, `cmdk`, `vaul`, and 12 unused Radix primitives.
+
+### Changed
+
+- Generated artifacts are no longer tracked in git: the two Electron bundles and the icon set built by `npm run generate:icons`.
+- Added `.github/workflows/ci.yml` running lint, typecheck, and tests on every push and pull request. Release builds now use `npm ci` instead of `npm install`.
+- Enabled `eslint-plugin-react-hooks`, which was installed but never wired into the lint config.
+
 ## [1.1.5] - 2026-09-10
 
 ### Fixed

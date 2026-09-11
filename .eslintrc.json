@@ -7,6 +7,7 @@
   "extends": [
     "eslint:recommended",
     "plugin:react/recommended",
+    "plugin:react-hooks/recommended",
     "plugin:@typescript-eslint/recommended",
     "prettier"
   ],
@@ -20,29 +21,30 @@
   },
   "plugins": [
     "react",
+    "react-hooks",
     "@typescript-eslint"
   ],
   "rules": {
     "react/react-in-jsx-scope": "off",
     "react/prop-types": "off",
     "no-unused-vars": "off",
-    "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
     "@typescript-eslint/no-explicit-any": "warn"
   },
   "overrides": [
     {
-      "files": ["client/src/components/ui/*.tsx", "client/src/components/ui/*.ts"],
+      "files": [
+        "client/src/components/ui/*.tsx",
+        "client/src/components/ui/*.ts"
+      ],
       "rules": {
         "@typescript-eslint/ban-ts-comment": "off",
         "react/no-unknown-property": "off"
-      }
-    },
-    {
-      "files": ["*.cjs"],
-      "rules": {
-        "@typescript-eslint/no-require-imports": "off",
-        "@typescript-eslint/no-var-requires": "off",
-        "no-undef": "off"
       }
     }
   ],

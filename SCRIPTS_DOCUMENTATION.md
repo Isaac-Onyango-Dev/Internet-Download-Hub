@@ -14,7 +14,7 @@ This document explains the purpose and functionality of each script in `package.
 
 - **Purpose**: Builds only the main Electron process (TypeScript to CommonJS)
 - **Used for**: Faster iteration during development
-- **Command**: `npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:electron-updater --external:sql.js --external:playwright-core`
+- **Command**: `npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core`
 
 ### `dev`
 
@@ -37,7 +37,8 @@ This document explains the purpose and functionality of each script in `package.
 
 - **Purpose**: Installs the Playwright Chromium browser used by the Playwright fallback extraction engine (`electron/extractor.ts`)
 - **When**: Run manually as needed — not wired to `postinstall`, so it does not run automatically after `npm install`
-- **Command**: `npx playwright install chromium`
+- **Command**: `npx playwright-core install chromium`
+- **Note**: `playwright-core` is declared in `optionalDependencies` and is excluded from the packaged installer, so this engine is available in development only
 
 ### `test`
 
@@ -45,15 +46,6 @@ This document explains the purpose and functionality of each script in `package.
 - **Command**: `vitest run`
 
 ## Build Scripts
-
-### `build`
-
-- **Purpose**: Full production build pipeline
-- **Steps**:
-  1. Builds React frontend with Vite
-  2. Builds Electron processes
-  3. Runs electron-builder for packaging
-- **Command**: `tsx scripts/build.ts && electron-builder build`
 
 ### `setup:binaries`
 
@@ -72,15 +64,6 @@ This document explains the purpose and functionality of each script in `package.
 - **Purpose**: Builds Electron processes (main and preload) for production
 - **Process**: Converts TypeScript to CommonJS with bundling and minification
 - **Command**: `npx esbuild electron/main.ts --bundle --platform=node --format=cjs --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --outfile=electron/preload.cjs --external:electron`
-
-### `prebuild:win`
-
-- **Purpose**: Pre-build setup for Windows production builds
-- **Steps**:
-  1. Builds Vite frontend
-  2. Builds Electron processes with production defines
-  3. Handles import.meta.url for CommonJS compatibility
-- **Command**: `vite build && npx esbuild electron/main.ts --bundle --platform=node --format=cjs --define:import.meta.url=undefined --outfile=electron/main.cjs --external:electron --external:electron-log --external:sql.js --external:playwright-core && npx esbuild electron/preload.ts --bundle --platform=node --define:import.meta.url=undefined --outfile=electron/preload.cjs --external:electron`
 
 ### `build:win`
 
@@ -152,10 +135,7 @@ npm run dev:web
 ### Production Build
 
 ```bash
-# Build for current platform
-npm run build
-
-# Build for specific platforms
+# Build for a specific platform
 npm run build:win    # Windows
 npm run build:mac    # macOS
 npm run build:linux  # Linux

@@ -32,7 +32,7 @@ git remote add upstream https://github.com/Isaac-Onyango-Dev/Internet-Download-H
 
 ### Prerequisites
 
-- **Node.js 18+** — Download from [nodejs.org](https://nodejs.org/)
+- **Node.js 20+** — Download from [nodejs.org](https://nodejs.org/)
 - **npm 9+** — Comes with Node.js
 - **Windows 10/11** — The app is designed for Windows
 

@@ -1355,8 +1355,11 @@ function createWindow() {
     },
   });
 
+  // Packaged: splash.html ships inside the asar at client/splash.html (see the
+  // "files" array in package.json). It is not unpacked, so resolve it relative
+  // to the app path rather than resourcesPath/app.asar.unpacked.
   const splashPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'splash.html')
+    ? path.join(app.getAppPath(), 'client', 'splash.html')
     : path.join(process.cwd(), 'client', 'splash.html');
 
   if (fs.existsSync(splashPath)) {

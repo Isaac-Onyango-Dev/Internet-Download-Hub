@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/icon.png" alt="Internet Download Hub" width="128" height="128" />
+  <img src="docs/icon.png" alt="Internet Download Hub" width="128" height="128" />
   <h1>Internet Download Hub</h1>
   <p>A free, open source desktop video downloader for Windows</p>
 
@@ -28,11 +28,11 @@ A fully free web-based version of Internet Download Hub is available for quick d
 
 - **Web App**: [internet-download-hub.onrender.com](https://internet-download-hub.onrender.com/)
 - **No installation required** — works directly in your browser
-- **Powered by Cobalt API** — supports YouTube, TikTok, Twitter, Instagram, and more
-- **Fully static** — operates locally in your browser with zero backend requirements
+- **Server-side yt-dlp** — an Express backend runs the same download engine as the desktop app
+- **Hosted on Render** — see `render.yaml` and `server/index.ts`
 
 **Web Version Limitations:**
-- Uses Cobalt API (community instances)
+- Shared free-tier server, so downloads are slower and large files may time out
 - No persistent download history
 - Basic quality selection
 - Supported sites: YouTube, TikTok, Twitter, Instagram, Reddit, Vimeo, and 50+ other platforms
@@ -55,7 +55,7 @@ A fully free web-based version of Internet Download Hub is available for quick d
 | **Build Tool**         | [Vite](https://vitejs.dev/)                                                                                                                                                   |
 | **Styling**            | [Tailwind CSS](https://tailwindcss.com/)                                                                                                                                      |
 | **Download Engines**   | [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/), [streamlink](https://streamlink.github.io/), [N_m3u8DL-RE](https://github.com/nilaoda/N_m3u8DL-RE) |
-| **Browser Automation** | [Playwright](https://playwright.dev/)                                                                                                                                         |
+| **Browser Automation** | [Playwright](https://playwright.dev/) — optional dev-only fallback engine, not bundled in the installer                                                                     |
 
 ## Supported Sites
 
@@ -82,7 +82,7 @@ Internet Download Hub supports downloading from **1000+ websites**, including:
 - Multiple quality options — 1080p, 720p, 480p, 360p, Audio Only
 - Fast parallel downloading with real-time progress tracking
 - Automatic audio and video merging via FFmpeg
-- Smart fallback engine system — yt-dlp, streamlink, N_m3u8DL-RE, Playwright
+- Smart fallback engine system — yt-dlp, streamlink, gallery-dl, N_m3u8DL-RE
 - Download queue with pause, resume, and cancel
 - Download history
 - Customizable save location

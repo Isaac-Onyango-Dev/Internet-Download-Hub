@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Read-only: this workflow only verifies, it never writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      # The release pipeline builds these from source. Verifying them on every
+      # change means a bundling failure fails a pull request, not a tagged release.
+      - name: Build frontend
+        run: npx vite build
+
+      - name: Build Electron main and preload bundles
+        run: npm run build:electron

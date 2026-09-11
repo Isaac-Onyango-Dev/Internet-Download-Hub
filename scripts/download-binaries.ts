@@ -142,27 +142,34 @@ async function main() {
           await exec(`powershell -Command "Remove-Item -Recurse -Force '${tempExtractDir}'"`);
         }
         mkdirSync(tempExtractDir);
-        await extractZip(zipDest, tempExtractDir);
 
-        for (let i = 0; i < binary.searchFiles!.length; i++) {
-          const searchFile = binary.searchFiles![i];
-          const name = binary.names[i];
-          const finalDest = join(BINARIES_DIR, name);
-          const foundPath = findFile(tempExtractDir, searchFile);
-          if (foundPath) {
-            if (existsSync(finalDest)) {
-              unlinkSync(finalDest);
+        // The archive and its extraction directory are scratch space. Clean them
+        // up in a finally block so a missing file inside the archive cannot leave
+        // a stray temp_*/ directory (and a multi-hundred-MB zip) behind.
+        try {
+          await extractZip(zipDest, tempExtractDir);
+
+          for (let i = 0; i < binary.searchFiles!.length; i++) {
+            const searchFile = binary.searchFiles![i];
+            const name = binary.names[i];
+            const finalDest = join(BINARIES_DIR, name);
+            const foundPath = findFile(tempExtractDir, searchFile);
+            if (foundPath) {
+              if (existsSync(finalDest)) {
+                unlinkSync(finalDest);
+              }
+              renameSync(foundPath, finalDest);
+              console.log(`Extracted and moved ${name}`);
+            } else {
+              throw new Error(`Could not find ${searchFile} in extracted archive`);
             }
-            renameSync(foundPath, finalDest);
-            console.log(`Extracted and moved ${name}`);
-          } else {
-            throw new Error(`Could not find ${searchFile} in extracted archive`);
+          }
+        } finally {
+          if (existsSync(zipDest)) unlinkSync(zipDest);
+          if (existsSync(tempExtractDir)) {
+            await exec(`powershell -Command "Remove-Item -Recurse -Force '${tempExtractDir}'"`);
           }
         }
-
-        // Cleanup
-        unlinkSync(zipDest);
-        await exec(`powershell -Command "Remove-Item -Recurse -Force '${tempExtractDir}'"`);
       } else {
         const finalDest = join(BINARIES_DIR, binary.names[0]);
         if (existsSync(finalDest)) unlinkSync(finalDest);

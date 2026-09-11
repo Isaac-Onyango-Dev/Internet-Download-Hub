@@ -6,15 +6,10 @@ dist/
 release/
 out/
 build/
+coverage/
 
-# Documentation assets (minified bundles)
-docs/web/assets/
-docs/app/assets/
-docs/app/index.html
-
-# Electron bundles
+# Electron bundles (esbuild output)
 electron/*.cjs
 
-# Utility scripts
-parse_lint.js
-parse_lint.cjs
+# Static marketing site (hand-authored, not part of the TS project)
+docs/

@@ -1,13 +1,27 @@
+# Dependencies and build output (rebuilt inside the image)
 node_modules
 dist
 release
+
+# Desktop-only artifacts — the web image uses the yt-dlp installed in the Dockerfile
 binaries
 *.exe
 *.dmg
+assets/*.ico
+assets/*.icns
+
+# Repository metadata and static marketing site
 .git
 .github
 docs
-assets/*.ico
-assets/*.icns
-playwright_test_log.txt
-fix.mjs
+
+# Local editor / AI assistant config
+.vscode
+.idea
+.claude
+.qwen
+.production
+
+# Environment files
+.env
+.env.*
