@@ -1,19 +1,21 @@
 <div align="center">
   <img src="docs/icon.png" alt="Internet Download Hub" width="128" height="128" />
   <h1>Internet Download Hub</h1>
-  <p>A free, open source desktop video downloader for Windows</p>
+  <p>Grab any video, anywhere. A free, open source desktop video downloader for Windows.</p>
+
+  <p><strong><a href="https://isaac-onyango-dev.github.io/Internet-Download-Hub/">internet download hub — download page</a></strong></p>
 
   <!-- Build Status Badge - Add your CI badge here -->
   <!-- ![Build Status](https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/actions/workflows/ci.yml/badge.svg) -->
 
   <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Isaac-Onyango-Dev/Internet-Download-Hub?label=Download&style=for-the-badge&color=2563EB" alt="Download" />
+    <img src="https://img.shields.io/github/v/release/Isaac-Onyango-Dev/Internet-Download-Hub?label=Download&style=for-the-badge&color=FF2E9A&labelColor=0B0B12" alt="Download the latest release" />
   </a>
-  <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest">
-    <img src="https://img.shields.io/github/downloads/Isaac-Onyango-Dev/Internet-Download-Hub/total?style=for-the-badge&color=059669" alt="Downloads" />
+  <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases">
+    <img src="https://img.shields.io/github/downloads/Isaac-Onyango-Dev/Internet-Download-Hub/total?style=for-the-badge&color=8B2FE0&labelColor=0B0B12" alt="Total downloads across all GitHub Releases" />
   </a>
-  <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D4?style=for-the-badge" alt="Windows" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License" />
+  <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-22D3EE?style=for-the-badge&labelColor=0B0B12" alt="Windows 10 and 11" />
+  <img src="https://img.shields.io/badge/License-MIT-FF7A2F?style=for-the-badge&labelColor=0B0B12" alt="MIT licensed" />
 </div>
 
 ---
@@ -169,13 +171,55 @@ docker run -p 3001:3001 internet-download-hub
 
 This is an alternative to the hosted [web app](https://internet-download-hub.onrender.com/) for self-hosting; it is not used by the project's own CI/CD or deployments.
 
+## Releasing
+
+`package.json` is the single source of truth for the version. Everything else is
+derived from it or from the published GitHub Release, so no version number is
+ever typed twice.
+
+To cut a release:
+
+1. Move the `## [Unreleased]` entries in [CHANGELOG.md](./CHANGELOG.md) under a
+   new `## [X.Y.Z] - YYYY-MM-DD` heading.
+2. Bump `version` in `package.json` to the same `X.Y.Z`.
+3. Commit, then push the matching tag:
+
+```cmd
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The tag push runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
+which:
+
+- refuses to continue if the tag and `package.json` disagree, or if
+  `CHANGELOG.md` has no section for that version;
+- builds the release notes from that CHANGELOG section
+  (`scripts/release-notes.ts`), with GitHub's generated commit list appended;
+- downloads and verifies every bundled engine, builds the installer, and
+  attaches it to the GitHub Release;
+- redeploys the GitHub Pages site as its final step.
+
+Nothing after step 3 is manual. The badges above read the current version and
+the total download count from the GitHub API, and the download page reads the
+version, the installer link and the changelog from the same place, so both
+update on their own once the release is published.
+
+A tag-push convention is used rather than `semantic-release` because releases
+here are cut deliberately, the installer build is the slow and failure-prone
+part of the pipeline, and the CHANGELOG is written for people rather than
+derived from commit subjects. Automating the version bump would not remove a
+step; it would only move where the version is decided.
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute.
 
 ## Support
 
-If you find this app useful please consider sharing it with others. Visit the [project website](https://internet-download-hub.onrender.com) to share or report issues.
+If you find this app useful please consider sharing it with others. The
+[download page](https://isaac-onyango-dev.github.io/Internet-Download-Hub/) has
+share links, and bugs belong in the [issue tracker](https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues).
 
 ## End-user agreement (EULA)
 

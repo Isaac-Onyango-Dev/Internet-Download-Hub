@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **New download site** (`docs/`), rebuilt from scratch on an original "Prism Pop" identity: a near-black canvas with a magenta → violet → cyan gradient used only as a glow and as the brand fill, one warm coral reserved for the primary call to action, Bricolage Grotesque for display type and Inter for body. New wordmark (the "o" of *Download* is a play-button notch), new mark, favicon set, web manifest and Open Graph image, all generated from `docs/brand/mark.svg`.
+- **"What's new" section** on the site, rendered live from GitHub Releases. Release bodies render in full — no fixed-height container, no `line-clamp`, no `overflow: hidden` anywhere in that subtree. The newest release is open by default; older ones sit behind a disclosure that expands to their full height.
+- **`docs/404.html`**, styled to match the rest of the site.
+- **`scripts/release-notes.ts`** extracts a version's section from `CHANGELOG.md` to use as the GitHub Release body, with unit tests in `scripts/release-notes.test.ts`.
+
+### Changed
+
+- The download counter now sums `assets[].download_count` across every release, caches the result in `localStorage` for 8 minutes to stay inside GitHub's unauthenticated rate limit, and falls back to a static shields.io badge when the API is unreachable or returns nothing. It never renders `0` or `NaN`.
+- The primary call to action detects the visitor's platform: Windows gets the installer, macOS and Linux get an honest "no build yet" note with the platform picker already open, and mobile is pointed at the hosted web version.
+- Screenshots are now a horizontally scrolling strip at their natural aspect ratios rather than a fixed-height carousel, which is what caused the height mismatch fixed in the previous round.
+- `release.yml` now fails before building if `CHANGELOG.md` has no section for the tag, publishes that section as the release body (v1.1.5 shipped with an empty one), and redeploys the GitHub Pages site as its final step via `deploy-web.yml`'s new `workflow_call` trigger.
+- README documents the release process and the reasoning behind tag-push over `semantic-release`; its badges were recoloured to the new palette.
+
 ### Fixed
 
 - **Releases shipped a stale main process.** `electron/main.cjs` is an esbuild bundle of `electron/main.ts`, but it was committed to the repository and the release workflow never rebuilt it — electron-builder packaged whichever bundle happened to be in the tagged commit. Because the v1.1.5 release commit changed `main.ts` without rebuilding, **the v1.1.5 installer shipped the v1.1.4 main process and none of the 1.1.5 desktop fixes**. Both `.cjs` bundles are now generated-only and gitignored, and `.github/workflows/release.yml` runs `npm run build:electron` before packaging.

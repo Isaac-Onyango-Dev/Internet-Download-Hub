@@ -105,3 +105,6 @@ temp/
 .cache/
 .parcel-cache/
 .eslintcache
+
+# Generated at release time by scripts/release-notes.ts
+release-notes.md

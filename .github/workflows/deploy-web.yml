@@ -5,12 +5,18 @@ name: Deploy GitHub Pages
 # canonical web app at internet-download-hub.onrender.com — GitHub Pages
 # no longer hosts a rebuilt copy of the SPA; Render is the single source
 # of truth for the live web app).
+#
+# workflow_call exists so the release pipeline can redeploy the site as its
+# last step: publishing a release changes what the site's version display,
+# download button and "What's new" section resolve to, and nothing under
+# docs/ has to change for that to be true.
 on:
   push:
     branches:
       - main
     paths:
       - 'docs/**'
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -18,9 +24,9 @@ permissions:
   pages: write
   id-token: write
 
-# Only one Pages deployment can run at a time; this is the only workflow
-# that targets the github-pages environment, so there is no cross-workflow
-# race to guard against.
+# Only one Pages deployment can run at a time. A release triggers this
+# workflow as well, so cancel-in-progress keeps the newest deploy and drops
+# any older one still queued.
 concurrency:
   group: pages
   cancel-in-progress: true
