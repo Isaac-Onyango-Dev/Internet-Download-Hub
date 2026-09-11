@@ -15,6 +15,7 @@
 
 // Import core Electron modules for desktop app functionality
 import log from 'electron-log'; // Logging utility
+import { autoUpdater } from 'electron-updater'; // In-place app updates from GitHub Releases
 import {
   app,
   BrowserWindow,
@@ -1149,83 +1150,8 @@ function createApplicationMenu() {
         { type: 'separator' },
         {
           label: 'Check for Updates',
-          click: async () => {
-            if (!mainWindow) return;
-
-            // Show a loading indicator via the window title temporarily
-            const currentVersion = app.getVersion();
-            log.info(`[Menu] Checking for updates… (installed: v${currentVersion})`);
-
-            try {
-              const release = await fetchJson(
-                'https://api.github.com/repos/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest',
-              );
-              const latestTag: string = release.tag_name; // e.g. "v1.1.3"
-              const latestVersion = latestTag.replace(/^v/, '');
-
-              if (currentVersion === latestVersion) {
-                dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: 'You\'re up to date',
-                  message: 'Internet Download Hub is up to date.',
-                  detail:
-                    `Installed version: v${currentVersion}\n\n` +
-                    `You're running the latest version. Updates will be automatically ` +
-                    `downloaded when new releases are published.`,
-                  buttons: ['OK'],
-                  defaultId: 0,
-                  noLink: true,
-                });
-              } else {
-                const releaseName = release.name || latestVersion;
-                const releaseBody = release.body || '';
-                const releaseNotes = releaseBody
-                  .split('\n')
-                  .filter((line: string) => line.trim())
-                  .slice(0, 20) // limit to first 20 lines
-                  .join('\n');
-
-                const { response } = await dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: 'Update Available',
-                  message: `Version ${latestVersion} is available`,
-                  detail:
-                    `Installed: v${currentVersion}\nLatest: v${latestVersion}\n\n` +
-                    `${releaseNotes ? `Release Notes:\n${releaseNotes}\n\n` : ''}` +
-                    `You can download the latest installer from GitHub.`,
-                  buttons: ['Download Update', 'Later'],
-                  defaultId: 0,
-                  cancelId: 1,
-                  noLink: true,
-                });
-
-                if (response === 0) {
-                  shell.openExternal(
-                    `https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest`,
-                  );
-                }
-              }
-            } catch (err: unknown) {
-              log.error('[Menu] Update check failed:', err);
-              dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: 'Update Check Failed',
-                message: 'Could not check for updates.',
-                detail:
-                  'Please check your internet connection and try again.\n\n' +
-                  'You can also visit the releases page manually:',
-                buttons: ['Open GitHub Releases', 'Cancel'],
-                defaultId: 0,
-                cancelId: 1,
-                noLink: true,
-              }).then(({ response }) => {
-                if (response === 0) {
-                  shell.openExternal(
-                    'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest',
-                  );
-                }
-              });
-            }
+          click: () => {
+            void checkForAppUpdates();
           },
         },
         { type: 'separator' },
@@ -1594,6 +1520,231 @@ async function downloadFile(url: string, dest: string): Promise<void> {
     };
     doRequest(url);
   });
+}
+
+// ── App Self-Update ──────────────────────────────────────────────────────────
+// "Check for Updates" asks the GitHub API which release is newest, then hands
+// the install to electron-updater, which downloads the release installer and
+// runs it. Every way that can go wrong — an unsupported platform, a dev build,
+// missing update metadata, GitHub rejecting the request, a failed download —
+// ends at the public download page. It never ends at the GitHub releases/tags
+// page, which a non-technical user cannot navigate.
+
+const APP_RELEASE_API =
+  'https://api.github.com/repos/Isaac-Onyango-Dev/Internet-Download-Hub/releases/latest';
+const DOWNLOAD_PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/';
+
+/** Stops a second "Check for Updates" click from stacking requests and dialogs. */
+let appUpdateInFlight = false;
+
+/**
+ * Open the public download page in the user's default browser.
+ * If even that fails, show the address and offer to copy it, so the user is
+ * never left with a dead button and no way forward.
+ */
+async function openDownloadPage(): Promise<void> {
+  try {
+    await shell.openExternal(DOWNLOAD_PAGE_URL);
+    log.info(`[Update] Opened the download page: ${DOWNLOAD_PAGE_URL}`);
+  } catch (err: unknown) {
+    log.error('[Update] Could not open the download page:', err);
+    if (!mainWindow) return;
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Could not open your browser',
+      message: 'Please download the new version from our website.',
+      detail: DOWNLOAD_PAGE_URL,
+      buttons: ['Copy Link', 'OK'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response === 0) clipboard.writeText(DOWNLOAD_PAGE_URL);
+  }
+}
+
+/**
+ * Download the new version and restart into its installer.
+ *
+ * Returns null once the install is under way (the app is quitting at that
+ * point). Returns a plain-language reason string when the in-app path cannot
+ * be used, so the caller can fall back to the download page.
+ */
+async function installUpdateInApp(
+  setStatus: (text: string | null) => void,
+): Promise<string | null> {
+  // Only the Windows build ships an installer, and electron-updater needs a
+  // packaged app with app-update.yml in its resources.
+  if (process.platform !== 'win32') {
+    return 'Automatic updates are only available in the Windows build.';
+  }
+  if (!app.isPackaged) {
+    return 'Automatic updates only work in an installed build, not in development.';
+  }
+
+  const onProgress = (progress: any) => {
+    const percent = Math.max(0, Math.min(100, Math.round(progress?.percent ?? 0)));
+    setStatus(`Downloading update… ${percent}%`);
+  };
+  // electron-updater rejects its promises AND emits 'error'. An 'error' event
+  // with no listener is rethrown by EventEmitter, so keep one attached.
+  const onError = (err: unknown) => log.error('[Update] electron-updater reported:', err);
+
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = false; // the dialog decides, not the check
+  autoUpdater.autoInstallOnAppQuit = true; // if our explicit install is cut short, still land it
+  autoUpdater.on('error', onError);
+  autoUpdater.on('download-progress', onProgress);
+
+  try {
+    setStatus('Checking for updates…');
+    const result = await autoUpdater.checkForUpdates();
+    if (!result?.updateInfo) {
+      return 'The update service did not say which version to install.';
+    }
+    if (result.isUpdateAvailable === false) {
+      return 'The update service found no installable update for this build.';
+    }
+
+    setStatus('Downloading update… 0%');
+    await autoUpdater.downloadUpdate(result.cancellationToken);
+
+    setStatus('Installing update…');
+    log.info(`[Update] Downloaded v${result.updateInfo.version}; restarting to install.`);
+
+    // The window's close handler hides to tray unless isQuitting is set, which
+    // would swallow the app.quit() inside quitAndInstall() and leave the
+    // installer unrun.
+    (app as any).isQuitting = true;
+    // Defer so this call stack (and the caller's dialog) unwinds before the
+    // app tears itself down.
+    setImmediate(() => autoUpdater.quitAndInstall(false, true));
+    return null;
+  } catch (err: any) {
+    log.error('[Update] In-app update failed:', err);
+    return err?.message || 'The update could not be downloaded.';
+  } finally {
+    autoUpdater.removeListener('download-progress', onProgress);
+    autoUpdater.removeListener('error', onError);
+  }
+}
+
+/**
+ * Help ▸ Check for Updates. Compares the installed version against the newest
+ * GitHub release and offers to install it in place.
+ */
+async function checkForAppUpdates(): Promise<void> {
+  if (!mainWindow) return;
+  if (appUpdateInFlight) {
+    log.info('[Update] A check is already running; ignoring the repeat click.');
+    return;
+  }
+  appUpdateInFlight = true;
+
+  const win = mainWindow;
+  const baseTitle = win.getTitle();
+  // Progress lives in the window title: it is visible in the title bar and the
+  // taskbar without blocking the UI, and a modal dialog cannot show progress.
+  const setStatus = (text: string | null) => {
+    if (win.isDestroyed()) return;
+    win.setTitle(text ? `${baseTitle} — ${text}` : baseTitle);
+  };
+
+  const currentVersion = app.getVersion();
+  log.info(`[Menu] Checking for updates… (installed: v${currentVersion})`);
+
+  // On the success path the app is quitting into the installer, so the title
+  // keeps saying so instead of snapping back to normal.
+  let installing = false;
+
+  try {
+    setStatus('Checking for updates…');
+    const release = await fetchJson(APP_RELEASE_API);
+    const latestTag: string = release.tag_name; // e.g. "v1.1.3"
+    const latestVersion = latestTag.replace(/^v/, '');
+    setStatus(null);
+
+    if (currentVersion === latestVersion) {
+      await dialog.showMessageBox(win, {
+        type: 'info',
+        title: 'You\'re up to date',
+        message: 'Internet Download Hub is up to date.',
+        detail:
+          `Installed version: v${currentVersion}\n\n` +
+          `You're running the latest version. Check here again whenever you ` +
+          `want to see if a newer one has been released.`,
+        buttons: ['OK'],
+        defaultId: 0,
+        noLink: true,
+      });
+      return;
+    }
+
+    const releaseBody = release.body || '';
+    const releaseNotes = releaseBody
+      .split('\n')
+      .filter((line: string) => line.trim())
+      .slice(0, 20) // limit to first 20 lines
+      .join('\n');
+
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'info',
+      title: 'Update Available',
+      message: `Version ${latestVersion} is available`,
+      detail:
+        `Installed: v${currentVersion}\nLatest: v${latestVersion}\n\n` +
+        `${releaseNotes ? `Release Notes:\n${releaseNotes}\n\n` : ''}` +
+        `The app will download the update and restart to install it. ` +
+        `This can take a few minutes on a slow connection.`,
+      buttons: ['Install Update', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+
+    if (response !== 0) return;
+
+    const failureReason = await installUpdateInApp(setStatus);
+    if (failureReason === null) {
+      installing = true;
+      return; // the app is quitting into the installer
+    }
+
+    setStatus(null);
+    await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Update Failed',
+      message: 'Update failed — opening the download page instead.',
+      detail:
+        `${failureReason}\n\n` +
+        `Your browser will open at our download page, where you can get ` +
+        `v${latestVersion} and install it yourself. Nothing on this computer ` +
+        `has been changed.`,
+      buttons: ['OK'],
+      defaultId: 0,
+      noLink: true,
+    });
+    await openDownloadPage();
+  } catch (err: unknown) {
+    log.error('[Menu] Update check failed:', err);
+    setStatus(null);
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'error',
+      title: 'Update Check Failed',
+      message: 'Could not check for updates.',
+      detail:
+        'Please check your internet connection and try again.\n\n' +
+        'You can also download the latest version from our website.',
+      buttons: ['Open Download Page', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response === 0) await openDownloadPage();
+  } finally {
+    if (!installing) setStatus(null);
+    appUpdateInFlight = false;
+  }
 }
 
 /** Get the currently installed yt-dlp version string. */

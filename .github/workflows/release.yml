@@ -85,6 +85,11 @@ jobs:
 
       # body_path supplies the hand-written CHANGELOG section;
       # generate_release_notes appends GitHub's own commit/PR list underneath.
+      #
+      # latest.yml is what the in-app updater reads to learn which version is
+      # current and which asset to fetch. A release without it silently
+      # disables "Install Update" for every user, so it is listed explicitly
+      # and fail_on_unmatched_files turns a missing one into a failed build.
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -94,6 +99,7 @@ jobs:
           files: |
             release/*.exe
             release/*.blockmap
+            release/latest.yml
           # A build that produced no installer must fail, not publish an empty release.
           fail_on_unmatched_files: true
         env:
