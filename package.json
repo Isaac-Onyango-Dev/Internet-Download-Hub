@@ -1,6 +1,6 @@
 {
   "name": "internet-download-hub",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "description": "A free desktop app to download videos from YouTube, Twitter, TikTok, Instagram, and 1000+ other sites",
   "author": {
     "name": "Isaac Onyango",
@@ -43,11 +43,13 @@
     "@tanstack/react-query": "^5.60.5",
     "cors": "^2.8.6",
     "electron-log": "^5.4.3",
+    "electron-updater": "^6.8.9",
     "execa": "^5.1.1",
     "express": "^5.2.1",
     "lucide-react": "^0.453.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "semver": "^7.8.5",
     "sql.js": "^1.14.1",
     "tailwind-merge": "^3.5.0",
     "wouter": "^3.3.5"
@@ -109,6 +111,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Isaac-Onyango-Dev",
+        "repo": "Internet-Download-Hub"
+      }
+    ],
     "files": [
       "dist/**/*",
       "client/splash.html",
@@ -145,7 +154,8 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "artifactName": "Internet-Download-Hub-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
