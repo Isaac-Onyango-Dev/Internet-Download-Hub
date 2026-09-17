@@ -34,6 +34,10 @@ for (const name of [
   }
 }
 
+// N_m3u8DL-RE's console library turns its progress display off when it sees GitHub
+// Actions. The engines inherit this environment, which should look like a user's PC.
+delete process.env.GITHUB_ACTIONS;
+
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'idh-engines-'));
 process.env.IDH_ENGINES_HOME = home;
 const dl = path.join(home, 'downloads');
