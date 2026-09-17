@@ -1381,7 +1381,7 @@ function HistoryPanel() {
           percent: item.state === 'completed' ? 100 : 0,
           speed: '',
           eta: '',
-          phase: item.state === 'completed' ? 'Completed' : item.state,
+          phase: item.state.charAt(0).toUpperCase() + item.state.slice(1),
           status: item.state as DownloadJob['status'],
           totalSize: '',
           error: item.error,

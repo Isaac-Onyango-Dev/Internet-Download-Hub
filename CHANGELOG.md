@@ -50,6 +50,7 @@ every download engine.
   - The dialog showed "Playlist" with no title or size, and the videos had no thumbnails.
   - A playlist that failed to load kept the dialog loading forever.
   - "Download all" on the main page saw only the last video that arrived.
+  - With "Select specific videos" open, the dialog grew taller than the window and left "Add to Queue" and Cancel off-screen. Long video titles also pushed the list past the dialog's edge. The dialog now scrolls, and long titles end in an ellipsis.
 - **gallery-dl galleries** were always titled "Image Gallery", had no thumbnail and appeared in the queue as `.zip` files, which they never were. They are now named after the album, board or page, not after the first image in them.
 - A YouTube link to a video that does not exist said to check your connection; it now says the video was removed or is unavailable.
 - **Settings in an open panel** could overwrite a folder chosen from the menu, and raising the download limit did not start waiting downloads until another one finished.

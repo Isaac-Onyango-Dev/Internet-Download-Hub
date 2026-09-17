@@ -18,7 +18,6 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -177,8 +176,10 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
+      {/* max-h + overflow: with the video list open the dialog outgrew a 600px window and its
+          buttons ended up off-screen. min-w-0: grid children otherwise grow to fit long titles. */}
       <DialogContent
-        className="max-w-2xl w-full bg-[#111827] border border-white/10 text-white shadow-2xl"
+        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto [&>*]:min-w-0 bg-[#111827] border border-white/10 text-white shadow-2xl"
         onEscapeKeyDown={handleClose}
       >
         {/* ── Header ── */}
@@ -235,7 +236,8 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
             value={mode}
             onValueChange={(v) => handleModeChange(v as DownloadMode)}
             disabled={streaming}
-            className="space-y-2"
+            // RadioGroup is a grid too: without min-w-0 its cards grow to fit the longest title.
+            className="space-y-2 [&>*]:min-w-0"
           >
             {/* All */}
             <div className={`flex items-center gap-3 rounded-lg border border-white/10 px-4 py-3 ${streaming ? 'opacity-50' : 'hover:bg-white/5 cursor-pointer'}`}>
@@ -323,7 +325,9 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                   </div>
 
                   {/* Video list */}
-                  <ScrollArea className="h-56 pr-2">
+                  {/* A plain scroll box: Radix ScrollArea lays its content out as a table,
+                      which ignores `truncate` and pushed long titles past the dialog's edge. */}
+                  <div className="max-h-56 overflow-y-auto pr-2">
                     <ul className="space-y-1">
                       {entries.map((entry) => (
                         <li
@@ -353,7 +357,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                         </li>
                       ))}
                     </ul>
-                  </ScrollArea>
+                  </div>
 
                   {/* No selection warning */}
                   {selected.size === 0 && (
