@@ -151,7 +151,7 @@
     "asarUnpack": [
       "binaries/yt-dlp.exe",
       "binaries/gallery-dl.exe",
-      "binaries/streamlink.exe",
+      "binaries/streamlink/**/*",
       "binaries/N_m3u8DL-RE.exe",
       "binaries/ffmpeg.exe",
       "binaries/ffprobe.exe",
@@ -201,7 +201,7 @@
         "filter": [
           "yt-dlp.exe",
           "gallery-dl.exe",
-          "streamlink.exe",
+          "streamlink/**/*",
           "N_m3u8DL-RE.exe",
           "ffmpeg.exe",
           "ffprobe.exe"

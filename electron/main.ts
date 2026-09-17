@@ -35,6 +35,7 @@ import semver from 'semver'; // Version comparison that understands pre-releases
 import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process'; // Process spawning for downloads
 import execa from 'execa'; // Better process execution
 import { extractVideoInfo, streamPlaylistInfo } from './extractor'; // Video metadata extraction
+import { analyseUrl, type Engine } from './url-analyser'; // Engine order shared by extraction and download
 import fs from 'fs'; // File system operations
 import os from 'os'; // Operating system utilities
 import https from 'https'; // HTTP requests for FFmpeg download
@@ -67,32 +68,25 @@ try {
 // SITE DETECTION & ERROR HANDLING
 // ============================================================================
 
-interface SiteInfo {
-  name: string;
-  engine: 'ytdlp' | 'gallery-dl' | 'streamlink' | 'nm3u8dlre';
-  engineBinary: string;
-  isLikelyPlaylist: boolean;
+function siteName(url: string): string {
+  if (/\.m3u8/.test(url)) return 'HLS Stream';
+  try { return new URL(url).hostname.replace('www.', ''); } catch { return url || 'unknown site'; }
 }
 
-function detectSite(url: string): SiteInfo {
-  let hostname = '';
-  try { hostname = new URL(url).hostname.replace('www.', ''); } catch { hostname = url; }
-
-  if (/twitch\.tv|kick\.com|dailymotion\.com|youtu\.be|youtube\.com/.test(hostname)) {
-    return { name: hostname, engine: 'ytdlp', engineBinary: 'yt-dlp.exe',
-      isLikelyPlaylist: /list=|(\/c\/)|(\/channel\/)|(\/user\/)/.test(url) };
-  }
-  if (/tiktok\.com|instagram\.com|facebook\.com|fb\.watch|twitter\.com|x\.com|reddit\.com|vimeo\.com/.test(hostname)) {
-    return { name: hostname, engine: 'ytdlp', engineBinary: 'yt-dlp.exe', isLikelyPlaylist: false };
-  }
-  if (/pixiv\.net|deviantart\.com|flickr\.com|artstation\.com|imgur\.com/.test(hostname)) {
-    return { name: hostname, engine: 'gallery-dl', engineBinary: 'gallery-dl.exe', isLikelyPlaylist: true };
-  }
-  if (/m3u8/.test(url)) {
-    return { name: 'HLS Stream', engine: 'nm3u8dlre', engineBinary: 'N_m3u8DL-RE.exe', isLikelyPlaylist: false };
-  }
-  // Default: try yt-dlp first (it supports 1000+ sites)
-  return { name: hostname || 'unknown site', engine: 'ytdlp', engineBinary: 'yt-dlp.exe', isLikelyPlaylist: false };
+/** Engines that can download `url`, in the same order extraction tries them, skipping missing binaries. */
+function downloadEnginesFor(url: string): { engine: Engine; binary: string }[] {
+  const binaries: Partial<Record<Engine, string>> = {
+    'yt-dlp': ytDlpPath,
+    streamlink: streamlinkPath,
+    'gallery-dl': galleryDlPath,
+    'n-m3u8dl': n_m3u8dlPath,
+  };
+  let order: Engine[];
+  try { order = analyseUrl(url).engineOrder; } catch { order = ['yt-dlp']; }
+  // playwright only finds the stream URL during extraction; it never downloads.
+  return order
+    .filter((e) => binaries[e] && fs.existsSync(binaries[e]!))
+    .map((e) => ({ engine: e, binary: binaries[e]! }));
 }
 
 function buildErrorMessage(siteName: string, stderr: string): string {
@@ -240,7 +234,7 @@ function setupPaths() {
   ytDlpPath = getBinaryPath('yt-dlp.exe');
   ffmpegPath = getBinaryPath('ffmpeg.exe');
   ffprobePath = getBinaryPath('ffprobe.exe');
-  streamlinkPath = getBinaryPath('streamlink.exe');
+  streamlinkPath = getBinaryPath('streamlink/bin/streamlink.exe'); // launcher needs its sibling Python/ and pkgs/
   n_m3u8dlPath = getBinaryPath('N_m3u8DL-RE.exe');
   galleryDlPath = getBinaryPath('gallery-dl.exe');
 }
@@ -318,8 +312,8 @@ function isFFmpegAvailable(): boolean {
   const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
   const userFFmpegPath = path.join(userDataBinariesPath, 'ffmpeg.exe');
 
-  // Check if FFmpeg exists in packaged resources
-  const packagedFFmpegPath = path.join(process.resourcesPath, 'binaries', 'ffmpeg.exe');
+  // Check the bundled copy: packaged resources, or ./binaries in development
+  const packagedFFmpegPath = path.join(binariesPath, 'ffmpeg.exe');
 
   const ffmpegAvailable = fs.existsSync(userFFmpegPath) || fs.existsSync(packagedFFmpegPath);
   log.info(
@@ -369,15 +363,24 @@ async function downloadFFmpeg() {
       log.info(`[Main] Starting FFmpeg download from: ${downloadUrl}`);
 
       // Helper function to download file using streams
-      const downloadFile = (url: string, dest: string) => {
+      const downloadFile = (url: string, dest: string, redirectsLeft = 5): Promise<unknown> => {
         return new Promise((resolve, reject) => {
-          const file = fs.createWriteStream(dest);
           https
             .get(url, (response) => {
-              if (response.statusCode !== 200) {
-                reject(new Error(`Failed to download FFmpeg: ${response.statusCode}`));
+              const { statusCode = 0, headers } = response;
+              // GitHub release assets always answer with a redirect to their CDN.
+              if (statusCode >= 300 && statusCode < 400 && headers.location && redirectsLeft > 0) {
+                response.resume();
+                resolve(downloadFile(new URL(headers.location, url).toString(), dest, redirectsLeft - 1));
                 return;
               }
+              if (statusCode !== 200) {
+                response.resume();
+                reject(new Error(`Failed to download FFmpeg: ${statusCode}`));
+                return;
+              }
+              const file = fs.createWriteStream(dest);
+              file.on('error', reject);
               const totalSize = parseInt(response.headers['content-length'] || '0', 10);
               let downloaded = 0;
 
@@ -2034,17 +2037,21 @@ const BINARIES = [
   {
     name: 'streamlink',
     releaseApi: 'https://api.github.com/repos/streamlink/windows-builds/releases/latest',
-    downloadUrl: (tag: string) =>
-      `https://github.com/streamlink/windows-builds/releases/download/${tag}/streamlink-${tag.replace('v', '')}.zip`,
+    downloadUrl: null, // Asset is e.g. streamlink-8.6.1-1-py314-x86_64.zip
+    assetPattern: /x86_64\.zip$/,
     versionFlag: '--version',
-    fileName: 'streamlink.exe',
+    fileName: 'streamlink/bin/streamlink.exe',
     isZip: true,
+    // The launcher needs its sibling Python/ and pkgs/, so the whole build is kept.
+    keepDir: 'streamlink',
   },
   {
     name: 'gallery-dl',
-    releaseApi: 'https://api.github.com/repos/mikf/gallery-dl/releases/latest',
-    downloadUrl: (tag: string) =>
-      `https://github.com/mikf/gallery-dl/releases/download/${tag}/gallery-dl.exe`,
+    // Releases moved to Codeberg; its GitHub releases no longer carry binaries.
+    // Forgejo's release API returns the same tag_name/assets shape as GitHub's.
+    releaseApi: 'https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest',
+    downloadUrl: null,
+    assetPattern: /^gallery-dl\.exe$/,
     versionFlag: '--version',
     fileName: 'gallery-dl.exe',
   },
@@ -2053,17 +2060,28 @@ const BINARIES = [
     releaseApi: 'https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases/latest',
     downloadUrl: null, // Dynamic - finds the correct asset from release
     versionFlag: '--version',
+    assetPattern: /_win-x64_.*\.zip$/,
     fileName: 'N_m3u8DL-RE.exe',
     isZip: true,
   },
-];
+] as {
+  name: string;
+  releaseApi: string;
+  downloadUrl: ((tag: string) => string) | null;
+  assetPattern?: RegExp;
+  versionFlag: string;
+  fileName: string;
+  isZip?: boolean;
+  keepDir?: string;
+}[];
 
 /**
  * Helper to find the correct download asset URL from a release
  */
-function getAssetDownloadUrl(release: any, fileNamePattern: string): string | null {
+function getAssetDownloadUrl(release: any, fileNamePattern: RegExp): string | null {
   const assets = release.assets || [];
-  const asset = assets.find((a: any) => a.name.includes(fileNamePattern));
+  // Anchored patterns, so a neighbouring .sig/.asc file is never picked instead.
+  const asset = assets.find((a: any) => fileNamePattern.test(a.name));
   return asset ? asset.browser_download_url : null;
 }
 
@@ -2481,10 +2499,9 @@ function setupIpcHandlers() {
         outputPath,
       ],
     );
+    // Read the id before saving: sql.js export() reopens the connection, which resets it to 0.
+    const downloadId = getQuery(db, 'SELECT last_insert_rowid() as id').id;
     saveDatabase(db);
-
-    const info = getQuery(db, 'SELECT last_insert_rowid() as id');
-    const downloadId = info.id;
 
     processQueue();
     return { id: downloadId };
@@ -2849,8 +2866,9 @@ function setupIpcHandlers() {
             getLatestBinaryVersion(binary),
           ]);
 
-          // Normalize versions by removing 'v' prefix for comparison
-          const normalizeVersion = (v: string) => v.replace(/^v/, '');
+          // Compare the dotted number only: tools print "streamlink 8.2.1" or "0.5.1+c1f6…"
+          // while their tags read "8.6.1-1" or "v0.6.0-beta".
+          const normalizeVersion = (v: string) => v.match(/\d+(?:\.\d+)+/)?.[0] ?? v;
           const normalizedInstalled = normalizeVersion(installedVersion);
           const normalizedLatest = normalizeVersion(latestVersion);
 
@@ -2939,11 +2957,10 @@ function setupIpcHandlers() {
       const release = await fetchJson(binary.releaseApi);
       const latestVersion = release.tag_name;
 
-      // Get download URL - handle dynamic asset finding for N_m3u8DL-RE
+      // Get download URL - some asset names embed more than the tag, so find them in the release
       let downloadUrl: string;
       if (binary.downloadUrl === null) {
-        // Dynamic asset finder for N_m3u8DL-RE
-        const asset = getAssetDownloadUrl(release, 'win-x64');
+        const asset = binary.assetPattern && getAssetDownloadUrl(release, binary.assetPattern);
         if (!asset) {
           throw new Error(`Could not find download asset for ${binary.name}`);
         }
@@ -2960,7 +2977,7 @@ function setupIpcHandlers() {
         (a: any) => a.browser_download_url === downloadUrl,
       );
 
-      const tempPath = path.join(app.getPath('temp'), `${binary.fileName}.tmp`);
+      const tempPath = path.join(app.getPath('temp'), `${binary.name}.tmp`);
 
       // Destination: userData/binaries (always writable, even in Program Files installs)
       const userDataBinariesPath = path.join(app.getPath('userData'), 'binaries');
@@ -2988,9 +3005,9 @@ function setupIpcHandlers() {
       // Handle zip files
       if (binary.isZip) {
         const tempDir = path.join(app.getPath('temp'), `${binary.name}_extract`);
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
+        // Start empty: a leftover from an interrupted update would be picked up below.
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        fs.mkdirSync(tempDir, { recursive: true });
 
         // Extract using PowerShell (built-in). Paths travel in the environment
         // rather than inside the command text: execFileSync skips the shell,
@@ -3001,36 +3018,47 @@ function setupIpcHandlers() {
           env: { ...process.env, IDH_ARCHIVE: tempPath, IDH_DEST: tempDir },
         });
 
-        // Find the specific .exe file in extracted files
-        const findSpecificExe = (dir: string, fileName: string): string | null => {
-          const files = fs.readdirSync(dir);
-          // First try exact match
-          if (files.includes(fileName)) {
-            return path.join(dir, fileName);
-          }
-          // Then search recursively
-          for (const file of files) {
-            const fullPath = path.join(dir, file);
-            const stat = fs.statSync(fullPath);
-            if (stat.isDirectory()) {
-              const found = findSpecificExe(fullPath, fileName);
-              if (found) return found;
-            } else if (file === fileName) {
-              return fullPath;
+        if (binary.keepDir) {
+          const [root] = fs.readdirSync(tempDir);
+          const finalDir = path.join(userDataBinariesPath, binary.keepDir);
+          // Its bundled ffmpeg is 164 MB; downloads pass --ffmpeg-ffmpeg instead.
+          fs.rmSync(path.join(tempDir, root, 'ffmpeg'), { recursive: true, force: true });
+          fs.rmSync(finalDir, { recursive: true, force: true });
+          // cpSync, not rename: temp and userData can sit on different drives.
+          fs.cpSync(path.join(tempDir, root), finalDir, { recursive: true });
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } else {
+          // Find the specific .exe file in extracted files
+          const findSpecificExe = (dir: string, fileName: string): string | null => {
+            const files = fs.readdirSync(dir);
+            // First try exact match
+            if (files.includes(fileName)) {
+              return path.join(dir, fileName);
             }
+            // Then search recursively
+            for (const file of files) {
+              const fullPath = path.join(dir, file);
+              const stat = fs.statSync(fullPath);
+              if (stat.isDirectory()) {
+                const found = findSpecificExe(fullPath, fileName);
+                if (found) return found;
+              } else if (file === fileName) {
+                return fullPath;
+              }
+            }
+            return null;
+          };
+
+          const exePath = findSpecificExe(tempDir, binary.fileName);
+          if (!exePath) {
+            throw new Error(`Could not find ${binary.fileName} in extracted archive`);
           }
-          return null;
-        };
 
-        const exePath = findSpecificExe(tempDir, binary.fileName);
-        if (!exePath) {
-          throw new Error(`Could not find ${binary.fileName} in extracted archive`);
+          fs.copyFileSync(exePath, destPath);
+
+          // Clean up
+          fs.rmSync(tempDir, { recursive: true, force: true });
         }
-
-        fs.copyFileSync(exePath, destPath);
-
-        // Clean up
-        fs.rmSync(tempDir, { recursive: true, force: true });
       } else {
         // Direct copy for .exe files
         fs.copyFileSync(tempPath, destPath);
@@ -3038,6 +3066,8 @@ function setupIpcHandlers() {
 
       // Clean up temp file
       fs.unlinkSync(tempPath);
+      // Point the engine paths at the new userData copy now, not on the next launch.
+      setupPaths();
 
       log.info(`[UPDATE] ${binary.name} successfully updated to ${latestVersion} in userData`);
       return { success: true, newVersion: latestVersion };
@@ -3186,8 +3216,14 @@ function spawnDownload(
   formatId?: string | null,
   isResume: boolean = false,
   youtubePlayerClient?: YoutubePlayerClient,
+  engineIndex: number = 0,
+  primaryStderr: string = '',
 ): { id: number } {
   taskStopReasons.delete(downloadId);
+  lineBuffers.delete(downloadId); // a stopped process may have left half a line behind
+  const engines = downloadEnginesFor(url);
+  const current = engines[engineIndex] ?? { engine: 'yt-dlp' as Engine, binary: ytDlpPath };
+  const hasNextEngine = engineIndex + 1 < engines.length;
   // Used for translating yt-dlp failures reliably (close handler only gives the exit code).
   let lastStderrOutput = '';
   let aggregatedStderr = '';
@@ -3196,7 +3232,9 @@ function spawnDownload(
 
   // Build the yt-dlp format argument intelligently
   let formatArg: string;
-  if (formatId === 'bestvideo+bestaudio' || !formatId) {
+  // 'best' comes from streamlink/gallery-dl extraction; as `best+bestaudio` it fails on
+  // streams that have no audio-only format, which is exactly when yt-dlp is the fallback.
+  if (formatId === 'bestvideo+bestaudio' || formatId === 'best' || !formatId) {
     formatArg = 'bestvideo+bestaudio/best';
   } else if (formatId === 'bestaudio') {
     formatArg = 'bestaudio/best';
@@ -3214,15 +3252,13 @@ function spawnDownload(
 
   const cookiesPath = getResolvedCookiesPath();
 
-  const siteInfo = detectSite(url);
-  let binaryPath = ytDlpPath;
-  if (siteInfo.engine === 'gallery-dl') binaryPath = galleryDlPath;
-  else if (siteInfo.engine === 'streamlink') binaryPath = streamlinkPath;
-  else if (siteInfo.engine === 'nm3u8dlre') binaryPath = n_m3u8dlPath;
+  const site = siteName(url);
+  const binaryPath = current.binary;
+  log.info(`[DOWNLOAD] Job ${downloadId} using engine ${current.engine} (${engineIndex + 1}/${engines.length})`);
 
   let downloadArgs: string[] = [];
 
-  if (siteInfo.engine === 'ytdlp') {
+  if (current.engine === 'yt-dlp') {
     downloadArgs = [
       '--newline',
       '--progress',
@@ -3249,12 +3285,18 @@ function spawnDownload(
       downloadArgs.unshift('--continue');
     }
     downloadArgs.push('--', url);
-  } else if (siteInfo.engine === 'gallery-dl') {
-    downloadArgs = ['-d', saveFolder, url];
-  } else if (siteInfo.engine === 'streamlink') {
-    downloadArgs = ['--hls-live-restart', '-o', outputTemplate.replace('%(title)s.%(ext)s', 'stream.mp4'), url, 'best'];
-  } else if (siteInfo.engine === 'nm3u8dlre') {
-    downloadArgs = ['--save-dir', saveFolder, url];
+  } else if (current.engine === 'gallery-dl') {
+    // -D, not -d: -d nests files under <category>/<id>/, so the recorded path pointed at nothing.
+    // The gallery gets its own folder, and that folder is what the queue opens.
+    actualFilePath = path.join(saveFolder, path.parse(outputPath).name);
+    downloadArgs = ['-D', actualFilePath, '--', url];
+  } else if (current.engine === 'streamlink') {
+    downloadArgs = ['--hls-live-restart', '--force', '--ffmpeg-ffmpeg', ffmpegPath, '-o', outputPath, url, 'best'];
+  } else if (current.engine === 'n-m3u8dl') {
+    // --auto-select: without it N_m3u8DL-RE prompts for tracks, and with no terminal it exits 1.
+    // --tmp-dir: the default is the working directory, i.e. the read-only install folder.
+    downloadArgs = [url, '--save-dir', saveFolder, '--tmp-dir', saveFolder, '--save-name', path.parse(outputPath).name,
+      '--auto-select', '--no-log', '--no-ansi-color', '--ffmpeg-binary-path', ffmpegPath, '-M', 'format=mp4'];
   }
 
   log.info('[PROGRESS-AUDIT] Download started for jobId:', downloadId);
@@ -3419,17 +3461,18 @@ function spawnDownload(
         log.error(`[PROGRESS] Error for job ${jobId}:`, trimmed);
         const userFriendlyError = translateDownloadError(trimmed, null, url);
         const deferFailForAgeRetry =
+          current.engine === 'yt-dlp' &&
           isYouTubeUrl(url) &&
           youtubePlayerClient !== 'tv_embedded' &&
           isLikelyYoutubeAgeRestrictionError(trimmed);
-        if (deferFailForAgeRetry) {
-          log.info(`[PROGRESS] Holding failed state for job ${jobId} pending tv_embedded retry`);
+        if (deferFailForAgeRetry || hasNextEngine) {
+          log.info(`[PROGRESS] Holding failed state for job ${jobId} pending retry`);
           if (mainWindow) {
             mainWindow.webContents.send('download-progress', {
               jobId: String(jobId),
               id: jobId,
               percent: 0,
-              phase: 'Retrying with alternate player…',
+              phase: deferFailForAgeRetry ? 'Retrying with alternate player…' : 'Trying another engine…',
               status: 'downloading',
             });
           }
@@ -3451,12 +3494,19 @@ function spawnDownload(
     }
   };
 
+  // Pause, cancel, restart, delete and clear-history drop the task before killing it.
+  // A process that is no longer the job's own must not report, fail, retry or complete it:
+  // after a restart that would run a second engine beside the new download.
+  const superseded = () => activeTasks.get(downloadId)?.process !== downloadProcess;
+
   downloadProcess.stdout.on('data', (data: Buffer) => {
+    if (superseded()) return;
     log.info('[PROGRESS-AUDIT] STDOUT received:', data.toString());
     parseYtDlpOutput(data.toString(), downloadId);
   });
 
   downloadProcess.stderr.on('data', (data: Buffer) => {
+    if (superseded()) return;
     const text = data.toString();
     aggregatedStderr += text;
     log.info('[PROGRESS-AUDIT] STDERR received:', text);
@@ -3464,7 +3514,18 @@ function spawnDownload(
     parseYtDlpOutput(text, downloadId);
   });
 
+  // A failed spawn emits 'error' and then 'close'; only the first may act,
+  // otherwise the job is failed and retried at the same time.
+  let settled = false;
+
   downloadProcess.on('close', (code: number | null) => {
+    if (settled) return;
+    settled = true;
+    if (superseded()) {
+      log.info(`[PROGRESS] Job ${downloadId}: stopped process exited with ${code}`);
+      processQueue();
+      return;
+    }
     log.info('[PROGRESS-AUDIT] Process closed with code:', code);
     lineBuffers.delete(downloadId);
     activeTasks.delete(downloadId);
@@ -3538,6 +3599,7 @@ function spawnDownload(
       }
     } else if (code !== null) {
       if (
+        current.engine === 'yt-dlp' &&
         youtubePlayerClient !== 'tv_embedded' &&
         isYouTubeUrl(url) &&
         isLikelyYoutubeAgeRestrictionError(aggregatedStderr)
@@ -3545,12 +3607,19 @@ function spawnDownload(
         log.info(
           `[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`,
         );
-        spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded');
+        spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded', engineIndex, primaryStderr);
         processQueue();
         return;
       }
+      // Keep the first engine's stderr: it is the most specific ("private video", "login required"...).
+      const failureStderr = primaryStderr || aggregatedStderr || lastStderrOutput;
+      if (hasNextEngine) {
+        log.warn(`[PROGRESS] Job ${downloadId}: ${current.engine} exited ${code}, falling back to ${engines[engineIndex + 1].engine}`);
+        spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, failureStderr);
+        return;
+      }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = buildErrorMessage(siteInfo.name, aggregatedStderr || lastStderrOutput);
+      const userFriendlyError = buildErrorMessage(site, failureStderr);
       updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
@@ -3569,10 +3638,20 @@ function spawnDownload(
   });
 
   downloadProcess.on('error', (err: any) => {
+    // With a pid the process is running (e.g. a failed kill); its 'close' settles the job.
+    if (settled || downloadProcess.pid !== undefined || superseded()) {
+      log.warn(`[Spawn Error] downloadId=${downloadId}: ${err.message}`);
+      return;
+    }
+    settled = true;
     activeTasks.delete(downloadId);
     updatePowerSave();
     log.error(`[Spawn Error] downloadId=${downloadId}: ${err.message}`);
-    const userFriendlyError = buildErrorMessage(siteInfo.name, err?.message || String(err));
+    if (hasNextEngine) {
+      spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, primaryStderr || err.message);
+      return;
+    }
+    const userFriendlyError = buildErrorMessage(site, err?.message || String(err));
     updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
     if (mainWindow) {
       mainWindow.webContents.send('download-progress', {

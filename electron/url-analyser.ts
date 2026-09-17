@@ -90,20 +90,24 @@ export function analyseUrl(url: string): AnalysisResult {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
 
-    let engineOrder: Engine[] = ['yt-dlp', 'playwright'];
+    // Preferred engines first; every other engine is still tried afterwards as a fallback.
+    let preferred: Engine[] = ['yt-dlp'];
 
-    if (matchesDomain(host, YTDLP_NATIVE)) {
-      engineOrder = ['yt-dlp', 'playwright'];
+    if (/\.(m3u8|mpd)$/i.test(parsed.pathname)) {
+      preferred = ['n-m3u8dl', 'yt-dlp'];
+    } else if (matchesDomain(host, YTDLP_NATIVE)) {
+      preferred = ['yt-dlp'];
     } else if (matchesDomain(host, ANIME_STREAMING)) {
-      engineOrder = ['n-m3u8dl', 'yt-dlp', 'playwright'];
+      preferred = ['n-m3u8dl', 'yt-dlp'];
     } else if (matchesDomain(host, GALLERY_DL_NATIVE)) {
-      engineOrder = ['gallery-dl', 'yt-dlp', 'playwright'];
+      preferred = ['gallery-dl', 'yt-dlp'];
     } else if (matchesDomain(host, STREAMLINK_NATIVE)) {
-      engineOrder = ['streamlink', 'yt-dlp', 'playwright'];
+      preferred = ['streamlink', 'yt-dlp'];
     }
 
+    const all: Engine[] = ['yt-dlp', 'streamlink', 'gallery-dl', 'playwright'];
     return {
-      engineOrder,
+      engineOrder: [...preferred, ...all.filter((e) => !preferred.includes(e))],
       isPlaylist: parsed.searchParams.has('list'),
     };
   } catch (error: unknown) {

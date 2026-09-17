@@ -63,7 +63,7 @@ jobs:
       - name: Verify binaries exist
         shell: pwsh
         run: |
-          $engines = @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe", "gallery-dl.exe", "streamlink.exe", "N_m3u8DL-RE.exe")
+          $engines = @("ffmpeg.exe", "ffprobe.exe", "yt-dlp.exe", "gallery-dl.exe", "streamlink/bin/streamlink.exe", "N_m3u8DL-RE.exe")
           foreach ($engine in $engines) {
             if (!(Test-Path "binaries/$engine")) { throw "Critical Error: $engine is missing after setup. Build aborted!" }
             Write-Host "Verified: $engine"

@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-17
+
+Downloads no longer stop at yt-dlp. Fetching a video's details already tried
+several engines, but the download step picked one by site and never tried
+another. A link that only streamlink or gallery-dl could handle showed its
+details and then failed. Of the three other engines, streamlink could not
+start at all in a packaged build, and N_m3u8DL-RE exited before downloading
+anything. This release makes every engine work and chains them together.
+
 ### Changed
 
+- **A download now falls back through every installed engine.** It tries them in the same order as fetching the video's details: the site's preferred engine first, then each of the others. While that happens the queue shows "Trying another engine…". If every engine fails, the error shown comes from the first one, because its message is the most specific ("private video", "login required").
+- **`.m3u8` and `.mpd` links go to N_m3u8DL-RE first**, with yt-dlp as the fallback. Fetching a stream's details never runs N_m3u8DL-RE, which can only download; yt-dlp reads the manifest instead.
+- **streamlink now ships as its full portable build** in `binaries/streamlink/`, minus the build's own 164 MB copy of FFmpeg. streamlink uses the FFmpeg the app already bundles.
 - **Both "get the desktop app" links in the web version now open the download page** rather than GitHub Releases. The releases page redirects to a tag page where the installer sits behind a collapsed "Assets" disclosure, which is a dead end for anyone who does not already know what a release asset is. Both the header link and the "Need more power?" button read from one constant so they cannot drift apart again.
 - **The screenshot gallery on the download page scrolls itself.** It drifts right to left at 50px a second, slow enough to read a slide as it passes, and loops without stopping: the slides are duplicated once and the scroll position is rewound by exactly one set's width, so the pixels either side of the seam are identical and there is nothing to see. Clear previous and next arrows sit at each end. A press becomes an eased tween inside the same animation loop rather than a competing scroll, so manual navigation blends with the drift instead of fighting it. The strip pauses while hovered, touched, focused or off-screen, holds still under `prefers-reduced-motion` with the arrows still working, and the scrollbar is hidden because nobody needs to drag it any more.
 
@@ -16,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **streamlink never started in a packaged build.** Its `streamlink.exe` is a 108 KB launcher that loads Python from folders next to it, and the build shipped only the launcher.
+- **N_m3u8DL-RE exited immediately.** With no terminal attached, it stopped at its interactive track prompt and quit. It also tried to write temporary files into the read-only install folder. It now picks tracks itself, keeps its temporary files in the download folder, and writes an MP4 with the name the queue expects.
+- **gallery-dl saved files where the app could not find them.** It nested them under `<category>/<id>/`, so opening a finished gallery from the queue pointed at nothing. Each gallery now gets its own folder named after its title, and the queue opens that folder.
+- **yt-dlp failed as a fallback for downloads whose details came from streamlink or gallery-dl.** Their "best" quality was passed to yt-dlp as `best+bestaudio`, which it rejects on streams that have no separate audio track. It is now `bestvideo+bestaudio/best`.
+- **Restarting a running download could leave two engines downloading the same file.** The stopped process's exit counted as a failure, so the next engine started alongside the fresh download. Once a process has been paused, cancelled, restarted, deleted or cleared from history, it no longer affects its download.
+- **When every engine failed while fetching details, the error could come from one that never ran.** A late "playwright is not installed" message replaced the real reason. The first error from an engine that actually ran is now the one shown.
+- **The in-app gallery-dl updater pointed at GitHub**, where gallery-dl no longer publishes binaries. It now uses gallery-dl's Codeberg releases, as the build already does.
+- **streamlink and N_m3u8DL-RE always showed an update as available.** Their `--version` output ("streamlink 8.2.1", "0.5.1+c1f6…") never matched their release tags ("8.6.1-1", "v0.6.0-beta"). The check now compares only the dotted version numbers. An updated engine is used right away instead of after a restart. The updater can no longer download a `.sig` signature file in place of the binary it sits beside.
+- **The one-time FFmpeg download always failed.** It runs when no bundled copy is found, but GitHub serves release files through a redirect, and the downloader did not follow redirects. Development builds also missed the FFmpeg in `binaries/` and tried that download too, so their queued downloads never started.
+- Adding a download returned id `0` every time. The new row's id was read after sql.js saved the database, which reopens the connection and resets the value.
 - **The Render web deployment had been silently failing, and had been for some time.** `render.yaml` sets `NODE_ENV=production` for the whole service, and npm honours that during the build by omitting `devDependencies` — which is where `vite`, `esbuild`, `tailwindcss`, `@vitejs/plugin-react` and `cross-env` all live. A clean install produced 123 packages instead of roughly 800, `cross-env` was not found, `vite build` never ran, no `dist/` was produced, and Render went on serving whichever build last succeeded. The deployed site was therefore stuck on a pre-rebrand bundle: old palette, no logo, the broken `./icons/icon-128.png` favicon and a Google Fonts request for 25 families. The build command is now `npm install --include=dev && npm run build:web`. The Dockerfile was never affected because it installs before it sets `ENV NODE_ENV=production`.
 - `vite` is now declared in `devDependencies`. Three npm scripts invoke it directly, but it was never a declared dependency — it arrived only as a transitive dependency of `@vitejs/plugin-react` and `vitest`, so a hoisting change in either could have broken every build without a line of our own code changing.
 

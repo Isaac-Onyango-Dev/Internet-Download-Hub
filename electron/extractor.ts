@@ -126,7 +126,10 @@ export async function extractVideoInfo(
   const { engineOrder } = analyseUrl(url);
   log.info(`[Extractor] Engine order for ${url}: ${engineOrder.join(', ')}`);
 
-  let lastError: unknown = null;
+  // Report the first error from an engine that actually ran — a later
+  // "not installed" error (e.g. playwright in the packaged app) says nothing useful.
+  let firstRealError: unknown = null;
+  let unavailableError: unknown = null;
 
   // Try each engine in order until one succeeds
   for (const engine of engineOrder) {
@@ -142,8 +145,8 @@ export async function extractVideoInfo(
           result = await runStreamlink(url, paths.streamlink);
           break;
         case 'n-m3u8dl':
-          result = await runNm3u8dl(url, paths.nm3u8dl);
-          break;
+          // Download-only engine; yt-dlp probes manifests for metadata.
+          continue;
         case 'gallery-dl':
           result = await runGalleryDl(url, paths.galleryDl);
           break;
@@ -157,13 +160,14 @@ export async function extractVideoInfo(
       log.info(`[Extractor] Success with engine: ${engine}`);
       return result;
     } catch (err: unknown) {
-      log.warn(`[Extractor] Engine ${engine} failed: ${err instanceof Error ? err.message : String(err)}`);
-      lastError = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`[Extractor] Engine ${engine} failed: ${msg}`);
+      if (/^[\w-]+ not found$|is not available|not installed yet/.test(msg)) unavailableError ??= err;
+      else firstRealError ??= err;
     }
   }
 
-  // If all engines failed, throw the last error
-  throw lastError || new Error('All extraction engines failed.');
+  throw firstRealError || unavailableError || new Error('All extraction engines failed.');
 }
 
 // ============================================================================
@@ -303,21 +307,6 @@ async function runStreamlink(url: string, streamlinkPath: string): Promise<Video
       },
     ],
   };
-}
-
-/**
- * Placeholder for N_m3u8DL-RE extraction engine
- * Currently only used as a download engine, not for metadata extraction
- * @param url - HLS/DASH stream URL
- * @param nm3u8dlPath - Path to N_m3u8DL-RE executable
- * @returns Promise with video info (not implemented)
- */
-async function runNm3u8dl(url: string, nm3u8dlPath: string): Promise<VideoInfo> {
-  if (!fs.existsSync(nm3u8dlPath)) throw new Error('N_m3u8DL-RE not found');
-
-  // N_m3u8DL-RE is more of a downloader than an extractor, but we can use it to probe manifests
-  // For simplicity, we'll treat it as a fallback that playwright might feed manifest URLs to
-  throw new Error('N_m3u8DL-RE extraction not fully implemented — use as download engine only.');
 }
 
 /**

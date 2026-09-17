@@ -8,6 +8,7 @@ import {
   unlinkSync,
   readdirSync,
   lstatSync,
+  rmSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -58,10 +59,14 @@ const BINARIES = [
     searchFiles: ['ffmpeg.exe', 'ffprobe.exe'],
   },
   {
-    names: ['streamlink.exe'],
+    names: ['streamlink/bin/streamlink.exe'],
     url: 'https://github.com/streamlink/windows-builds/releases/download/8.2.1-1/streamlink-8.2.1-1-py314-x86_64.zip',
     isZip: true,
-    searchFiles: ['streamlink.exe'],
+    // bin/streamlink.exe is a launcher that loads ../Python and ../pkgs, so the
+    // whole portable build is kept. Its own 164 MB ffmpeg is dropped: the app
+    // passes --ffmpeg-ffmpeg pointing at the ffmpeg it already ships.
+    keepDir: 'streamlink',
+    dropDirs: ['ffmpeg'],
   },
   {
     names: ['N_m3u8DL-RE.exe'],
@@ -133,7 +138,7 @@ async function main() {
       const url: string = typeof binary.url === 'function' ? await binary.url() : binary.url;
 
       if (binary.isZip) {
-        const baseName = binary.names[0].replace('.exe', '');
+        const baseName = binary.keepDir ?? binary.names[0].replace('.exe', '');
         const zipDest = join(BINARIES_DIR, `${baseName}.zip`);
         const tempExtractDir = join(BINARIES_DIR, `temp_${baseName}`);
 
@@ -148,6 +153,19 @@ async function main() {
         // a stray temp_*/ directory (and a multi-hundred-MB zip) behind.
         try {
           await extractZip(zipDest, tempExtractDir);
+
+          if (binary.keepDir) {
+            const [root] = readdirSync(tempExtractDir);
+            const rootPath = join(tempExtractDir, root);
+            for (const dir of binary.dropDirs ?? []) rmSync(join(rootPath, dir), { recursive: true, force: true });
+            const finalDir = join(BINARIES_DIR, binary.keepDir);
+            rmSync(finalDir, { recursive: true, force: true });
+            renameSync(rootPath, finalDir);
+            // Older setups copied the bare launcher here; it cannot run on its own.
+            rmSync(join(BINARIES_DIR, `${binary.keepDir}.exe`), { force: true });
+            console.log(`Extracted ${binary.keepDir}/`);
+            continue;
+          }
 
           for (let i = 0; i < binary.searchFiles!.length; i++) {
             const searchFile = binary.searchFiles![i];
