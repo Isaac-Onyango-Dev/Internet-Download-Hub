@@ -124,12 +124,59 @@ export const SUPPORTED_SITES: SiteCategory[] = [
 ];
 
 /**
- * Total count of supported sites
+ * The web version runs yt-dlp alone on a shared cloud server, and some sites refuse
+ * cloud IPs outright. This list holds only sites whose public links worked through
+ * the live server when checked on 2026-09-17; re-check it before adding to it.
  */
-export const TOTAL_SUPPORTED_SITES = SUPPORTED_SITES.reduce(
-  (sum, cat) => sum + cat.sites.length,
-  0,
-);
+export const WEB_SUPPORTED_SITES: SiteCategory[] = [
+  {
+    category: 'Video & Social',
+    icon: '🎬',
+    sites: [
+      { name: 'TikTok', url: 'tiktok.com', engines: ['yt-dlp'] },
+      { name: 'Twitter / X', url: 'twitter.com, x.com', engines: ['yt-dlp'] },
+      { name: 'Instagram', url: 'instagram.com', engines: ['yt-dlp'], notes: 'Public posts only' },
+      { name: 'Facebook', url: 'facebook.com', engines: ['yt-dlp'], notes: 'Public videos only' },
+      { name: 'Reddit', url: 'reddit.com', engines: ['yt-dlp'] },
+      { name: 'Pinterest', url: 'pinterest.com', engines: ['yt-dlp'] },
+      { name: 'Imgur', url: 'imgur.com', engines: ['yt-dlp'] },
+      { name: 'Vimeo', url: 'player.vimeo.com', engines: ['yt-dlp'], notes: 'Player (embed) links only' },
+      { name: 'Streamable', url: 'streamable.com', engines: ['yt-dlp'] },
+      { name: 'Loom', url: 'loom.com', engines: ['yt-dlp'] },
+      { name: 'Bilibili', url: 'bilibili.com', engines: ['yt-dlp'] },
+      { name: 'niconico', url: 'nicovideo.jp', engines: ['yt-dlp'] },
+      { name: 'VK', url: 'vk.com', engines: ['yt-dlp'] },
+      { name: 'PeerTube', url: 'framatube.org and other instances', engines: ['yt-dlp'] },
+      { name: 'Internet Archive', url: 'archive.org', engines: ['yt-dlp'] },
+    ],
+  },
+  {
+    category: 'Streaming Clips',
+    icon: '📡',
+    sites: [
+      { name: 'Twitch', url: 'twitch.tv', engines: ['yt-dlp'], notes: 'Clips' },
+      { name: 'Kick', url: 'kick.com', engines: ['yt-dlp'], notes: 'Clips' },
+    ],
+  },
+  {
+    category: 'Music',
+    icon: '🎵',
+    sites: [
+      { name: 'SoundCloud', url: 'soundcloud.com', engines: ['yt-dlp'] },
+      { name: 'Bandcamp', url: 'bandcamp.com', engines: ['yt-dlp'] },
+    ],
+  },
+];
+
+/** Sites that turn away every request from the web server, by the hosts they use. */
+const WEB_BLOCKED_SITES = [{ name: 'YouTube', hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'] }];
+
+/** The site's name when the web version cannot download from this link. */
+export function webBlockedSite(url: string): string | null {
+  const host = new URL(url).hostname.toLowerCase();
+  const site = WEB_BLOCKED_SITES.find((s) => s.hosts.some((h) => host === h || host.endsWith(`.${h}`)));
+  return site?.name ?? null;
+}
 
 /**
  * Get all unique engines used across all sites
@@ -140,25 +187,4 @@ export function getUniqueEngines(): Engine[] {
     cat.sites.forEach((site) => site.engines.forEach((e) => engines.add(e))),
   );
   return Array.from(engines);
-}
-
-/**
- * Search sites by name or URL
- */
-export function searchSites(query: string): SupportedSite[] {
-  const lowerQuery = query.toLowerCase();
-  const results: SupportedSite[] = [];
-
-  SUPPORTED_SITES.forEach((cat) => {
-    cat.sites.forEach((site) => {
-      if (
-        site.name.toLowerCase().includes(lowerQuery) ||
-        site.url.toLowerCase().includes(lowerQuery)
-      ) {
-        results.push(site);
-      }
-    });
-  });
-
-  return results;
 }

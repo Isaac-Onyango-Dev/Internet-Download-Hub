@@ -37,7 +37,8 @@ A fully free web-based version of Internet Download Hub is available for quick d
 - Shared free-tier server, so downloads are slower and large files may time out
 - No persistent download history
 - Basic quality selection
-- Supported sites: YouTube, TikTok, Twitter, Instagram, Reddit, Vimeo, and 50+ other platforms
+- Supported sites: about twenty tested ones, including TikTok, Twitter/X, Instagram, Facebook, Reddit and SoundCloud (listed on its Supported Sites page)
+- **No YouTube**: YouTube asks shared servers to sign in, so YouTube links need the desktop version
 - For advanced features (playlists, scheduling, format conversion), use the **desktop version**
 
 **Desktop Version Advantages:**

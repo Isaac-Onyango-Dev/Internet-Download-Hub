@@ -4,37 +4,62 @@
  */
 
 import { Card, CardContent } from '@/components/ui/card';
-import { SUPPORTED_SITES, TOTAL_SUPPORTED_SITES, searchSites } from '@/lib/supported-sites';
+import { SUPPORTED_SITES, WEB_SUPPORTED_SITES } from '@/lib/supported-sites';
 import { cn } from '@/lib/utils';
+import { isElectron } from '@/lib/utils/env';
 import { Search, Globe } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useState, useMemo } from 'react';
 import { LayoutShell } from '@/components/layout-shell';
+import { WebShell, DOWNLOAD_PAGE_URL } from '@/components/web-shell';
 
 export default function SupportedSites() {
   const [searchQuery, setSearchQuery] = useState('');
+  const isDesktop = isElectron();
+  const Shell = isDesktop ? LayoutShell : WebShell;
+  // The web server cannot reach every site the desktop app can, so it lists only the ones it can.
+  const categories = isDesktop ? SUPPORTED_SITES : WEB_SUPPORTED_SITES;
+  const totalSites = categories.reduce((sum, cat) => sum + cat.sites.length, 0);
 
   const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return SUPPORTED_SITES;
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return categories;
 
-    const query = searchQuery.toLowerCase();
-    return SUPPORTED_SITES.map((category) => ({
-      ...category,
-      sites: searchSites(query).filter((site) =>
-        category.sites.some((s) => s.name === site.name)
-      ),
-    })).filter((category) => category.sites.length > 0);
-  }, [searchQuery]);
+    return categories
+      .map((category) => ({
+        ...category,
+        sites: category.sites.filter(
+          (site) => site.name.toLowerCase().includes(query) || site.url.toLowerCase().includes(query),
+        ),
+      }))
+      .filter((category) => category.sites.length > 0);
+  }, [searchQuery, categories]);
 
   return (
-    <LayoutShell>
+    <Shell>
       <div className="space-y-6 animate-in fade-in duration-300">
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Supported Sites</h1>
-          <p className="text-muted-foreground">
-            Download videos, images, and audio from {TOTAL_SUPPORTED_SITES}+ websites using multiple download engines.
-          </p>
+          {isDesktop ? (
+            <p className="text-muted-foreground">
+              Download videos, images, and audio from {totalSites}+ websites using multiple download engines.
+            </p>
+          ) : (
+            <p className="text-muted-foreground">
+              These {totalSites} sites work in the web version. YouTube and other sites that block shared
+              servers need the{' '}
+              <a
+                href={DOWNLOAD_PAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary hover:underline"
+              >
+                desktop app
+              </a>
+              , which downloads over your own connection.
+            </p>
+          )}
         </div>
 
         {/* Search */}
@@ -49,43 +74,45 @@ export default function SupportedSites() {
           {searchQuery && (
             <p className="text-sm text-muted-foreground mt-2">
               Showing {filteredCategories.reduce((sum, cat) => sum + cat.sites.length, 0)} of{' '}
-              {TOTAL_SUPPORTED_SITES} sites
+              {totalSites} sites
             </p>
           )}
         </div>
 
-        {/* Engine Legend */}
-        <Card className="border-border/50 bg-card/50">
-          <CardContent className="pt-6">
-            <h3 className="text-sm font-medium mb-3">Download Engines</h3>
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-info" />
-                <span className="text-sm">
-                  <strong>yt-dlp</strong> - 1000+ video sites
-                </span>
+        {/* Engine Legend: the web server runs yt-dlp alone */}
+        {isDesktop && (
+          <Card className="border-border/50 bg-card/50">
+            <CardContent className="pt-6">
+              <h3 className="text-sm font-medium mb-3">Download Engines</h3>
+              <div className="flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-info" />
+                  <span className="text-sm">
+                    <strong>yt-dlp</strong> - 1000+ video sites
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-success" />
+                  <span className="text-sm">
+                    <strong>streamlink</strong> - Live streams
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-accent" />
+                  <span className="text-sm">
+                    <strong>gallery-dl</strong> - Image galleries
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-primary" />
+                  <span className="text-sm">
+                    <strong>N_m3u8DL-RE</strong> - HLS/M3U8 streams
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-success" />
-                <span className="text-sm">
-                  <strong>streamlink</strong> - Live streams
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-accent" />
-                <span className="text-sm">
-                  <strong>gallery-dl</strong> - Image galleries
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary" />
-                <span className="text-sm">
-                  <strong>N_m3u8DL-RE</strong> - HLS/M3U8 streams
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Categories with Accordions */}
         {filteredCategories.length === 0 ? (
@@ -182,6 +209,6 @@ export default function SupportedSites() {
           </div>
         )}
       </div>
-    </LayoutShell>
+    </Shell>
   );
 }

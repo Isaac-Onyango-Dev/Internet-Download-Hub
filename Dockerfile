@@ -11,8 +11,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install latest yt-dlp binary (using python3 for robustness)
-RUN python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', '/usr/local/bin/yt-dlp')" \
+# Install the latest standalone yt-dlp (using python3 for robustness). Not the plain
+# `yt-dlp` zipapp: it lacks curl_cffi, and sites such as Dailymotion refuse requests
+# that don't impersonate a browser.
+RUN python3 -c "import urllib.request; urllib.request.urlretrieve('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux', '/usr/local/bin/yt-dlp')" \
     && chmod +x /usr/local/bin/yt-dlp
 
 WORKDIR /app

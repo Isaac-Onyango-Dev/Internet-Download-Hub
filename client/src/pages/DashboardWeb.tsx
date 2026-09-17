@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import * as React from 'react';
-import { Link } from 'wouter';
 import { api } from '@/lib/api';
+import { WEB_SUPPORTED_SITES, webBlockedSite } from '@/lib/supported-sites';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { WebShell, DOWNLOAD_PAGE_URL } from '@/components/web-shell';
 import {
   AlertCircle,
   Download,
@@ -55,14 +55,7 @@ interface DownloadRecord {
 
 const WEB_DOWNLOADS_KEY = 'idh_web_downloads_v2';
 
-/**
- * Both "get the desktop app" links point here rather than at GitHub Releases.
- * The releases page redirects to a tag page where the installer is one row of
- * several behind a collapsed "Assets" disclosure, which is a dead end for
- * anyone who does not already know what a release asset is. This page offers
- * the installer as its primary button.
- */
-const DOWNLOAD_PAGE_URL = 'https://isaac-onyango-dev.github.io/Internet-Download-Hub/';
+const WEB_SITE_COUNT = WEB_SUPPORTED_SITES.reduce((sum, cat) => sum + cat.sites.length, 0);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,7 +102,7 @@ export default function DashboardWeb() {
   const [selectedFormat, setSelectedFormat] = useState('');
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [recentDownloads, setRecentDownloads] = useState<DownloadRecord[]>(loadRecentDownloads);
 
@@ -128,6 +121,21 @@ export default function DashboardWeb() {
     }
     if (!isValidUrl(trimmed)) {
       setError("That doesn't look like a valid URL. Paste a link starting with http:// or https://");
+      return;
+    }
+    // Asking the server would only wait for the same refusal.
+    const blocked = webBlockedSite(trimmed);
+    if (blocked) {
+      setError(
+        <>
+          {blocked} blocks downloads from shared servers like this one, so the web version can&apos;t get
+          it.{' '}
+          <a href={DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
+            Get the desktop app
+          </a>
+          , which downloads over your own connection.
+        </>,
+      );
       return;
     }
 
@@ -214,44 +222,8 @@ export default function DashboardWeb() {
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background">
-      {/* ── Top Bar ─────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-lg">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
-          {/* Same brand lockup as the desktop shell and the download site. */}
-          <div className="flex min-w-0 items-center gap-2.5">
-            <img src="./mark.svg" alt="" aria-hidden="true" className="h-7 w-7 shrink-0" />
-            <span className="wordmark" aria-hidden="true">
-              {/* The kicker is the first thing to go when space is tight. */}
-              <span className="wordmark-kicker hidden sm:block">Internet</span>
-              <span className="wordmark-name">
-                D<i className="wordmark-o" />
-                wnload Hub
-              </span>
-            </span>
-            <span className="sr-only">Internet Download Hub</span>
-            <Badge variant="secondary" className="hidden text-xs sm:inline-flex">Web</Badge>
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <Link href="/supported-sites">
-              <a className="hidden whitespace-nowrap text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline">
-                Supported Sites
-              </a>
-            </Link>
-            <a
-              href={DOWNLOAD_PAGE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="whitespace-nowrap text-sm font-medium text-primary hover:underline"
-            >
-              Get Desktop App
-            </a>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main Content ────────────────────────────────────────────────── */}
-      <main className="mx-auto max-w-2xl px-6 py-12 space-y-8">
+    <WebShell>
+      <div className="space-y-8">
 
         {/* ── Hero ────────────────────────────────────────────────────── */}
         <div className="text-center space-y-4">
@@ -268,7 +240,7 @@ export default function DashboardWeb() {
           <div className="flex gap-2">
             <Input
               ref={urlInputRef}
-              placeholder="Paste YouTube, TikTok, Twitter, Instagram, or any video link…"
+              placeholder="Paste a TikTok, X, Instagram, Reddit or Facebook link…"
               value={urlInput}
               onChange={e => setUrlInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -416,7 +388,7 @@ export default function DashboardWeb() {
         {/* ── Trust bar ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-4 py-4">
           {[
-            { icon: <Zap className="h-5 w-5" />, label: '1000+ sites' },
+            { icon: <Zap className="h-5 w-5" />, label: `${WEB_SITE_COUNT} tested sites` },
             { icon: <Shield className="h-5 w-5" />, label: 'No ads, no tracking' },
             { icon: <Globe className="h-5 w-5" />, label: 'Works in any browser' },
           ].map(item => (
@@ -431,7 +403,7 @@ export default function DashboardWeb() {
         <div className="rounded-xl border border-border bg-card/50 p-6 text-center space-y-3">
           <h3 className="font-semibold text-foreground">Need more power?</h3>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            The desktop app adds playlist downloads, parallel queues, MP3 extraction, and 1,000+ sites.
+            The desktop app adds YouTube and many more sites, playlist downloads and parallel queues.
           </p>
           <Button variant="outline" size="sm" asChild>
             <a href={DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer">
@@ -440,25 +412,7 @@ export default function DashboardWeb() {
             </a>
           </Button>
         </div>
-      </main>
-
-      {/* ── Footer ──────────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-6">
-        <div className="mx-auto max-w-5xl px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} Isaac Onyango · MIT License</span>
-          <div className="flex gap-4">
-            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              GitHub
-            </a>
-            <a href="https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-              Report a Bug
-            </a>
-            <Link href="/supported-sites">
-              <a className="hover:text-foreground transition-colors">Supported Sites</a>
-            </Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </WebShell>
   );
 }
