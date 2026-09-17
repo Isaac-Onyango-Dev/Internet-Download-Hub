@@ -5,6 +5,8 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import os from 'os';
+import { translateDownloadError, isEngineErrorLine } from '../electron/errors';
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -245,8 +247,10 @@ app.get('/api/video-info', async (req, res) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error('[video-info] error:', err.message?.slice(0, 300));
-    const msg = err.stderr?.slice(0, 300) || err.message || 'Failed to fetch video info';
-    return res.status(500).json({ success: false, error: msg });
+    // Raw yt-dlp output means nothing to a visitor; say what went wrong instead.
+    const raw: string = err.stderr || err.message || '';
+    const errorLines = raw.split('\n').filter(isEngineErrorLine).join('\n');
+    return res.status(500).json({ success: false, error: translateDownloadError(errorLines || raw, null, url, 'web') });
   }
 });
 
@@ -270,9 +274,6 @@ app.get('/api/download', (req, res) => {
     isYouTube = ['youtube.com', 'youtu.be'].includes(urlObj.hostname) || urlObj.hostname.endsWith('.youtube.com');
   } catch { /* ignore */ }
 
-  res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
-  res.setHeader('Content-Type', isAudio ? 'audio/mpeg' : 'video/mp4');
-
   let args: string[];
 
   const commonArgs = [
@@ -288,14 +289,19 @@ app.get('/api/download', (req, res) => {
     commonArgs.push('--extractor-args', 'youtube:player_client=web');
   }
 
+  // yt-dlp writes a real file first. Written to stdout, a merged video came out as
+  // MPEG-TS and "MP3" as AAC, because nothing can be merged or converted in a pipe.
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'idh-web-'));
+  const output = ['-P', workDir, '-o', 'download.%(ext)s'];
+
   if (isAudio) {
     args = [
-      '-f', 'bestaudio',
+      '-f', 'bestaudio/best',
       '--extract-audio',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
       ...commonArgs,
-      '-o', '-',
+      ...output,
       '--', url,
     ];
   } else {
@@ -310,50 +316,83 @@ app.get('/api/download', (req, res) => {
       // are already complete yt-dlp format expressions — use as-is
       formatArg = formatId;
     } else {
-      // Simple format ID (e.g., '137', '248') — append +bestaudio for merged output
-      formatArg = `${formatId}+bestaudio`;
+      // Simple format ID (e.g., '137', '248'): merge in the best audio, or take the format
+      // alone when there is no separate audio track (most HLS streams).
+      formatArg = `${formatId}+bestaudio/${formatId}`;
     }
 
     args = [
       '-f', formatArg,
       ...commonArgs,
       '--merge-output-format', 'mp4',
-      '-o', '-',
+      ...output,
       '--', url,
     ];
   }
 
   console.log(`[download] Starting: ${url} | format: ${formatId} | file: ${safeFilename}`);
 
-  const proc = spawn(YT_DLP, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  proc.stdout.pipe(res);
+  const proc = spawn(YT_DLP, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  const cleanUp = () => fs.rm(workDir, { recursive: true, force: true }, () => {});
 
   const stderrChunks: Buffer[] = [];
   proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
 
+  // The browser navigated here, so a failure must be a page it can show and leave.
+  const fail = (raw: string) => {
+    cleanUp();
+    if (res.headersSent || res.destroyed) return;
+    const message = translateDownloadError(
+      raw.split('\n').filter(isEngineErrorLine).join('\n') || raw,
+      null,
+      url,
+      'web',
+    );
+    res
+      .status(502)
+      .type('html')
+      .send(
+        `<!doctype html><meta charset="utf-8"><title>Download failed</title>` +
+          `<body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem">` +
+          `<h1>Download failed</h1><p>${escapeHtml(message)}</p>` +
+          `<p><a href="/" onclick="history.back();return false">Back to Internet Download Hub</a></p>`,
+      );
+  };
+
   proc.on('error', (err) => {
     console.error('[download] spawn error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).send('Download failed');
-    } else {
-      res.destroy();
-    }
+    fail(err.message);
   });
 
   proc.on('close', (code) => {
-    if (code !== 0) {
-      const stderr = Buffer.concat(stderrChunks).toString().slice(0, 300);
-      console.error(`[download] yt-dlp exited with code ${code}: ${stderr}`);
-    } else {
-      console.log(`[download] Completed: ${safeFilename}`);
+    if (res.destroyed) return cleanUp(); // the visitor left; nothing to send
+    const stderr = Buffer.concat(stderrChunks).toString();
+    const file = fs.readdirSync(workDir).find((f) => f.startsWith('download.') && !f.endsWith('.part'));
+    if (code !== 0 || !file) {
+      console.error(`[download] yt-dlp exited with code ${code}: ${stderr.slice(0, 300)}`);
+      return fail(stderr);
     }
+    // The saved name keeps the visitor's title with the extension yt-dlp actually produced.
+    const name = path.parse(safeFilename).name + path.extname(file);
+    res.download(path.join(workDir, file), name, (err) => {
+      cleanUp();
+      if (err) console.error(`[download] Sending ${name} failed: ${err.message}`);
+      else console.log(`[download] Completed: ${name}`);
+    });
   });
 
-  req.on('close', () => {
-    proc.kill('SIGTERM');
+  // 'close' on the response: the request's own 'close' fires once a GET has been read.
+  res.on('close', () => {
+    if (proc.exitCode !== null) return;
+    // On Windows yt-dlp.exe is a launcher; killing only it leaves the download running.
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F']);
+    else proc.kill('SIGTERM');
   });
 });
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

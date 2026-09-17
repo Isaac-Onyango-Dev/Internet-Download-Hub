@@ -101,11 +101,15 @@ declare global {
       updateYtDlp: () => Promise<{ updated: boolean; version: string }>;
       getYtDlpVersion: () => Promise<string>;
       checkAllBinaryUpdates: () => Promise<BinaryUpdateInfo[]>;
-      updateBinary: (binaryName: string) => Promise<{ success: boolean; newVersion: string }>;
-      onYtDlpVersionInfo: (callback: (data: YtDlpVersionInfo) => void) => void;
+      updateBinary: (
+        binaryName: string,
+      ) => Promise<{ success: boolean; newVersion: string; error?: string }>;
+      /** Returns a function that removes the listener. */
+      onYtDlpVersionInfo: (callback: (data: YtDlpVersionInfo) => void) => () => void;
+      /** Returns a function that removes the listener. */
       onYtDlpUpdateAvailable: (
         callback: (data: { currentVersion: string; latestVersion: string }) => void,
-      ) => void;
+      ) => () => void;
       onPlaylistDetected: (
         callback: (data: { title: string; count: number; entries: PlaylistEntry[]; streaming?: boolean }) => void,
       ) => void;
@@ -113,7 +117,8 @@ declare global {
         callback: (data: { video: any; index: number; total: number }) => void,
       ) => void;
       onPlaylistDetectionComplete: (
-        callback: (data: { title: string; count: number }) => void,
+        /** `error` is set when reading the playlist failed. */
+        callback: (data: { title: string; count: number; error?: string }) => void,
       ) => void;
       addPlaylistToQueue: (
         entries: any[],

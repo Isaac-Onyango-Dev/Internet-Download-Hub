@@ -40,6 +40,8 @@ export interface PlaylistDialogData {
   title: string;
   count: number;
   entries: PlaylistEntry[];
+  /** Why reading the playlist stopped, when it failed */
+  error?: string;
 }
 
 type DownloadMode = 'all' | 'range' | 'select';
@@ -65,7 +67,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
   const [submitting, setSubmitting] = useState(false);
 
   // Use data as it arrives (entries grow while streaming)
-  const entries = data?.entries ?? [];
+  const entries = useMemo(() => data?.entries ?? [], [data?.entries]);
   const total = data?.count ?? 0;
   const title = data?.title ?? 'Playlist';
   const loadedCount = entries.length;
@@ -203,6 +205,18 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
             </div>
           </DialogDescription>
         </DialogHeader>
+
+        {/* ── Read failure ── */}
+        {data?.error && (
+          <Alert role="alert" className="border-destructive/30 bg-destructive/10">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <AlertDescription className="text-destructive text-sm">
+              {entries.length > 0
+                ? `The playlist stopped loading after ${entries.length} video${entries.length === 1 ? '' : 's'}: ${data.error}`
+                : data.error}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* ── Large-playlist warning ── */}
         {total >= 500 && (

@@ -318,23 +318,47 @@ async function runStreamlink(url: string, streamlinkPath: string): Promise<Video
 async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoInfo> {
   if (!fs.existsSync(galleryDlPath)) throw new Error('gallery-dl not found');
 
-  const result = await execa(galleryDlPath, ['-j', '--', url], { timeout: 30000 });
-  const info = JSON.parse(result.stdout);
+  // -j resolves every item before printing, so a large profile would outlast the
+  // timeout; the first 100 are enough to name the gallery and prove it has content.
+  const LIMIT = 100;
+  const result = await execa(galleryDlPath, ['-j', '--range', `1-${LIMIT}`, '--', url], { timeout: 30000 });
+  // A list of messages: [2, dirMeta] directory, [3, url, meta] file,
+  // [6, url, meta] sub-gallery, [-1, {error, message}] failure.
+  const messages: [number, ...unknown[]][] = JSON.parse(result.stdout);
+  const failure = messages.find((m) => m[0] === -1)?.[1] as { message?: string } | undefined;
+  if (failure) throw new Error(failure.message || 'gallery-dl could not read this page.');
 
-  // gallery-dl output depends on the site, but usually it's an array of image data
+  const items = messages.filter((m) => m[0] === 3 || m[0] === 6);
+  if (items.length === 0) throw new Error('No images found at this URL.');
+  // Only the fields used below; each site's extractor adds its own.
+  type GalleryMeta = {
+    title?: unknown; username?: unknown; filename?: unknown; category?: unknown; author?: unknown;
+    album?: { title?: unknown }; gallery?: { title?: unknown }; user?: { name?: unknown };
+  };
+  const files = messages.filter((m) => m[0] === 3) as [3, string, GalleryMeta][];
+  const meta = (messages.find((m) => m[0] === 2)?.[1] ?? files[0]?.[2] ?? {}) as GalleryMeta;
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  const title =
+    text(meta.title) || text(meta.album?.title) || text(meta.gallery?.title) ||
+    text(meta.user?.name) || text(meta.username) || text(meta.filename) ||
+    `${text(meta.category) || 'Image'} gallery`;
+  const image = files.find(([, u]) => /\.(jpe?g|png|gif|webp|avif|bmp)(\?|$)/i.test(u));
+  const count = `${items.length}${items.length >= LIMIT ? '+' : ''}`;
+
   return {
     url,
-    title: 'Image Gallery',
-    thumbnail: Array.isArray(info) ? info[0]?.url || '' : '',
+    title,
+    thumbnail: image?.[1] ?? '',
     duration: 0, // Images have no duration
-    uploader: new URL(url).hostname,
+    uploader: text(meta.user?.name) || text(meta.author) || new URL(url).hostname,
     extractionMethod: 'gallery-dl',
     formats: [
       {
         formatId: 'best',
-        label: 'Full Quality Gallery',
+        label: `Full Quality Gallery (${count} items)`,
         quality: 'best',
-        ext: 'zip', // Typically downloaded as archive
+        // Saved as a folder of files, not an archive; the extension only names the queue entry.
+        ext: 'gallery',
         filesize: null,
         height: null,
       },
@@ -464,6 +488,7 @@ export async function streamPlaylistInfo(
   let incompleteLine = '';
   let playlistMetadata: { title: string; uploader: string; videoCount: number } | null = null;
   let detectedCount = 0;
+  let lastError = '';
 
   process.stdout.on('data', (data: Buffer) => {
     const chunk = data.toString();
@@ -475,20 +500,17 @@ export async function streamPlaylistInfo(
       try {
         const info = JSON.parse(line);
 
-        // The first few lines might be playlist metadata if it's a playlist object
-        if (info._type === 'playlist') {
-          playlistMetadata = {
-            title: info.title || 'Playlist',
-            uploader: info.uploader || info.channel || '',
-            videoCount: info.playlist_count || 0,
-          };
-          continue;
-        }
+        // --flat-playlist prints only the entries, never the playlist itself;
+        // every entry carries its playlist's title and size instead.
+        playlistMetadata ??= {
+          title: info.playlist_title || info.playlist || 'Playlist',
+          uploader: info.playlist_uploader || info.playlist_channel || '',
+          videoCount: info.playlist_count || 0,
+        };
 
-        // Otherwise it's a video entry
         detectedCount++;
         const video = parseYtDlpInfo(info, url);
-        onVideoDetected(video, detectedCount, playlistMetadata?.videoCount || 0);
+        onVideoDetected(video, info.playlist_index || detectedCount, playlistMetadata.videoCount);
       } catch (e) {
         log.error('[Extractor] Error parsing playlist stream line:', e);
       }
@@ -498,17 +520,16 @@ export async function streamPlaylistInfo(
   process.stderr.on('data', (data: Buffer) => {
     const stderr = data.toString();
     log.warn('[Extractor] yt-dlp playlist stream stderr:', stderr);
+    lastError = stderr.split('\n').find((l) => l.startsWith('ERROR:')) ?? lastError;
   });
 
   process.on('close', (code: number | null) => {
-    if (code === 0) {
-      if (playlistMetadata) {
-        onComplete(playlistMetadata);
-      } else {
-        onComplete({ title: 'Playlist', uploader: '', videoCount: detectedCount });
-      }
+    if (code === 0 && detectedCount > 0) {
+      onComplete({ ...playlistMetadata!, videoCount: playlistMetadata!.videoCount || detectedCount });
+    } else if (code === 0) {
+      onError(new Error('This playlist has no videos that can be downloaded.'));
     } else {
-      onError(new Error(`yt-dlp exited with code ${code}`));
+      onError(new Error(lastError || `yt-dlp exited with code ${code}`));
     }
   });
 
@@ -787,7 +808,8 @@ function parseYtDlpInfo(info: YtDlpEntry, fallbackUrl: string): VideoInfo {
   return {
     url: resolvedUrl,
     title: info.title || 'Unknown Video',
-    thumbnail: info.thumbnail || '',
+    // Flat playlist entries only carry the `thumbnails` list; its last entry is the largest.
+    thumbnail: info.thumbnail || (info.thumbnails as { url?: string }[] | undefined)?.at(-1)?.url || '',
     duration: info.duration || 0,
     uploader: info.uploader || info.channel || '',
     extractionMethod: 'yt-dlp',

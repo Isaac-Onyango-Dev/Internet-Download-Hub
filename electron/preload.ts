@@ -230,21 +230,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateBinary: (binaryName: string) => ipcRenderer.invoke('update-binary', { binaryName }),
 
   /**
-   * Listens for yt-dlp version check results
+   * Listens for yt-dlp version check results. The update banner and the settings
+   * panel both listen, so this adds a listener rather than replacing the other one.
    * @param callback - Function to handle version info
+   * @returns Removes this listener
    */
   onYtDlpVersionInfo: (callback: (data: unknown) => void) => {
-    ipcRenderer.removeAllListeners('ytdlp-version-info');
-    ipcRenderer.on('ytdlp-version-info', (_event, data) => callback(data));
+    const listener = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('ytdlp-version-info', listener);
+    return () => ipcRenderer.removeListener('ytdlp-version-info', listener);
   },
 
   /**
-   * Listens for yt-dlp update availability notifications
+   * Listens for yt-dlp update availability notifications (see onYtDlpVersionInfo)
    * @param callback - Function to handle update notifications
+   * @returns Removes this listener
    */
   onYtDlpUpdateAvailable: (callback: (data: unknown) => void) => {
-    ipcRenderer.removeAllListeners('ytdlp-update-available');
-    ipcRenderer.on('ytdlp-update-available', (_event, data) => callback(data));
+    const listener = (_event: unknown, data: unknown) => callback(data);
+    ipcRenderer.on('ytdlp-update-available', listener);
+    return () => ipcRenderer.removeListener('ytdlp-update-available', listener);
   },
 
   // ============================================================================

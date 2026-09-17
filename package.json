@@ -38,7 +38,8 @@
     "build:linux": "npm run setup:binaries && npm run generate:icons && vite build && npm run build:electron && electron-builder build --linux",
     "check": "tsc",
     "setup:playwright": "npx playwright-core install chromium",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:engines": "node tests/engines/run.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.60.5",

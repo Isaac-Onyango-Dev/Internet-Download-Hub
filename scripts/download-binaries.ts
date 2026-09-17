@@ -60,7 +60,7 @@ const BINARIES = [
   },
   {
     names: ['streamlink/bin/streamlink.exe'],
-    url: 'https://github.com/streamlink/windows-builds/releases/download/8.2.1-1/streamlink-8.2.1-1-py314-x86_64.zip',
+    url: 'https://github.com/streamlink/windows-builds/releases/download/8.6.1-1/streamlink-8.6.1-1-py314-x86_64.zip',
     isZip: true,
     // bin/streamlink.exe is a launcher that loads ../Python and ../pkgs, so the
     // whole portable build is kept. Its own 164 MB ffmpeg is dropped: the app
@@ -70,7 +70,7 @@ const BINARIES = [
   },
   {
     names: ['N_m3u8DL-RE.exe'],
-    url: 'https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.5.1-beta/N_m3u8DL-RE_v0.5.1-beta_win-x64_20251029.zip',
+    url: 'https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.6.0-beta/N_m3u8DL-RE_v0.6.0-beta_win-x64_20260629.zip',
     isZip: true,
     searchFiles: ['N_m3u8DL-RE.exe'],
   },

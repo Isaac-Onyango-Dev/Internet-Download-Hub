@@ -36,12 +36,15 @@ import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_pro
 import execa from 'execa'; // Better process execution
 import { extractVideoInfo, streamPlaylistInfo } from './extractor'; // Video metadata extraction
 import { analyseUrl, type Engine } from './url-analyser'; // Engine order shared by extraction and download
+import { parseEngineProgress, splitNm3u8dlOutput } from './engine-progress'; // streamlink and N_m3u8DL-RE output
 import fs from 'fs'; // File system operations
 import os from 'os'; // Operating system utilities
 import https from 'https'; // HTTP requests for FFmpeg download
+import { fileURLToPath } from 'url'; // Matching the renderer's own page in will-navigate
+import { pipeline } from 'stream/promises'; // Streams that reject when either side fails
 import { promisify } from 'util'; // Utility for promise conversion
 import initSqlJs from 'sql.js'; // In-memory database
-import { translateDownloadError, isLikelyYoutubeAgeRestrictionError } from './errors'; // Error handling
+import { translateDownloadError, isLikelyYoutubeAgeRestrictionError, isEngineErrorLine } from './errors'; // Error handling
 import {
   ytDlpCommonArgs,
   ytDlpCookiesArgs,
@@ -65,16 +68,16 @@ try {
 }
 
 // ============================================================================
-// SITE DETECTION & ERROR HANDLING
+// DOWNLOAD ENGINES
 // ============================================================================
 
-function siteName(url: string): string {
-  if (/\.m3u8/.test(url)) return 'HLS Stream';
-  try { return new URL(url).hostname.replace('www.', ''); } catch { return url || 'unknown site'; }
+/** True for a chosen quality or audio-only, which only yt-dlp can honour. */
+function isSpecificFormat(formatId?: string | null): boolean {
+  return !!formatId && formatId !== 'bestvideo+bestaudio' && formatId !== 'best';
 }
 
 /** Engines that can download `url`, in the same order extraction tries them, skipping missing binaries. */
-function downloadEnginesFor(url: string): { engine: Engine; binary: string }[] {
+function downloadEnginesFor(url: string, formatId?: string | null): { engine: Engine; binary: string }[] {
   const binaries: Partial<Record<Engine, string>> = {
     'yt-dlp': ytDlpPath,
     streamlink: streamlinkPath,
@@ -83,23 +86,40 @@ function downloadEnginesFor(url: string): { engine: Engine; binary: string }[] {
   };
   let order: Engine[];
   try { order = analyseUrl(url).engineOrder; } catch { order = ['yt-dlp']; }
+  // The others always fetch the best they can, so a chosen quality starts with yt-dlp.
+  if (isSpecificFormat(formatId)) order = ['yt-dlp', ...order.filter((e) => e !== 'yt-dlp')];
   // playwright only finds the stream URL during extraction; it never downloads.
   return order
     .filter((e) => binaries[e] && fs.existsSync(binaries[e]!))
     .map((e) => ({ engine: e, binary: binaries[e]! }));
 }
 
-function buildErrorMessage(siteName: string, stderr: string): string {
-  const s = stderr.toLowerCase();
-  if (s.includes('private') || s.includes('login required') || s.includes('sign in'))
-    return `This ${siteName} video is private or requires an account login.`;
-  if (s.includes('not available') || s.includes('unavailable'))
-    return `This ${siteName} video is unavailable or has been removed.`;
-  if (s.includes('geo') || s.includes('country') || s.includes('region'))
-    return `This ${siteName} video is geo-restricted and not available in your region.`;
-  if (s.includes('rate') || s.includes('too many'))
-    return `Too many requests to ${siteName}. Please wait a moment and try again.`;
-  return `Failed to download from ${siteName}. The site may have changed or this content is restricted.`;
+/** Per-download scratch folder for partial files, next to the output so the final move is a rename. */
+function jobTempDir(saveFolder: string, downloadId: number): string {
+  return path.join(saveFolder, '.idh-temp', String(downloadId));
+}
+
+/**
+ * Deletes a download's scratch folder, then the shared parent if nothing else uses it.
+ * Only ever touches .idh-temp, so a user's own files next to the download are safe.
+ */
+function removeJobTempDir(saveFolder: string, downloadId: number) {
+  const dir = jobTempDir(saveFolder, downloadId);
+  try {
+    // Retries cover a just-killed engine that has not released its handles yet.
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    fs.rmdirSync(path.dirname(dir)); // throws while other downloads still use it
+  } catch (err: any) {
+    if (err?.code !== 'ENOTEMPTY' && err?.code !== 'ENOENT') log.warn(`[Cleanup] ${dir}: ${err?.message}`);
+  }
+}
+
+/** `file`, or `file (2)`, `file (3)`… so an engine never overwrites an earlier recording. */
+function uniquePath(file: string): string {
+  const { dir, name, ext } = path.parse(file);
+  let candidate = file;
+  for (let n = 2; fs.existsSync(candidate); n++) candidate = path.join(dir, `${name} (${n})${ext}`);
+  return candidate;
 }
 
 // ============================================================================
@@ -123,11 +143,8 @@ const activeTasks = new Map<
   number,
   {
     process: ChildProcess; // The actual download process
-    url: string; // Download URL
-    formatArg: string; // Video format argument (e.g., 'bestvideo+bestaudio')
-    outputTemplate: string; // Output filename template
-    savePath: string; // Where the file will be saved
-    filePath?: string; // Full path to the downloaded file (when available)
+    engine: Engine; // Which binary it is, so that binary is not replaced mid-download
+    recording: string | null; // File streamlink writes directly, discarded on cancel
   }
 >();
 
@@ -330,11 +347,11 @@ async function downloadFFmpeg() {
     const ffmpegDownloaded =
       getQuery(db, 'SELECT ffmpeg_downloaded FROM settings WHERE id = 1')?.ffmpeg_downloaded === 1;
 
-    // Check if FFmpeg is already available (bundled or previously downloaded)
-    if (ffmpegDownloaded || isFFmpegAvailable()) {
+    // Only the file on disk counts: the flag stays set after an antivirus quarantines
+    // ffmpeg.exe, and trusting it left every queued download waiting forever.
+    if (isFFmpegAvailable()) {
       log.info('[Main] FFmpeg is available, skipping download');
-      // Update database flag if FFmpeg is available but flag is not set
-      if (!ffmpegDownloaded && isFFmpegAvailable()) {
+      if (!ffmpegDownloaded) {
         db.run('UPDATE settings SET ffmpeg_downloaded = 1 WHERE id = 1');
         saveDatabase(db);
       }
@@ -346,7 +363,7 @@ async function downloadFFmpeg() {
       if (mainWindow) {
         mainWindow.webContents.send('ffmpeg-download-notification', {
           title: 'Downloading FFmpeg',
-          body: 'FFmpeg is being downloaded (~80MB) for high-quality video merging. This only happens once.',
+          body: 'FFmpeg is being downloaded (about 190 MB) for high-quality video merging. This only happens once.',
           type: 'info',
         });
       }
@@ -362,52 +379,14 @@ async function downloadFFmpeg() {
 
       log.info(`[Main] Starting FFmpeg download from: ${downloadUrl}`);
 
-      // Helper function to download file using streams
-      const downloadFile = (url: string, dest: string, redirectsLeft = 5): Promise<unknown> => {
-        return new Promise((resolve, reject) => {
-          https
-            .get(url, (response) => {
-              const { statusCode = 0, headers } = response;
-              // GitHub release assets always answer with a redirect to their CDN.
-              if (statusCode >= 300 && statusCode < 400 && headers.location && redirectsLeft > 0) {
-                response.resume();
-                resolve(downloadFile(new URL(headers.location, url).toString(), dest, redirectsLeft - 1));
-                return;
-              }
-              if (statusCode !== 200) {
-                response.resume();
-                reject(new Error(`Failed to download FFmpeg: ${statusCode}`));
-                return;
-              }
-              const file = fs.createWriteStream(dest);
-              file.on('error', reject);
-              const totalSize = parseInt(response.headers['content-length'] || '0', 10);
-              let downloaded = 0;
-
-              response.on('data', (chunk) => {
-                downloaded += chunk.length;
-                if (mainWindow && totalSize > 0) {
-                  mainWindow.webContents.send('ffmpeg-download-progress', {
-                    phase: 'downloading',
-                    percent: (downloaded / totalSize) * 100,
-                  });
-                }
-              });
-
-              response.pipe(file);
-              file.on('finish', () => {
-                file.close();
-                resolve(true);
-              });
-            })
-            .on('error', (err) => {
-              fs.unlink(dest, () => {});
-              reject(err);
-            });
-        });
-      };
-
-      await downloadFile(downloadUrl, zipPath);
+      let lastPercent = -1;
+      await downloadFileUnverified(downloadUrl, zipPath, (received, total) => {
+        // Once per whole percent: a 190 MB body arrives in thousands of chunks.
+        const percent = total > 0 ? Math.floor((received / total) * 100) : -1;
+        if (percent === lastPercent) return;
+        lastPercent = percent;
+        mainWindow?.webContents.send('ffmpeg-download-progress', { phase: 'downloading', percent });
+      });
       log.info('[Main] FFmpeg zip downloaded, extracting...');
 
       if (mainWindow) {
@@ -463,6 +442,8 @@ async function downloadFFmpeg() {
         saveDatabase(db);
         setupPaths(); // Refresh global paths to point to the new binaries in userData
         log.info('[Main] FFmpeg installed successfully');
+        // Downloads that were waiting for FFmpeg start now, not on the next queue event.
+        setImmediate(processQueue);
 
         if (mainWindow) {
           mainWindow.webContents.send('ffmpeg-download-progress', {
@@ -865,33 +846,65 @@ function updateDownloadInDb(id: number, updates: any) {
   }
 }
 
-function deletePartialFile(savePath: string | null) {
-  if (!savePath) return;
+/**
+ * Discards an unfinished download's partial data. yt-dlp, gallery-dl and N_m3u8DL-RE keep
+ * theirs in the job's scratch folder. streamlink records straight into the save folder, and
+ * only the file the stopped process created (`recording`) is removed. The save path itself
+ * is never deleted: it can name a finished file from an earlier download.
+ */
+function discardPartialDownload(id: number, savePath: string | null, recording?: string | null) {
+  if (savePath) removeJobTempDir(path.dirname(savePath), id);
+  if (!recording) return;
   try {
-    if (fs.existsSync(savePath)) {
-      fs.unlinkSync(savePath);
-      log.info(`[Cleanup] Deleted partial file: ${savePath}`);
-    }
-    // yt-dlp also leaves behind resume/fragment files alongside the destination
-    // (e.g. "<name>.part", "<name>.ytdl", "<name>.part-Frag12") — sweep the
-    // containing folder for anything sharing the base filename, matching the
-    // cleanup logic used in cancel-download.
-    const dir = path.dirname(savePath);
-    const ext = path.extname(savePath);
-    const fileBase = path.basename(savePath, ext);
-    if (fs.existsSync(dir)) {
-      const files = fs.readdirSync(dir);
-      for (const file of files) {
-        if (file.includes(fileBase) && (file.endsWith('.part') || file.endsWith('.ytdl') || /\.part-Frag\d+$/.test(file))) {
-          const fullPath = path.join(dir, file);
-          fs.unlinkSync(fullPath);
-          log.info(`[Cleanup] Deleted partial file: ${fullPath}`);
-        }
-      }
-    }
+    fs.rmSync(recording, { force: true, maxRetries: 5, retryDelay: 200 });
+    log.info(`[Cleanup] Deleted partial recording: ${recording}`);
   } catch (err) {
-    log.error(`[Cleanup] Failed to delete partial file:`, err);
+    log.error(`[Cleanup] Failed to delete partial recording:`, err);
   }
+}
+
+/**
+ * Removes history rows. Shared by the Queue page and the Downloads menu, which used to
+ * delete rows under running downloads and leave their partial data behind.
+ */
+function clearHistory(type: 'all' | 'completed' | 'failed') {
+  // Rows that go away take their partial data with them; nothing else would ever find it.
+  const discardUnfinished = (where: string, recordings = new Map<number, string | null>()) => {
+    for (const row of allQuery(db, `SELECT id, save_path FROM downloads WHERE ${where}`)) {
+      discardPartialDownload(row.id, row.save_path, recordings.get(row.id));
+    }
+  };
+  if (type === 'all') {
+    const recordings = new Map([...activeTasks].map(([id, job]) => [id, job.recording]));
+    activeTasks.forEach((job) => {
+      killProcessTree(job.process.pid);
+    });
+    activeTasks.clear();
+    updatePowerSave();
+    updateTaskbarProgress();
+    discardUnfinished("state != 'completed'", recordings);
+    db.run('DELETE FROM downloads');
+  } else if (type === 'completed') {
+    db.run("DELETE FROM downloads WHERE state = 'completed'");
+  } else if (type === 'failed') {
+    discardUnfinished("state = 'failed'");
+    db.run("DELETE FROM downloads WHERE state = 'failed'");
+  }
+  saveDatabase(db);
+}
+
+/** The same question the Queue page asks before clearing. */
+function confirmClearHistory(type: 'all' | 'completed' | 'failed'): boolean {
+  const options = {
+    type: 'question' as const,
+    buttons: ['Clear', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: `Clear ${type} downloads? This cannot be undone.`,
+    detail: type === 'all' ? 'Downloads in progress are stopped and their partial files deleted.' : undefined,
+  };
+  const choice = mainWindow ? dialog.showMessageBoxSync(mainWindow, options) : dialog.showMessageBoxSync(options);
+  return choice === 0;
 }
 
 // ── System Tray ───────────────────────────────────────────────────────────────
@@ -935,7 +948,9 @@ function createTray() {
         enabled: activeCount > 0,
         click: () => {
           activeTasks.forEach((job, id) => {
-            job.process.kill('SIGTERM');
+            // The whole tree: yt-dlp.exe and streamlink.exe are launchers, and killing
+            // only the launcher leaves the real downloader running.
+            killProcessTree(job.process.pid);
             updateDownloadInDb(id, { state: 'paused' });
             if (mainWindow)
               mainWindow.webContents.send('download-progress', {
@@ -1024,7 +1039,8 @@ function createApplicationMenu() {
               properties: ['openDirectory'],
             });
             if (!result.canceled && result.filePaths.length > 0) {
-              db.run('UPDATE settings SET download_path = ? WHERE id = 1', result.filePaths[0]);
+              // Params must be an array: sql.js ignores a bare value and binds NULL.
+              db.run('UPDATE settings SET download_path = ? WHERE id = 1', [result.filePaths[0]]);
               saveDatabase(db);
               mainWindow.webContents.send('settings-updated');
             }
@@ -1039,7 +1055,7 @@ function createApplicationMenu() {
             return s ? s.close_to_tray !== 0 : true;
           })(),
           click: (item) => {
-            db.run('UPDATE settings SET close_to_tray = ? WHERE id = 1', (item as any).checked ? 1 : 0);
+            db.run('UPDATE settings SET close_to_tray = ? WHERE id = 1', [item.checked ? 1 : 0]);
             saveDatabase(db);
           },
         },
@@ -1160,8 +1176,8 @@ function createApplicationMenu() {
           label: 'Clear Completed Downloads',
           click: () => {
             try {
-              db.run("DELETE FROM downloads WHERE state = 'completed'");
-              saveDatabase(db);
+              if (!confirmClearHistory('completed')) return;
+              clearHistory('completed');
               if (mainWindow) mainWindow.webContents.send('downloads-cleared');
             } catch (err: unknown) {
               log.error('[Menu] Failed to clear completed downloads:', err);
@@ -1172,8 +1188,8 @@ function createApplicationMenu() {
           label: 'Clear Failed Downloads',
           click: () => {
             try {
-              db.run("DELETE FROM downloads WHERE state = 'failed'");
-              saveDatabase(db);
+              if (!confirmClearHistory('failed')) return;
+              clearHistory('failed');
               if (mainWindow) mainWindow.webContents.send('downloads-cleared');
             } catch (err: unknown) {
               log.error('[Menu] Failed to clear failed downloads:', err);
@@ -1184,8 +1200,8 @@ function createApplicationMenu() {
           label: 'Clear All History',
           click: () => {
             try {
-              db.run('DELETE FROM downloads');
-              saveDatabase(db);
+              if (!confirmClearHistory('all')) return;
+              clearHistory('all');
               if (mainWindow) mainWindow.webContents.send('downloads-cleared');
             } catch (err: unknown) {
               log.error('[Menu] Failed to clear all history:', err);
@@ -1465,12 +1481,31 @@ function createWindow() {
   });
 
   const isDevRenderer = !app.isPackaged && process.env.CI !== 'true';
-  const forceBuilt = process.env.CI === 'true';
-  
-  if (isDevRenderer && !forceBuilt) {
-    mainWindow.loadURL('http://localhost:5173');
+  const devUrl = 'http://localhost:5173';
+  const indexHtml = isDevRenderer ? null : getPackagedIndexHtmlPath();
+
+  // A plain link would load its page in this window, and the preload API with it.
+  // Routing is hash-based, so the app itself never navigates away from its page.
+  mainWindow.webContents.on('will-navigate', (event, target) => {
+    let own = false;
+    try {
+      const u = new URL(target);
+      own = indexHtml
+        ? u.protocol === 'file:' && fileURLToPath(u).toLowerCase() === indexHtml.toLowerCase()
+        : u.origin === devUrl;
+    } catch {
+      /* not a URL we know */
+    }
+    if (own) return;
+    event.preventDefault();
+    if (isAllowedExternalUrl(target)) shell.openExternal(target);
+    else log.warn(`[MAIN] Blocked navigation: ${target}`);
+  });
+
+  if (indexHtml) {
+    mainWindow.loadFile(indexHtml);
   } else {
-    mainWindow.loadFile(getPackagedIndexHtmlPath());
+    mainWindow.loadURL(devUrl);
   }
 }
 
@@ -1708,30 +1743,40 @@ async function downloadFile(url: string, dest: string, digest?: string | null): 
 }
 
 /** The transfer itself, with no integrity check. Use downloadFile instead. */
-async function downloadFileUnverified(url: string, dest: string): Promise<void> {
+async function downloadFileUnverified(
+  url: string,
+  dest: string,
+  onProgress?: (received: number, total: number) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const doRequest = (redirectUrl: string) => {
-      https
-        .get(redirectUrl, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
-          if (res.statusCode === 301 || res.statusCode === 302) {
-            doRequest(res.headers.location!);
-            return;
-          }
-          if (res.statusCode !== 200) {
-            reject(new Error(`Failed to download file (HTTP ${res.statusCode}): ${url}`));
-            return;
-          }
-          const file = fs.createWriteStream(dest);
-          res.pipe(file);
-          file.on('finish', () => file.close(() => resolve()));
-          file.on('error', (err) => {
-            fs.unlink(dest, () => {});
-            reject(err);
-          });
-        })
-        .on('error', reject);
+    const doRequest = (target: string, redirectsLeft: number) => {
+      const request = https.get(target, { headers: { 'User-Agent': 'Internet-Download-Hub' } }, (res) => {
+        const status = res.statusCode ?? 0;
+        // GitHub answers release downloads with a redirect to its CDN.
+        if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
+          res.resume(); // drain, or the socket is never released
+          doRequest(new URL(res.headers.location, target).toString(), redirectsLeft - 1);
+          return;
+        }
+        if (status !== 200) {
+          res.resume();
+          reject(new Error(`Failed to download file (HTTP ${status}): ${url}`));
+          return;
+        }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        if (onProgress) res.on('data', (chunk: Buffer) => onProgress((received += chunk.length), total));
+        // pipeline, not pipe: a connection that drops mid-body rejects instead of hanging.
+        pipeline(res, fs.createWriteStream(dest)).then(resolve, (err) => {
+          fs.unlink(dest, () => {});
+          reject(err);
+        });
+      });
+      request.on('error', reject);
+      // A connection that stays open but stops sending ends the same way.
+      request.setTimeout(60000, () => request.destroy(new Error(`The download stalled: ${url}`)));
     };
-    doRequest(url);
+    doRequest(url, 5);
   });
 }
 
@@ -2356,6 +2401,15 @@ function setupIpcHandlers() {
           },
           (err: Error) => {
             log.error(`[Extractor] Playlist stream error: ${err.message}`);
+            // Ends the dialog's loading state; without this it spun forever.
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('playlist-detection-complete', {
+                title: 'Playlist',
+                count: 0,
+                uploader: '',
+                error: translateDownloadError(err.message, null, rawUrl),
+              });
+            }
           }
         );
 
@@ -2586,27 +2640,11 @@ function setupIpcHandlers() {
       killProcessTree(job.process.pid);
       activeTasks.delete(numericId);
       updatePowerSave();
-
-      // Clean up partial files — yt-dlp leaves .part files behind
-      try {
-        const fileBase = path.basename(job.outputTemplate, path.extname(job.outputTemplate));
-        if (job.savePath && fs.existsSync(job.savePath)) {
-          const files = fs.readdirSync(job.savePath);
-          for (const file of files) {
-            if ((file.includes(fileBase) && file.endsWith('.part')) || file.endsWith('.ytdl')) {
-              fs.unlinkSync(path.join(job.savePath, file));
-              log.info('[CANCEL] Deleted partial file:', file);
-            }
-          }
-        }
-      } catch (err) {
-        log.warn('[CANCEL] Could not clean up partial files:', err);
-      }
     }
 
-    // Get save path to clean up partial file directly from DB just in case it wasn't active
-    const dl = getQuery(db, 'SELECT save_path FROM downloads WHERE id = ?', [numericId]);
-    if (dl) deletePartialFile(dl.save_path);
+    // Queued and paused downloads have partial data too, so this does not depend on `job`.
+    const dl = getQuery(db, 'SELECT save_path, state FROM downloads WHERE id = ?', [numericId]);
+    if (dl && dl.state !== 'completed') discardPartialDownload(numericId, dl.save_path, job?.recording);
 
     updateDownloadInDb(numericId, { state: 'cancelled' });
     if (mainWindow) {
@@ -2634,9 +2672,7 @@ function setupIpcHandlers() {
     }
 
     const dl = getQuery(db, 'SELECT save_path, state FROM downloads WHERE id = ?', [id]);
-    if (dl && dl.state !== 'completed') {
-      deletePartialFile(dl.save_path);
-    }
+    if (dl && dl.state !== 'completed') discardPartialDownload(Number(id), dl.save_path, job?.recording);
 
     db.run('DELETE FROM downloads WHERE id = ?', [id]);
     saveDatabase(db);
@@ -2647,6 +2683,11 @@ function setupIpcHandlers() {
 
   // ── open-file-path ────────────────────────────────────────────────────────
   ipcMain.handle('open-file-path', async (_: any, filePath: string) => {
+    // shell.openPath runs executables too, so only what this app finished downloading.
+    const known = getQuery(db, "SELECT 1 AS ok FROM downloads WHERE state = 'completed' AND save_path = ?", [
+      String(filePath),
+    ]);
+    if (!known) throw new Error('Only finished downloads can be opened from here.');
     const result = await shell.openPath(filePath);
     if (result) {
       throw new Error(`Could not open file: ${result}`);
@@ -2745,19 +2786,7 @@ function setupIpcHandlers() {
 
   // ── clear-history ─────────────────────────────────────────────────────────
   ipcMain.handle('clear-history', async (_: any, type: 'all' | 'completed' | 'failed' = 'all') => {
-    if (type === 'all') {
-      activeTasks.forEach((job) => {
-        killProcessTree(job.process.pid);
-      });
-      activeTasks.clear();
-      updatePowerSave();
-      db.run('DELETE FROM downloads');
-    } else if (type === 'completed') {
-      db.run("DELETE FROM downloads WHERE state = 'completed'");
-    } else if (type === 'failed') {
-      db.run("DELETE FROM downloads WHERE state = 'failed'");
-    }
-    saveDatabase(db);
+    clearHistory(type);
     return { success: true };
   });
 
@@ -2770,16 +2799,22 @@ function setupIpcHandlers() {
   ipcMain.handle('save-settings', async (_: any, settings: any) => {
     log.info('[IPC] save-settings called with:', settings);
     try {
-      const fields = Object.keys(settings)
-        .map((k) => {
-          const snakeKey = k.replace(/[A-Z]/g, (l) => `_${l.toLowerCase()}`);
-          return `${snakeKey} = ?`;
-        })
-        .join(', ');
-      const values = Object.values(settings);
+      // Keys become column names in the SQL text, so only real columns get through.
+      const columns = new Set(allQuery(db, 'PRAGMA table_info(settings)').map((c) => c.name));
+      columns.delete('id');
+      const entries = Object.entries(settings ?? {})
+        .map(([k, v]) => [k.replace(/[A-Z]/g, (l) => `_${l.toLowerCase()}`), v] as const)
+        .filter(([k]) => columns.has(k));
 
-      db.run(`UPDATE settings SET ${fields} WHERE id = 1`, values);
-      saveDatabase(db);
+      if (entries.length > 0) {
+        db.run(
+          `UPDATE settings SET ${entries.map(([k]) => `${k} = ?`).join(', ')} WHERE id = 1`,
+          entries.map(([, v]) => v),
+        );
+        saveDatabase(db);
+      }
+      // A higher download limit should start waiting downloads now, not after the next one ends.
+      processQueue();
       return getQuery(db, 'SELECT * FROM settings WHERE id = 1');
     } catch (error: any) {
       log.error(`[IPC Error] save-settings failed: ${error.message}`);
@@ -2885,7 +2920,11 @@ function setupIpcHandlers() {
             name: binary.name,
             installedVersion,
             latestVersion,
-            needsUpdate: normalizedInstalled !== normalizedLatest,
+            // 'Unknown' means a lookup failed; that is not evidence an update exists.
+            needsUpdate:
+              installedVersion !== 'Unknown' &&
+              latestVersion !== 'Unknown' &&
+              normalizedInstalled !== normalizedLatest,
             downloadUrl,
           };
         }),
@@ -2907,6 +2946,12 @@ function setupIpcHandlers() {
       const binary = BINARIES.find((b) => b.name === binaryName);
       if (!binary) {
         throw new Error(`Unknown binary: ${binaryName}`);
+      }
+
+      // Windows cannot replace an executable that is running.
+      const engine = binary.name === 'N_m3u8DL-RE' ? 'n-m3u8dl' : binary.name;
+      if ([...activeTasks.values()].some((t) => t.engine === engine)) {
+        return { success: false, newVersion: '', error: `${binary.name} is downloading right now. Pause those downloads, then update.` };
       }
 
       log.info(`[IPC] Updating ${binaryName}...`);
@@ -2952,7 +2997,7 @@ function setupIpcHandlers() {
 
   async function performBinaryUpdate(
     binary: (typeof BINARIES)[0],
-  ): Promise<{ success: boolean; newVersion: string }> {
+  ): Promise<{ success: boolean; newVersion: string; error?: string }> {
     try {
       const release = await fetchJson(binary.releaseApi);
       const latestVersion = release.tag_name;
@@ -3073,7 +3118,7 @@ function setupIpcHandlers() {
       return { success: true, newVersion: latestVersion };
     } catch (error: any) {
       log.error(`Failed to update ${binary.name}: ${error.message}`);
-      return { success: false, newVersion: '' };
+      return { success: false, newVersion: '', error: error.message };
     }
   }
 
@@ -3205,8 +3250,27 @@ function setupIpcHandlers() {
   });
 }
 
-// Store incomplete lines between data chunks
-const lineBuffers = new Map<number, string>();
+// Prefixes the line yt-dlp prints with the finished file's path.
+const FINAL_PATH_MARK = 'IDH_FILE:';
+
+/** Undoes path.toNamespacedPath: \\?\C:\x -> C:\x and \\?\UNC\host\x -> \\host\x. */
+function withoutNamespace(p: string): string {
+  return p.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
+}
+
+/** Applies cleanFilename to a finished file, unless that name is taken or comes out empty. */
+function tidyFileName(file: string): string {
+  const { dir, name, ext } = path.parse(file);
+  const clean = cleanFilename(name);
+  const target = path.join(dir, clean + ext);
+  if (!clean || target === file || fs.existsSync(target)) return file;
+  try {
+    fs.renameSync(file, target);
+    return target;
+  } catch {
+    return file;
+  }
+}
 
 // ── Spawn Download (shared logic) ─────────────────────────────────────────────
 function spawnDownload(
@@ -3217,18 +3281,19 @@ function spawnDownload(
   isResume: boolean = false,
   youtubePlayerClient?: YoutubePlayerClient,
   engineIndex: number = 0,
-  primaryStderr: string = '',
+  primaryError: string = '',
 ): { id: number } {
   taskStopReasons.delete(downloadId);
-  lineBuffers.delete(downloadId); // a stopped process may have left half a line behind
-  const engines = downloadEnginesFor(url);
+  const engines = downloadEnginesFor(url, formatId);
   const current = engines[engineIndex] ?? { engine: 'yt-dlp' as Engine, binary: ytDlpPath };
   const hasNextEngine = engineIndex + 1 < engines.length;
   // Used for translating yt-dlp failures reliably (close handler only gives the exit code).
   let lastStderrOutput = '';
   let aggregatedStderr = '';
-  let actualFilePath = outputPath;
-  let cleanedFilePathCandidate: string | null = null;
+  // Failure lines from either stream: streamlink reports errors on stdout.
+  const errorLines: string[] = [];
+  // The finished file or folder. yt-dlp only knows it after merging, and prints it then.
+  let actualFilePath: string | null = null;
 
   // Build the yt-dlp format argument intelligently
   let formatArg: string;
@@ -3243,16 +3308,21 @@ function spawnDownload(
     // are already complete yt-dlp format expressions — use as-is
     formatArg = formatId;
   } else {
-    // Simple format ID (e.g., '137', '248') — append +bestaudio for merged output
-    formatArg = `${formatId}+bestaudio`;
+    // Simple format ID (e.g., '137', '248'): merge in the best audio. Most HLS streams have
+    // no audio-only format, where that selector fails, so the format alone is the fallback.
+    formatArg = `${formatId}+bestaudio/${formatId}`;
   }
 
   const saveFolder = path.dirname(outputPath);
-  const outputTemplate = path.join(saveFolder, '%(title)s.%(ext)s');
+  const stem = path.parse(outputPath).name;
+  const tempDir = jobTempDir(saveFolder, downloadId);
+  let recording: string | null = null;
+  // Engines get \\?\ paths: Python otherwise stops at 260 characters, which a long title
+  // in a nested folder reaches. Node's fs adds the prefix itself.
+  const long = path.toNamespacedPath;
 
   const cookiesPath = getResolvedCookiesPath();
 
-  const site = siteName(url);
   const binaryPath = current.binary;
   log.info(`[DOWNLOAD] Job ${downloadId} using engine ${current.engine} (${engineIndex + 1}/${engines.length})`);
 
@@ -3260,10 +3330,18 @@ function spawnDownload(
 
   if (current.engine === 'yt-dlp') {
     downloadArgs = [
+      // Without this yt-dlp prints in the system code page and silently drops every
+      // character it lacks, so a non-English title came back as a path that does not exist.
+      '--encoding',
+      'utf-8',
       '--newline',
       '--progress',
       '--no-colors',
       '--no-warnings',
+      // The finished path, after merging and audio extraction. --no-quiet: --print implies --quiet.
+      '--no-quiet',
+      '--print',
+      `after_move:${FINAL_PATH_MARK}%(filepath)s`,
       ...ytDlpCommonArgs(url, {
         noPlaylist: true,
         ...(youtubePlayerClient !== undefined ? { youtubePlayerClient } : {}),
@@ -3274,12 +3352,18 @@ function spawnDownload(
       '200',
       '-f',
       formatArg,
-      '--merge-output-format',
-      'mp4',
+      // "Audio Only (MP3)" used to save whatever container the audio came in.
+      ...(formatId === 'bestaudio' ? ['-x', '--audio-format', 'mp3'] : ['--merge-output-format', 'mp4']),
       '--ffmpeg-location',
       ffmpegPath,
+      // Partial files stay in the job's scratch folder until yt-dlp moves the result home.
+      // -o must be relative for -P to apply.
+      '-P',
+      `home:${long(saveFolder)}`,
+      '-P',
+      `temp:${long(tempDir)}`,
       '-o',
-      outputTemplate,
+      '%(title)s.%(ext)s',
     ];
     if (isResume) {
       downloadArgs.unshift('--continue');
@@ -3288,14 +3372,20 @@ function spawnDownload(
   } else if (current.engine === 'gallery-dl') {
     // -D, not -d: -d nests files under <category>/<id>/, so the recorded path pointed at nothing.
     // The gallery gets its own folder, and that folder is what the queue opens.
-    actualFilePath = path.join(saveFolder, path.parse(outputPath).name);
-    downloadArgs = ['-D', actualFilePath, '--', url];
+    actualFilePath = path.join(saveFolder, stem);
+    // gallery-dl extends -D itself, but not the part directory.
+    downloadArgs = ['-D', actualFilePath, '-o', `downloader.part-directory=${long(tempDir)}`, '--', url];
   } else if (current.engine === 'streamlink') {
-    downloadArgs = ['--hls-live-restart', '--force', '--ffmpeg-ffmpeg', ffmpegPath, '-o', outputPath, url, 'best'];
+    // Records straight into the save folder, so a stopped live stream still leaves a playable
+    // file; a new name each run, so resuming never overwrites what was recorded before.
+    recording = actualFilePath = uniquePath(path.join(saveFolder, `${stem}.ts`));
+    downloadArgs = ['--progress=force', '--hls-live-restart', '--ffmpeg-ffmpeg', ffmpegPath,
+      '--ffmpeg-fout', 'mpegts', '-o', long(recording), url, 'best'];
   } else if (current.engine === 'n-m3u8dl') {
     // --auto-select: without it N_m3u8DL-RE prompts for tracks, and with no terminal it exits 1.
     // --tmp-dir: the default is the working directory, i.e. the read-only install folder.
-    downloadArgs = [url, '--save-dir', saveFolder, '--tmp-dir', saveFolder, '--save-name', path.parse(outputPath).name,
+    actualFilePath = path.join(saveFolder, `${stem}.mp4`);
+    downloadArgs = [url, '--save-dir', long(saveFolder), '--tmp-dir', long(tempDir), '--save-name', stem,
       '--auto-select', '--no-log', '--no-ansi-color', '--ffmpeg-binary-path', ffmpegPath, '-M', 'format=mp4'];
   }
 
@@ -3304,31 +3394,65 @@ function spawnDownload(
 
   const downloadProcess = spawn(binaryPath, downloadArgs);
 
-  activeTasks.set(downloadId, {
-    process: downloadProcess,
-    url,
-    formatArg,
-    outputTemplate,
-    savePath: saveFolder,
-    // Helps cleanup/correct open-folder paths if we capture it.
-    filePath: actualFilePath as any,
-  });
+  activeTasks.set(downloadId, { process: downloadProcess, engine: current.engine, recording });
   updatePowerSave();
 
-  const parseYtDlpOutput = (raw: string, jobId: number) => {
-    const existing = lineBuffers.get(jobId) || '';
-    const combined = existing + raw;
+  const sendProgress = (data: Record<string, unknown>) => {
+    mainWindow?.webContents.send('download-progress', {
+      jobId: String(downloadId),
+      id: downloadId,
+      phase: 'Downloading',
+      status: 'downloading',
+      ...data,
+    });
+  };
+  let galleryFiles = 0;
+
+  // stdout and stderr each keep their own unfinished line; sharing one buffer spliced them together.
+  const pending = { stdout: '', stderr: '' };
+  const parseYtDlpOutput = (raw: string, stream: keyof typeof pending) => {
+    const jobId = downloadId;
+    let combined = pending[stream] + raw;
+    // N_m3u8DL-RE 0.6 writes to a pipe without line breaks; without this nothing it
+    // printed would ever count as a complete line.
+    if (current.engine === 'n-m3u8dl') combined = splitNm3u8dlOutput(combined);
 
     // Split on newlines AND carriage returns to handle both output styles
     const lines = combined.split(/[\n\r]+/);
 
     // Keep the last item only if it did not end with a newline (incomplete line)
-    const lastLine = combined.endsWith('\n') || combined.endsWith('\r') ? '' : lines.pop() || '';
-    lineBuffers.set(jobId, lastLine);
+    pending[stream] = combined.endsWith('\n') || combined.endsWith('\r') ? '' : lines.pop() || '';
 
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
+
+      if (current.engine === 'yt-dlp' && trimmed.startsWith(FINAL_PATH_MARK)) {
+        actualFilePath = withoutNamespace(trimmed.slice(FINAL_PATH_MARK.length));
+        continue;
+      }
+
+      if (current.engine === 'gallery-dl' && stream === 'stdout' && !trimmed.startsWith('[')) {
+        // One line per file: its path, or "# path" when it was already there.
+        galleryFiles++;
+        sendProgress({ totalSize: `${galleryFiles} file${galleryFiles === 1 ? '' : 's'} saved`, indeterminate: true });
+        continue;
+      }
+
+      const engineProgress = parseEngineProgress(current.engine, trimmed);
+      if (engineProgress) {
+        const { percent, size, speed, eta } = engineProgress;
+        const known = percent !== undefined;
+        sendProgress({
+          ...(known ? { percent: Math.min(percent, 99) } : { indeterminate: true }),
+          totalSize: size,
+          speed,
+          eta: known ? formatEta(eta) : '',
+        });
+        if (known) mainWindow?.setProgressBar(Math.min(percent, 99) / 100);
+        else mainWindow?.setProgressBar(2, { mode: 'indeterminate' });
+        continue;
+      }
 
       const progressMatch = trimmed.match(
         /\[download\]\s+([\d.]+)%(?:\s+of\s+(?:~?\s*)?([\w.\s]+?))?(?:(?:\s+in\s+[\w:]+)?\s+at\s+([\w.\s/]+?))?(?:\s+ETA\s+([\w:]+))?(?:\s+\(frag.*?\))?\s*$/i,
@@ -3378,28 +3502,7 @@ function spawnDownload(
       }
 
       if (trimmed.startsWith('[download] Destination:')) {
-        // yt-dlp may still sanitize filenames (underscores/dashes). Fix it immediately if needed.
-        const rawDestinationPath = trimmed.replace('[download] Destination:', '').trim();
-        const dir = path.dirname(rawDestinationPath);
-        const ext = path.extname(rawDestinationPath);
-        const baseName = path.basename(rawDestinationPath, ext);
-        const cleanName = cleanFilename(baseName);
-        const cleanPath = path.join(dir, cleanName + ext);
-        cleanedFilePathCandidate = rawDestinationPath !== cleanPath ? cleanPath : null;
-
-        actualFilePath = rawDestinationPath;
-
-        if (rawDestinationPath && cleanedFilePathCandidate && fs.existsSync(rawDestinationPath)) {
-          try {
-            fs.renameSync(rawDestinationPath, cleanedFilePathCandidate);
-            actualFilePath = cleanedFilePathCandidate;
-            const task = activeTasks.get(downloadId);
-            if (task) (task as any).filePath = cleanedFilePathCandidate;
-          } catch {
-            // If rename fails (file not ready yet), we will attempt again in close handler.
-          }
-        }
-
+        // A scratch file in the job's temp folder; the finished path arrives with FINAL_PATH_MARK.
         if (mainWindow) {
           mainWindow.webContents.send('download-progress', {
             jobId: String(jobId),
@@ -3452,14 +3555,11 @@ function spawnDownload(
         continue;
       }
 
-      if (
-        trimmed.includes('ERROR:') ||
-        trimmed.includes('error:') ||
-        trimmed.includes('Unable to download') ||
-        trimmed.includes('This video is unavailable')
-      ) {
+      if (isEngineErrorLine(trimmed)) {
         log.error(`[PROGRESS] Error for job ${jobId}:`, trimmed);
-        const userFriendlyError = translateDownloadError(trimmed, null, url);
+        errorLines.push(trimmed);
+        // Same wording the close handler settles on: the first engine's error is the most specific.
+        const userFriendlyError = translateDownloadError(primaryError || errorLines.join('\n'), null, url);
         const deferFailForAgeRetry =
           current.engine === 'yt-dlp' &&
           isYouTubeUrl(url) &&
@@ -3502,7 +3602,7 @@ function spawnDownload(
   downloadProcess.stdout.on('data', (data: Buffer) => {
     if (superseded()) return;
     log.info('[PROGRESS-AUDIT] STDOUT received:', data.toString());
-    parseYtDlpOutput(data.toString(), downloadId);
+    parseYtDlpOutput(data.toString(), 'stdout');
   });
 
   downloadProcess.stderr.on('data', (data: Buffer) => {
@@ -3511,7 +3611,7 @@ function spawnDownload(
     aggregatedStderr += text;
     log.info('[PROGRESS-AUDIT] STDERR received:', text);
     lastStderrOutput = text;
-    parseYtDlpOutput(text, downloadId);
+    parseYtDlpOutput(text, 'stderr');
   });
 
   // A failed spawn emits 'error' and then 'close'; only the first may act,
@@ -3527,7 +3627,10 @@ function spawnDownload(
       return;
     }
     log.info('[PROGRESS-AUDIT] Process closed with code:', code);
-    lineBuffers.delete(downloadId);
+    // A final line without a line break (often the engine's error) still counts.
+    for (const stream of ['stdout', 'stderr'] as const) {
+      if (pending[stream]) parseYtDlpOutput('\n', stream);
+    }
     activeTasks.delete(downloadId);
     updatePowerSave();
 
@@ -3553,27 +3656,13 @@ function spawnDownload(
 
     if (code === 0) {
       log.info(`[PROGRESS] Job ${downloadId} completed successfully`);
-      // Final attempt to clean filenames now that the file should exist.
-      if (
-        cleanedFilePathCandidate &&
-        fs.existsSync(actualFilePath) &&
-        cleanedFilePathCandidate !== actualFilePath
-      ) {
-        try {
-          if (!fs.existsSync(cleanedFilePathCandidate)) {
-            fs.renameSync(actualFilePath, cleanedFilePathCandidate);
-          }
-          actualFilePath = cleanedFilePathCandidate;
-          const task = activeTasks.get(downloadId);
-          if (task) (task as any).filePath = cleanedFilePathCandidate;
-        } catch {
-          // Best effort only.
-        }
-      }
+      removeJobTempDir(saveFolder, downloadId);
+      const finalPath = current.engine === 'yt-dlp' && actualFilePath ? tidyFileName(actualFilePath) : actualFilePath;
+      // Without a reported path, keep what the row already says rather than guess.
       updateDownloadInDb(downloadId, {
         state: 'completed',
         completedAt: new Date(),
-        savePath: actualFilePath,
+        ...(finalPath ? { savePath: finalPath } : {}),
       });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
@@ -3582,11 +3671,13 @@ function spawnDownload(
           percent: 100,
           phase: 'Download complete',
           status: 'completed',
-          // UI uses `savePath` to open the correct folder.
-          savePath: saveFolder,
-          filePath: actualFilePath,
+          // The file (or gallery folder) itself, as the history shows after a restart;
+          // open-folder selects a file in Explorer and opens a folder.
+          savePath: finalPath ?? saveFolder,
+          filePath: finalPath,
           speed: '',
           eta: '',
+          indeterminate: false,
         });
         mainWindow.setProgressBar(-1);
         try {
@@ -3607,19 +3698,19 @@ function spawnDownload(
         log.info(
           `[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`,
         );
-        spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded', engineIndex, primaryStderr);
+        spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded', engineIndex, primaryError);
         processQueue();
         return;
       }
-      // Keep the first engine's stderr: it is the most specific ("private video", "login required"...).
-      const failureStderr = primaryStderr || aggregatedStderr || lastStderrOutput;
+      // Keep the first engine's error: it is the most specific ("private video", "login required"...).
+      const failureText = primaryError || errorLines.join('\n') || lastStderrOutput;
       if (hasNextEngine) {
         log.warn(`[PROGRESS] Job ${downloadId}: ${current.engine} exited ${code}, falling back to ${engines[engineIndex + 1].engine}`);
-        spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, failureStderr);
+        spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, failureText);
         return;
       }
       console.error(`[PROGRESS] Job ${downloadId} failed with code ${code}`);
-      const userFriendlyError = buildErrorMessage(site, failureStderr);
+      const userFriendlyError = translateDownloadError(failureText, code, url);
       updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
       if (mainWindow) {
         mainWindow.webContents.send('download-progress', {
@@ -3648,10 +3739,10 @@ function spawnDownload(
     updatePowerSave();
     log.error(`[Spawn Error] downloadId=${downloadId}: ${err.message}`);
     if (hasNextEngine) {
-      spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, primaryStderr || err.message);
+      spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, primaryError || err.message);
       return;
     }
-    const userFriendlyError = buildErrorMessage(site, err?.message || String(err));
+    const userFriendlyError = translateDownloadError(primaryError || err?.message || String(err), null, url);
     updateDownloadInDb(downloadId, { state: 'failed', error: userFriendlyError });
     if (mainWindow) {
       mainWindow.webContents.send('download-progress', {

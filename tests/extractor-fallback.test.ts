@@ -41,18 +41,42 @@ test('falls back to streamlink when yt-dlp fails', async () => {
   expect(engines()).toEqual(['yt-dlp', 'streamlink']);
 });
 
+// The shape `gallery-dl -j` really prints: [2, directory], [3, url, file], [-1, error].
+const galleryJson = (...messages: unknown[]) => ({ stdout: JSON.stringify(messages) });
+
 test('falls back to gallery-dl after yt-dlp and streamlink', async () => {
   run.mockImplementation(async (bin: string) => {
     if (bin === 'gallery-dl')
-      return { stdout: JSON.stringify([{ url: 'https://i.example.com/1.jpg' }]) };
+      return galleryJson(
+        [2, { category: 'imgur', album: { title: 'Holiday' } }],
+        [3, 'https://i.example.com/clip.mp4', { extension: 'mp4' }],
+        [3, 'https://i.example.com/1.jpg', { extension: 'jpg' }],
+      );
     throw fail(`${bin} failed`);
   });
   const info = await extractVideoInfo('https://example.com/album', paths);
   expect(info).toMatchObject({
+    title: 'Holiday',
     extractionMethod: 'gallery-dl',
     thumbnail: 'https://i.example.com/1.jpg',
+    formats: [{ label: 'Full Quality Gallery (2 items)', ext: 'gallery' }],
   });
   expect(engines()).toEqual(['yt-dlp', 'streamlink', 'gallery-dl']);
+});
+
+test('a gallery-dl error message or an empty gallery is a failure, not a result', async () => {
+  run.mockImplementation(async (bin: string) => {
+    if (bin === 'gallery-dl')
+      return galleryJson([-1, { error: 'NotFoundError', message: 'Requested album could not be found' }]);
+    throw fail(`${bin}: no plugin`);
+  });
+  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow('yt-dlp: no plugin');
+
+  run.mockImplementation(async (bin: string) => {
+    if (bin === 'gallery-dl') return galleryJson([2, { category: 'imgur' }]);
+    throw fail(`${bin}: no plugin`);
+  });
+  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow('yt-dlp: no plugin');
 });
 
 test('reports the first real engine error, not the later "not available" one', async () => {

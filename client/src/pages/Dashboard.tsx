@@ -4,7 +4,6 @@ import { useLocation } from 'wouter';
 import { LayoutShell } from '@/components/layout-shell';
 import { cn } from '@/lib/utils';
 import { useVideoDetect, type DetectedVideo } from '@/hooks/use-video-detect';
-import { queryClient } from '@/lib/queryClient';
 import {
   PlaylistDialog,
   type PlaylistEntry,
@@ -107,9 +106,10 @@ export default function Dashboard() {
     setRenderedTabs((prev) => (prev.has(currentTab) ? prev : new Set(prev).add(currentTab)));
   }, [currentTab]);
 
-  const handleTabChange = (value: string) => {
-    setLocation(value === 'downloader' ? '/' : `/${value}`);
-  };
+  const handleTabChange = useCallback(
+    (value: string) => setLocation(value === 'downloader' ? '/' : `/${value}`),
+    [setLocation],
+  );
 
   // Persist Downloader state across tab navigation
   const [scanUrl, setScanUrl] = useState<string>('');
@@ -144,11 +144,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!window.electronAPI) return;
-    window.electronAPI.onYtDlpUpdateAvailable?.((data) => {
+    const offUpdate = window.electronAPI.onYtDlpUpdateAvailable?.((data) => {
       setYtdlpUpdateAvailable(true);
       setYtdlpLatestVersion(data.latestVersion);
     });
-    window.electronAPI.onYtDlpVersionInfo?.((data) => {
+    const offInfo = window.electronAPI.onYtDlpVersionInfo?.((data) => {
       if (!data.updateAvailable) setYtdlpUpdateAvailable(false);
     });
     window.electronAPI.onPlaylistDetected?.((data) => {
@@ -161,13 +161,19 @@ export default function Dashboard() {
     window.electronAPI.onNavigateToTab?.((tabPath: string) => {
       handleTabChange(tabPath === '/' ? 'downloader' : tabPath.replace('/', ''));
     });
+    // The menu changes settings and history behind the open page. The preload keeps one
+    // listener per channel, so this one re-broadcasts and the panels listen on window.
     window.electronAPI.onSettingsUpdated?.(() => {
-      queryClient.invalidateQueries({ queryKey: ['/api/settings'] });
+      window.dispatchEvent(new Event(SETTINGS_UPDATED_EVENT));
     });
     window.electronAPI.onDownloadsCleared?.(() => {
-      queryClient.invalidateQueries({ queryKey: ['/api/downloads'] });
+      window.dispatchEvent(new Event(DOWNLOADS_CLEARED_EVENT));
     });
-  }, []);
+    return () => {
+      offUpdate?.();
+      offInfo?.();
+    };
+  }, [handleTabChange]);
 
   const showUpdateBanner = ytdlpUpdateAvailable && !ytdlpBannerDismissed;
 
@@ -264,7 +270,7 @@ interface VideoInfoProps {
   scanUrl: string;
   setScanUrl: (url: string) => void;
   videoInfo: DetectedVideo[] | null;
-  setVideoInfo: (info: DetectedVideo[] | null) => void;
+  setVideoInfo: React.Dispatch<React.SetStateAction<DetectedVideo[] | null>>;
   showUpdateBanner: boolean;
   ytdlpLatestVersion: string;
   onDismissBanner: () => void;
@@ -311,18 +317,12 @@ function VideoCapturePanel({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedCount, setStreamedCount] = useState(0);
 
-  const loadingMessages = [
-    'Fetching video details...',
-    'Analyzing available qualities...',
-    'Almost ready...',
-  ];
-
   useEffect(() => {
     if (!loading) return;
     let i = 0;
     const interval = setInterval(() => {
-      i = (i + 1) % loadingMessages.length;
-      setLoadingMessage(loadingMessages[i]);
+      i = (i + 1) % LOADING_MESSAGES.length;
+      setLoadingMessage(LOADING_MESSAGES[i]);
     }, 3000);
     return () => clearInterval(interval);
   }, [loading]);
@@ -339,9 +339,13 @@ function VideoCapturePanel({
     if (!window.electronAPI) return;
 
     window.electronAPI.onPlaylistVideoDetected?.((data: { video: DetectedVideo; index: number; total: number }) => {
-      const currentVideoInfo = videoInfo || [];
-      if (currentVideoInfo.some((v: DetectedVideo) => v.url === data.video.url && v.title === data.video.title)) return;
-      setVideoInfo([...currentVideoInfo, data.video]);
+      // Functional update: this listener is registered once, so a captured `videoInfo`
+      // would stay at its first value and each video would replace the list.
+      setVideoInfo((current) => {
+        const list = current || [];
+        if (list.some((v) => v.url === data.video.url && v.title === data.video.title)) return current;
+        return [...list, data.video];
+      });
 
       // Also update the playlist dialog data in real-time
       setPlaylistDetectedData((prev: PlaylistDialogData | null) => {
@@ -366,22 +370,22 @@ function VideoCapturePanel({
       });
     });
 
-    window.electronAPI.onPlaylistDetectionComplete?.((metadata: { title: string; count: number }) => {
-      setPlaylistTitle(metadata.title);
-      setPlaylistVideoCount(metadata.count);
+    window.electronAPI.onPlaylistDetectionComplete?.((metadata) => {
       setIsPlaylistStreaming(false);
+      if (!metadata.error) {
+        setPlaylistTitle(metadata.title);
+        setPlaylistVideoCount(metadata.count);
+      }
 
-      // Update dialog with final count and title
+      // Update dialog with final count and title, or say why the list stopped
       setPlaylistDetectedData((prev: PlaylistDialogData | null) => {
         if (!prev) return prev;
-        return {
-          ...prev,
-          title: metadata.title,
-          count: metadata.count,
-        };
+        return metadata.error
+          ? { ...prev, count: prev.entries.length, error: metadata.error }
+          : { ...prev, title: metadata.title, count: metadata.count };
       });
     });
-  }, [setVideoInfo]);
+  }, [setVideoInfo, setPlaylistDetectedData, setIsPlaylistStreaming]);
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1126,6 +1130,8 @@ interface DownloadJob {
   error?: string;
   savePath?: string;
   canRetry: boolean;
+  /** A live stream or gallery: no total, so no percentage to show. */
+  indeterminate?: boolean;
 }
 
 const DownloadCard = ({
@@ -1148,6 +1154,7 @@ const DownloadCard = ({
   loading: boolean;
 }) => {
   const isActive = job.status === 'downloading' || job.status === 'merging';
+  const showsPercent = !(isActive && job.indeterminate);
   const isPaused = job.status === 'paused';
   const isCompleted = job.status === 'completed' || job.percent === 100;
   const isFailed = job.status === 'failed';
@@ -1230,15 +1237,19 @@ const DownloadCard = ({
         {/* Progress bar */}
         <div className="w-full h-2 bg-secondary rounded-full overflow-hidden mb-2">
           <div
-            className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
-            style={{ width: `${Math.max(0, Math.min(100, job.percent))}%` }}
+            className={cn(
+              'h-full rounded-full transition-all duration-500 ease-out',
+              progressColor,
+              !showsPercent && 'animate-pulse',
+            )}
+            style={{ width: showsPercent ? `${Math.max(0, Math.min(100, job.percent))}%` : '100%' }}
           />
         </div>
 
         {/* Stats row */}
         {(isActive || isPaused) && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
-            <span className="font-mono font-medium">{job.percent.toFixed(1)}%</span>
+            {showsPercent && <span className="font-mono font-medium">{job.percent.toFixed(1)}%</span>}
             {job.speed && (
               <span className="flex items-center gap-1">
                 <Zap className="w-3 h-3" /> {job.speed}
@@ -1354,7 +1365,7 @@ function HistoryPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
 
-  // Load initial history
+  // Load history on mount, and again when the menu clears it
   useEffect(() => {
     const loadHistory = async () => {
       if (!window.electronAPI) return;
@@ -1384,6 +1395,8 @@ function HistoryPanel() {
       }
     };
     loadHistory();
+    window.addEventListener(DOWNLOADS_CLEARED_EVENT, loadHistory);
+    return () => window.removeEventListener(DOWNLOADS_CLEARED_EVENT, loadHistory);
   }, []);
 
   // Set up progress listener ONCE on mount
@@ -1408,6 +1421,8 @@ function HistoryPanel() {
             totalSize: data.totalSize || job.totalSize,
             error: data.error || job.error,
             savePath: data.savePath || job.savePath,
+            indeterminate:
+              typeof data.indeterminate === 'boolean' ? data.indeterminate : job.indeterminate,
             canRetry:
               data.status === 'failed' ||
               data.status === 'completed' ||
@@ -1504,7 +1519,8 @@ function HistoryPanel() {
   const handleClearHistory = async (type: 'all' | 'completed' | 'failed') => {
     if (!window.electronAPI) return;
     const confirmed = window.confirm(
-      `Are you sure you want to clear ${type} downloads? This cannot be undone.`,
+      `Are you sure you want to clear ${type} downloads? This cannot be undone.` +
+        (type === 'all' ? '\n\nDownloads in progress are stopped and their partial files deleted.' : ''),
     );
     if (!confirmed) return;
     setClearing(true);
@@ -1609,6 +1625,16 @@ function HistoryPanel() {
 // Settings Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Window events carrying the main process's settings-updated and downloads-cleared.
+const SETTINGS_UPDATED_EVENT = 'idh:settings-updated';
+const DOWNLOADS_CLEARED_EVENT = 'idh:downloads-cleared';
+
+const LOADING_MESSAGES = [
+  'Fetching video details...',
+  'Analyzing available qualities...',
+  'Almost ready...',
+];
+
 const DEFAULT_SETTINGS = {
   downloadPath: '',
   maxConcurrentDownloads: 3,
@@ -1681,64 +1707,67 @@ function SettingsPanel() {
     }
   }, []);
 
+  // Runs one engine update and records how it went on that engine's row. The main
+  // process reports failure as { success: false }, so a failure must not leave the row spinning.
+  const runBinaryUpdate = async (binaryName: string) => {
+    let result: { success: boolean; newVersion: string; error?: string };
+    try {
+      result = await window.electronAPI!.updateBinary(binaryName);
+    } catch (error: any) {
+      result = { success: false, newVersion: '', error: error?.message };
+    }
+    setBinaryUpdates((prev) =>
+      prev.map((u) =>
+        u.name !== binaryName
+          ? u
+          : result.success
+            ? {
+              ...u,
+              installedVersion: result.newVersion,
+              latestVersion: result.newVersion,
+              needsUpdate: false,
+              updating: false,
+              error: undefined,
+            }
+            : { ...u, updating: false, error: result.error || 'The update did not complete.' },
+      ),
+    );
+  };
+
   const handleUpdateBinary = async (binaryName: string) => {
     if (!window.electronAPI) return;
     setBinaryUpdates((prev) =>
-      prev.map((u) => (u.name === binaryName ? { ...u, updating: true } : u)),
+      prev.map((u) => (u.name === binaryName ? { ...u, updating: true, error: undefined } : u)),
     );
-    try {
-      const result = await window.electronAPI.updateBinary(binaryName);
-      if (result.success) {
-        setBinaryUpdates((prev) =>
-          prev.map((u) =>
-            u.name === binaryName
-              ? {
-                ...u,
-                installedVersion: result.newVersion,
-                latestVersion: result.newVersion,
-                needsUpdate: false,
-                updating: false,
-              }
-              : u,
-          ),
-        );
-      }
-    } catch (error: any) {
-      console.error(`Failed to update ${binaryName}:`, error);
-      setBinaryUpdates((prev) =>
-        prev.map((u) => (u.name === binaryName ? { ...u, updating: false } : u)),
-      );
-    }
+    await runBinaryUpdate(binaryName);
   };
 
   const handleUpdateAllBinaries = async () => {
     if (!window.electronAPI) return;
-    setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: true })));
+    setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: true, error: undefined })));
     try {
       const updates = await window.electronAPI.checkAllBinaryUpdates();
-      const outdatedBinaries = updates.filter((u: any) => u.needsUpdate);
-      for (const binary of outdatedBinaries) {
-        try {
-          await window.electronAPI.updateBinary(binary.name);
-        } catch (error: any) {
-          console.error(`Failed to update ${binary.name}:`, error);
-        }
-      }
-      // Reuse the already-fetched updates array instead of calling checkAllBinaryUpdates again
+      const outdated = new Set(updates.filter((u: any) => u.needsUpdate).map((u: any) => u.name));
+      // Only the engines that were actually updated get marked up to date.
       setBinaryUpdates((prev) =>
         prev.map((u) => {
-          const updated = updates.find((e: any) => e.name === u.name);
-          if (updated) {
-            return { ...u, installedVersion: updated.latestVersion, latestVersion: updated.latestVersion, needsUpdate: false, updating: false };
-          }
-          return u;
+          const fresh = updates.find((e: any) => e.name === u.name);
+          return { ...u, ...fresh, updating: outdated.has(u.name) };
         }),
       );
+      for (const name of Array.from(outdated)) await runBinaryUpdate(name as string);
     } catch (error: any) {
       console.error('Failed to update binaries:', error);
       setBinaryUpdates((prev) => prev.map((u) => ({ ...u, updating: false })));
     }
   };
+
+  // The menu's "Choose Save Folder" writes behind this panel; without a reload the next
+  // change here would save the old folder back over it.
+  useEffect(() => {
+    window.addEventListener(SETTINGS_UPDATED_EVENT, loadSettings);
+    return () => window.removeEventListener(SETTINGS_UPDATED_EVENT, loadSettings);
+  }, [loadSettings]);
 
   useEffect(() => {
     loadSettings();
@@ -1760,14 +1789,14 @@ function SettingsPanel() {
   useEffect(() => {
     if (!window.electronAPI) return;
 
-    window.electronAPI.onYtDlpVersionInfo?.((data: any) => {
+    const offInfo = window.electronAPI.onYtDlpVersionInfo?.((data: any) => {
       setYtDlpVersion(data.currentVersion);
       setLatestVersion(data.latestVersion);
       setUpdateAvailable(false);
       setUpdateStatus('');
     });
 
-    window.electronAPI.onYtDlpUpdateAvailable?.((data: any) => {
+    const offUpdate = window.electronAPI.onYtDlpUpdateAvailable?.((data: any) => {
       setYtDlpVersion(data.currentVersion);
       setLatestVersion(data.latestVersion);
       setUpdateAvailable(true);
@@ -1777,6 +1806,10 @@ function SettingsPanel() {
     window.electronAPI.getYtDlpVersion?.().then((v: string) => {
       if (v && v !== 'unknown') setYtDlpVersion(v);
     }).catch(() => { });
+    return () => {
+      offInfo?.();
+      offUpdate?.();
+    };
   }, []);
 
   const saveSetting = async (key: string, value: any) => {
@@ -2118,12 +2151,19 @@ function SettingsPanel() {
                         )}
                         {!binary.needsUpdate &&
                           binary.installedVersion !== 'Checking...' &&
-                          binary.installedVersion !== 'Not installed' && (
+                          binary.installedVersion !== 'Not installed' &&
+                          binary.installedVersion !== 'Unknown' &&
+                          binary.latestVersion !== 'Unknown' && (
                             <span className="text-xs font-semibold bg-success/15 text-success border border-success/30 px-2 py-0.5 rounded-full ml-2 flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Up to date
                             </span>
                           )}
                       </div>
+                      {binary.error && (
+                        <p role="alert" className="text-xs text-destructive mt-2 flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" /> {binary.error}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -2142,7 +2182,11 @@ function SettingsPanel() {
                           Update
                         </Button>
                       ) : (
-                        <span className="text-sm text-muted-foreground">Up to date</span>
+                        <span className="text-sm text-muted-foreground">
+                          {binary.installedVersion === 'Unknown' || binary.latestVersion === 'Unknown'
+                            ? "Couldn't check"
+                            : 'Up to date'}
+                        </span>
                       )}
                     </div>
                   </div>
