@@ -2458,9 +2458,13 @@ function setupIpcHandlers() {
       };
     } catch (error: any) {
       log.error(`[IPC Error] fetch-video-info failed: ${error.message}`);
+      // An engine failure's message starts with the whole command line (user agent, cookie
+      // file path…), which must not steer the wording; the engine's error lines do.
+      const raw: string = error?.stderr || error?.stdout || error?.message || String(error);
+      const errorLines = raw.split('\n').filter(isEngineErrorLine).join('\n');
       return {
         success: false,
-        error: translateDownloadError(error?.message || String(error), null, rawUrl),
+        error: translateDownloadError(errorLines || error?.message || raw, null, rawUrl),
       };
     }
   });
@@ -3253,6 +3257,12 @@ function setupIpcHandlers() {
 // Prefixes the line yt-dlp prints with the finished file's path.
 const FINAL_PATH_MARK = 'IDH_FILE:';
 
+// yt-dlp's default favours AV1 video and Opus audio, which Windows' own player cannot play
+// in an MP4 without extra codecs. Resolution still comes first; at that resolution, H.264
+// and AAC win when the site offers them (yt-dlp's own `-t mp4` preset puts codec first
+// and so stops at 1080p on YouTube).
+const MP4_FRIENDLY_SORT = ['-S', 'lang,quality,res,fps,vcodec:h264,acodec:aac'];
+
 /** Undoes path.toNamespacedPath: \\?\C:\x -> C:\x and \\?\UNC\host\x -> \\host\x. */
 function withoutNamespace(p: string): string {
   return p.replace(/^\\\\\?\\UNC\\/, '\\\\').replace(/^\\\\\?\\/, '');
@@ -3353,7 +3363,7 @@ function spawnDownload(
       '-f',
       formatArg,
       // "Audio Only (MP3)" used to save whatever container the audio came in.
-      ...(formatId === 'bestaudio' ? ['-x', '--audio-format', 'mp3'] : ['--merge-output-format', 'mp4']),
+      ...(formatId === 'bestaudio' ? ['-x', '--audio-format', 'mp3'] : ['--merge-output-format', 'mp4', ...MP4_FRIENDLY_SORT]),
       '--ffmpeg-location',
       ffmpegPath,
       // Partial files stay in the job's scratch folder until yt-dlp moves the result home.

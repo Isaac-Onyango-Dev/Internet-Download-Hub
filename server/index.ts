@@ -323,6 +323,9 @@ app.get('/api/download', (req, res) => {
 
     args = [
       '-f', formatArg,
+      // Best resolution first, then H.264/AAC where offered: the default AV1/Opus picks
+      // make an MP4 that Windows' own player cannot open.
+      '-S', 'lang,quality,res,fps,vcodec:h264,acodec:aac',
       ...commonArgs,
       '--merge-output-format', 'mp4',
       ...output,

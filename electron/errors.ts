@@ -70,6 +70,7 @@ export function translateDownloadError(
 
   if (
     msg.includes('video unavailable') ||
+    msg.includes('video is unavailable') ||
     msg.includes('has been removed') ||
     msg.includes('no longer available') ||
     msg.includes('has been deleted')

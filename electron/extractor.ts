@@ -333,15 +333,18 @@ async function runGalleryDl(url: string, galleryDlPath: string): Promise<VideoIn
   // Only the fields used below; each site's extractor adds its own.
   type GalleryMeta = {
     title?: unknown; username?: unknown; filename?: unknown; category?: unknown; author?: unknown;
-    album?: { title?: unknown }; gallery?: { title?: unknown }; user?: { name?: unknown };
+    page?: unknown; album?: { title?: unknown }; gallery?: { title?: unknown };
+    board?: { name?: unknown }; user?: { name?: unknown };
   };
   const files = messages.filter((m) => m[0] === 3) as [3, string, GalleryMeta][];
   const meta = (messages.find((m) => m[0] === 2)?.[1] ?? files[0]?.[2] ?? {}) as GalleryMeta;
   const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  // The directory metadata often describes the first item, so the collection's own name
+  // (album, board, the Wikimedia page) goes before `title`, which may be that item's.
   const title =
-    text(meta.title) || text(meta.album?.title) || text(meta.gallery?.title) ||
-    text(meta.user?.name) || text(meta.username) || text(meta.filename) ||
-    `${text(meta.category) || 'Image'} gallery`;
+    text(meta.album?.title) || text(meta.gallery?.title) || text(meta.board?.name) ||
+    text(meta.page) || text(meta.title) || text(meta.user?.name) || text(meta.username) ||
+    text(meta.filename) || `${text(meta.category) || 'Image'} gallery`;
   const image = files.find(([, u]) => /\.(jpe?g|png|gif|webp|avif|bmp)(\?|$)/i.test(u));
   const count = `${items.length}${items.length >= LIMIT ? '+' : ''}`;
 

@@ -13,6 +13,8 @@ test('site answers win over words that only look like network trouble', () => {
   expect(
     say('ERROR: [youtube] abc: Video unavailable. This video has been removed by the uploader'),
   ).toMatch(/removed/);
+  // What yt-dlp prints for a video id that does not exist.
+  expect(say('ERROR: [youtube] aaaaaaaaaaa: This video is unavailable')).toMatch(/removed/);
   expect(say('ERROR: [twitter] 1: This content is only available to logged in users')).toMatch(
     /signed-in accounts.*cookies file/,
   );

@@ -64,19 +64,44 @@ test('falls back to gallery-dl after yt-dlp and streamlink', async () => {
   expect(engines()).toEqual(['yt-dlp', 'streamlink', 'gallery-dl']);
 });
 
+test('a gallery is named after the collection, not its first item', async () => {
+  // Shape of gallery-dl's output for a Wikimedia Commons category: each file brings its own
+  // directory message, whose `title` is that file's.
+  run.mockImplementation(async (bin: string) => {
+    if (bin === 'gallery-dl')
+      return galleryJson(
+        [2, { category: 'wikimediacommons', page: 'Category:Example_images', title: 'File:1.jpg' }],
+        [3, 'https://upload.wikimedia.org/1.jpg', { title: 'File:1.jpg' }],
+      );
+    throw fail(`${bin} failed`);
+  });
+  const info = await extractVideoInfo(
+    'https://commons.wikimedia.org/wiki/Category:Example_images',
+    paths,
+  );
+  expect(info).toMatchObject({ title: 'Category:Example_images', extractionMethod: 'gallery-dl' });
+});
+
 test('a gallery-dl error message or an empty gallery is a failure, not a result', async () => {
   run.mockImplementation(async (bin: string) => {
     if (bin === 'gallery-dl')
-      return galleryJson([-1, { error: 'NotFoundError', message: 'Requested album could not be found' }]);
+      return galleryJson([
+        -1,
+        { error: 'NotFoundError', message: 'Requested album could not be found' },
+      ]);
     throw fail(`${bin}: no plugin`);
   });
-  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow('yt-dlp: no plugin');
+  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow(
+    'yt-dlp: no plugin',
+  );
 
   run.mockImplementation(async (bin: string) => {
     if (bin === 'gallery-dl') return galleryJson([2, { category: 'imgur' }]);
     throw fail(`${bin}: no plugin`);
   });
-  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow('yt-dlp: no plugin');
+  await expect(extractVideoInfo('https://example.com/album', paths)).rejects.toThrow(
+    'yt-dlp: no plugin',
+  );
 });
 
 test('reports the first real engine error, not the later "not available" one', async () => {

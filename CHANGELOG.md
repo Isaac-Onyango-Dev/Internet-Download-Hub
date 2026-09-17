@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-09-17
+
+Finished downloads are now where the app says they are. For the default
+quality, the app recorded the audio part that yt-dlp deletes after merging,
+so "Saved to" and "Open folder" pointed at nothing. Non-English titles and
+long folder paths broke the recorded path in the same way. This release also
+fixes cancelling, which could delete the wrong file, and adds progress for
+every download engine.
+
+### Added
+
+- **Progress for streamlink, N_m3u8DL-RE and gallery-dl.** Stream downloads show a percentage, size, speed and time left. Live recordings show how much has been written and galleries show how many files have been saved; both get a moving bar, since neither has a known total.
+- `npm run test:engines` runs the app's real download code against the real engines, using a local media server. The release build now runs it before packaging, so an engine that cannot start or save a file fails the release instead of shipping.
+
+### Changed
+
+- **"Best Quality" MP4s open in Windows' own player.** yt-dlp's default picks AV1 video and Opus audio, which that player cannot play in an MP4 without extra codecs. The download still takes the highest resolution available; at that resolution it now prefers H.264 and AAC when the site offers them. The web version does the same.
+- **A chosen quality always starts with yt-dlp.** It is the only engine that honours a specific quality or "Audio Only"; the others download the best they can.
+- **Partial files are kept in an `.idh-temp` folder** inside the download folder, one subfolder per download. It is removed once no download needs it.
+- **streamlink never overwrites an earlier recording.** Resuming a live recording starts `Name (2).ts` rather than replacing `Name.ts`.
+- **Error messages say what happened and what to do next.** YouTube's bot check, sign-in-only content, 403 and 404 responses, and channels that are not live each get their own message, and messages that need a signed-in account point to the cookies setting.
+- Bundled engines: streamlink 8.6.1 and N_m3u8DL-RE 0.6.0.
+
+### Fixed
+
+- **"Saved to" pointed at a deleted file for most downloads.** The app recorded the last file yt-dlp announced, which for the default quality is the audio part removed after merging. It now records the finished file yt-dlp reports.
+- **Titles with characters outside the Windows code page lost them.** yt-dlp dropped any character the system code page lacked, including every Japanese, Chinese, Arabic or emoji character, so the recorded path did not exist.
+- **Long titles in deeply nested folders failed to download.** The engines now use extended-length paths, which are not limited to 260 characters.
+- **"Audio Only (MP3)" did not produce an MP3.** It saved the audio in whatever format the site served; it is now converted to MP3.
+- **Choosing a quality failed on most HLS streams** because they have no separate audio track. That quality is now downloaded on its own when there is nothing to merge.
+- **Cancelling could delete the wrong file.** Cleanup looked for files with the name the queue had given the download. That could match a finished file from an earlier download, and it deleted every `.ytdl` resume file in the folder, including other downloads' files. It also missed yt-dlp's own partial files. Cancel, delete and clear-history now remove only that download's partial data.
+- **"Pause All" in the tray left downloads running.** It stopped the launcher process, not the downloader behind it.
+- **Two menu items always failed:** File ▸ Choose Save Folder and File ▸ Close to Tray. The Downloads menu's Clear items now ask first, stop downloads they remove and refresh the open page.
+- **The one-time FFmpeg download** could hang forever on a dropped or stalled connection, which left every waiting download queued. It no longer trusts a stale "already downloaded" flag, and it starts the waiting downloads when it finishes. The yt-dlp updater, which shares its download code, also only followed two kinds of redirect.
+- **Engine updates:**
+  - An engine can no longer be replaced while it is downloading.
+  - A failed update now says why instead of spinning forever.
+  - "Update All" no longer marks engines as updated when their update failed.
+  - A failed version lookup no longer shows as "Update available".
+- **Playlists:**
+  - The dialog showed "Playlist" with no title or size, and the videos had no thumbnails.
+  - A playlist that failed to load kept the dialog loading forever.
+  - "Download all" on the main page saw only the last video that arrived.
+- **gallery-dl galleries** were always titled "Image Gallery", had no thumbnail and appeared in the queue as `.zip` files, which they never were. They are now named after the album, board or page, not after the first image in them.
+- A YouTube link to a video that does not exist said to check your connection; it now says the video was removed or is unavailable.
+- **Settings in an open panel** could overwrite a folder chosen from the menu, and raising the download limit did not start waiting downloads until another one finished.
+- **Web version:**
+  - Merged videos were MPEG-TS files named `.mp4`, and "MP3" downloads were AAC files.
+  - A download that failed partway saved a truncated file.
+  - A download abandoned in the browser kept running on the server.
+  - Errors showed raw yt-dlp output.
+
+### Security
+
+- The app window can no longer be navigated away from the app's own page, so a stray link cannot load a website with access to the app's internal interface.
+- The internal "open file" call opens only files the app finished downloading, not any path it is given.
+- Saving settings accepts only known setting names; names were previously inserted into the database query as given.
+
 ## [1.3.1] - 2026-09-17
 
 Downloads no longer stop at yt-dlp. Fetching a video's details already tried
