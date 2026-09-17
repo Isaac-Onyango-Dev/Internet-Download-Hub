@@ -79,6 +79,9 @@ ffmpeg(
   '1:a',
   '-c:v',
   'libx264',
+  // A keyframe every second, so the 2 s segments really split the video (three segments).
+  '-g',
+  '25',
   '-c:a',
   'aac',
   '-f',
@@ -135,6 +138,16 @@ const server = http.createServer((req, res) => {
   if (u.startsWith('/hls/') || u.startsWith('/hls-slow/')) {
     body = fs.readFileSync(path.join(media, 'hls', path.basename(u)));
     type = types[path.extname(u)];
+    const segment = /_(\d+)\.ts$/.exec(u);
+    if (u.startsWith('/hls-slow/') && segment) {
+      // N_m3u8DL-RE fetches segments in parallel; staggering their answers makes it report
+      // progress between 0 and 100% however fast the machine is.
+      const headers = { 'Content-Type': type, 'Content-Length': body.length };
+      return setTimeout(
+        () => res.writeHead(200, headers).end(body),
+        (Number(segment[1]) + 1) * 800,
+      );
+    }
   } else if (u.startsWith('/img/')) {
     // yt-dlp (Chrome user agent) gets a page with no media, so the job has to fall back.
     if (/Chrome\//.test(req.headers['user-agent'] || '')) {
@@ -145,10 +158,10 @@ const server = http.createServer((req, res) => {
   } else if (u.endsWith('.mp4')) body = clip;
   else return res.writeHead(404).end();
   res.writeHead(200, { 'Content-Type': type, 'Content-Length': body.length });
-  if (!u.includes('slow')) return res.end(body);
-  // /slow…: ~10 s per file; /hls-slow/: ~2 s per file, so a stream reports progress midway.
+  if (!u.includes('slow') || u.startsWith('/hls-slow/')) return res.end(body);
+  // /slow…: the body arrives over ~10 s, so a download can be restarted or cancelled midway.
   let i = 0;
-  const step = Math.ceil(body.length / (u.startsWith('/hls-slow/') ? 10 : 50));
+  const step = Math.ceil(body.length / 50);
   const t = setInterval(
     () =>
       i >= body.length ? (clearInterval(t), res.end()) : res.write(body.subarray(i, (i += step))),
@@ -206,13 +219,18 @@ server.listen(0, '127.0.0.1', async () => {
   try {
     await until(() => st.handlers['start-download']);
 
+    // The 240p video format, as the Downloader page offers it (yt-dlp names it by bitrate).
+    const info = await h('fetch-video-info', `${base}/hls/master.m3u8`);
+    assert.ok(info.success, info.error);
+    const videoFormat = info.data.formats.find((f) => f.height === 240).formatId;
+
     await scenario(
       'a merged download records the merged file, not its audio part',
       async (folder) => {
         const { id } = await start(folder, {
           url: `${base}/hls/master.m3u8`,
           filename: 'master.mp4',
-          formatId: '64',
+          formatId: videoFormat,
         });
         assert.ok(id > 0, `start-download returned id ${id}`);
         const r = await until(settled(id));
@@ -269,10 +287,15 @@ server.listen(0, '127.0.0.1', async () => {
         assert.deepStrictEqual(spawns, ['N_m3u8DL-RE.exe']);
         assert.strictEqual(r.save_path, path.join(folder, 'Stream Title.mp4'));
         assert.deepStrictEqual(tree(folder), ['Stream Title.mp4']);
-        assert.ok(
-          events(id).some((e) => e.percent > 0 && e.percent < 100),
-          'percent events',
-        );
+        const midway = [
+          ...new Set(
+            events(id)
+              .map((e) => e.percent)
+              .filter((p) => p > 0 && p < 99),
+          ),
+        ];
+        assert.ok(midway.length >= 2, `progress between 0 and 99%: ${midway.join(', ') || 'none'}`);
+        console.log(`     N_m3u8DL-RE progress seen: ${midway.join('%, ')}%`);
       },
     );
 
@@ -399,7 +422,7 @@ server.listen(0, '127.0.0.1', async () => {
           const { id } = await start(folder, {
             url: `${base}/hls/master.m3u8`,
             filename: 'after-ffmpeg.mp4',
-            formatId: '64',
+            formatId: videoFormat,
           });
           await sleep(1000);
           assert.strictEqual((await row(id)).state, 'queued', 'waits for FFmpeg');
