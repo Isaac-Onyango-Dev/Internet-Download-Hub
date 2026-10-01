@@ -567,7 +567,7 @@ async function extractWithPlaywright(
   if (!fs.existsSync(browserPath)) {
     throw new Error(
       'This site requires deeper analysis but the browser component is not installed yet. ' +
-      'Please restart the app to trigger automatic installation, or try a YouTube link instead.',
+      'Please restart the app to trigger automatic installation, or try another link.',
     );
   }
 

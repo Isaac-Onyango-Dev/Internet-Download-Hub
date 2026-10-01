@@ -63,7 +63,7 @@ export function translateDownloadError(
   // YouTube / host age-gate or sign-in (narrow detection; see isLikelyYoutubeAgeRestrictionError)
   if (isLikelyYoutubeAgeRestrictionError(rawError)) {
     return (
-      'The host site is blocking this link until you sign in there (common on YouTube for some videos). ' +
+      'The host site is blocking this link until you sign in there. ' +
       `${cookiesHint} You can also ${orUpdate}use another URL for the same content.`
     );
   }

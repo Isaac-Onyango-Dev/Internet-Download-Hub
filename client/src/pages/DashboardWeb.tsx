@@ -128,7 +128,7 @@ export default function DashboardWeb() {
     if (blocked) {
       setError(
         <>
-          {blocked} blocks downloads from shared servers like this one, so the web version can&apos;t get
+          This site refuses downloads from shared servers like this one, so the web version can&apos;t get
           it.{' '}
           <a href={DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">
             Get the desktop app
@@ -403,7 +403,7 @@ export default function DashboardWeb() {
         <div className="rounded-xl border border-border bg-card/50 p-6 text-center space-y-3">
           <h3 className="font-semibold text-foreground">Need more power?</h3>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            The desktop app adds YouTube and many more sites, playlist downloads and parallel queues.
+            The desktop app works with many more sites and adds playlist downloads and parallel queues.
           </p>
           <Button variant="outline" size="sm" asChild>
             <a href={DOWNLOAD_PAGE_URL} target="_blank" rel="noopener noreferrer">

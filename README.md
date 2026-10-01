@@ -38,8 +38,9 @@ A fully free web-based version of Internet Download Hub is available for quick d
 - No persistent download history
 - Basic quality selection
 - Supported sites: about twenty tested ones, including TikTok, Twitter/X, Instagram, Facebook, Reddit and SoundCloud (listed on its Supported Sites page)
-- **No YouTube**: YouTube asks shared servers to sign in, so YouTube links need the desktop version
+- **Fewer sites**: some sites refuse downloads from shared servers, so their links need the desktop version
 - For advanced features (playlists, scheduling, format conversion), use the **desktop version**
+- If a site stops working, [report it](https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues/new) with the link you tried
 
 **Desktop Version Advantages:**
 - All 1000+ sites supported by yt-dlp
@@ -147,7 +148,7 @@ For the best quality, select **Highest Quality Available**. The app will automat
 
 ### How do I download age-restricted videos?
 
-Some videos on YouTube and other sites require you to be signed in. In Settings, you can import your browser cookies (Netscape format) to access these videos. See the Settings page in the app for instructions.
+Some videos can only be watched while signed in to the site they are on. In Settings, you can import your browser cookies (Netscape format) to access these videos. See the Settings page in the app for instructions.
 
 ### Is this app safe to use?
 

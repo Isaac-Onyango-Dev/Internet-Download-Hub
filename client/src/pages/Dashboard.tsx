@@ -1972,7 +1972,7 @@ function SettingsPanel() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Export cookies while logged into the site (for example YouTube) using a trusted
+                Export cookies while logged into the site using a trusted
                 method; keep the file private and clear it here when you no longer need it.
               </p>
             </div>

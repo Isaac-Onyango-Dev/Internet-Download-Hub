@@ -13,6 +13,8 @@ import { useState, useMemo } from 'react';
 import { LayoutShell } from '@/components/layout-shell';
 import { WebShell, DOWNLOAD_PAGE_URL } from '@/components/web-shell';
 
+const REPORT_SITE_URL = 'https://github.com/Isaac-Onyango-Dev/Internet-Download-Hub/issues/new';
+
 export default function SupportedSites() {
   const [searchQuery, setSearchQuery] = useState('');
   const isDesktop = isElectron();
@@ -47,8 +49,8 @@ export default function SupportedSites() {
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              These {totalSites} sites work in the web version. YouTube and other sites that block shared
-              servers need the{' '}
+              These {totalSites} sites work in the web version. Sites that refuse shared servers
+              need the{' '}
               <a
                 href={DOWNLOAD_PAGE_URL}
                 target="_blank"
@@ -60,6 +62,19 @@ export default function SupportedSites() {
               , which downloads over your own connection.
             </p>
           )}
+          {/* Sites change without notice, so users find the broken ones; this is how they tell us. */}
+          <p className="text-sm text-muted-foreground">
+            Found a site that no longer works?{' '}
+            <a
+              href={REPORT_SITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-primary hover:underline"
+            >
+              Report it
+            </a>{' '}
+            with the link you tried.
+          </p>
         </div>
 
         {/* Search */}
