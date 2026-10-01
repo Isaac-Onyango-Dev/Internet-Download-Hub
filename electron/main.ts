@@ -28,6 +28,7 @@ import {
   powerSaveBlocker,
   Notification,
   clipboard,
+  screen,
 } from 'electron';
 import path from 'path'; // File path utilities
 import crypto from 'crypto'; // Checksum verification for downloaded files
@@ -37,6 +38,15 @@ import execa from 'execa'; // Better process execution
 import { extractVideoInfo, streamPlaylistInfo } from './extractor'; // Video metadata extraction
 import { analyseUrl, type Engine } from './url-analyser'; // Engine order shared by extraction and download
 import { parseEngineProgress, splitNm3u8dlOutput } from './engine-progress'; // streamlink and N_m3u8DL-RE output
+import {
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  defaultWindowBounds,
+  parseSavedBounds,
+  resolveZoom,
+  restoreBounds,
+  stepZoom,
+} from './window-fit'; // Window size and zoom from the display's scaling
 import fs from 'fs'; // File system operations
 import os from 'os'; // Operating system utilities
 import https from 'https'; // HTTP requests for FFmpeg download
@@ -649,7 +659,10 @@ async function initDb() {
       playlist_download_mode  TEXT    NOT NULL DEFAULT 'all',
       create_playlist_folder   INTEGER NOT NULL DEFAULT 1,
       ffmpeg_downloaded         INTEGER NOT NULL DEFAULT 0,
-      close_to_tray            INTEGER NOT NULL DEFAULT 1
+      close_to_tray            INTEGER NOT NULL DEFAULT 1,
+      ui_scale                 TEXT    NOT NULL DEFAULT 'auto',
+      window_bounds            TEXT    DEFAULT '',
+      window_maximized         INTEGER NOT NULL DEFAULT 0
     );
   `);
 
@@ -670,6 +683,9 @@ async function initDb() {
     `ALTER TABLE downloads ADD COLUMN playlist_index INTEGER`,
     `ALTER TABLE downloads ADD COLUMN playlist_total INTEGER`,
     `ALTER TABLE settings ADD COLUMN close_to_tray INTEGER NOT NULL DEFAULT 1`,
+    `ALTER TABLE settings ADD COLUMN ui_scale TEXT NOT NULL DEFAULT 'auto'`,
+    `ALTER TABLE settings ADD COLUMN window_bounds TEXT DEFAULT ''`,
+    `ALTER TABLE settings ADD COLUMN window_maximized INTEGER NOT NULL DEFAULT 0`,
   ];
   for (const sql of migrations) {
     try {
@@ -703,6 +719,7 @@ async function initDb() {
     eula_age_acknowledged: 0,
     cookies_file_path: '',
     close_to_tray: 1,
+    ui_scale: 'auto',
   };
 
   for (const [key, value] of Object.entries(defaults)) {
@@ -1097,34 +1114,26 @@ function createApplicationMenu() {
           },
         },
         { type: 'separator' },
+        // Zoom is the Interface size setting: stepping it here saves it, so
+        // it survives a restart, and Reset goes back to Auto.
         {
           label: 'Zoom In',
           accelerator: 'CmdOrCtrl+Plus',
           click: () => {
-            if (mainWindow) {
-              const wc = mainWindow.webContents;
-              const current = wc.getZoomFactor();
-              wc.setZoomFactor(Math.min(current + 0.1, 3.0));
-            }
+            if (mainWindow) setUiScale(String(stepZoom(mainWindow.webContents.getZoomFactor(), 1)));
           },
         },
         {
           label: 'Zoom Out',
           accelerator: 'CmdOrCtrl+-',
           click: () => {
-            if (mainWindow) {
-              const wc = mainWindow.webContents;
-              const current = wc.getZoomFactor();
-              wc.setZoomFactor(Math.max(current - 0.1, 0.5));
-            }
+            if (mainWindow) setUiScale(String(stepZoom(mainWindow.webContents.getZoomFactor(), -1)));
           },
         },
         {
           label: 'Reset Zoom',
           accelerator: 'CmdOrCtrl+0',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.setZoomFactor(1.0);
-          },
+          click: () => setUiScale('auto'),
         },
         { type: 'separator' },
         {
@@ -1356,6 +1365,39 @@ function getPackagedIndexHtmlPath(): string {
   return fallback;
 }
 
+// ── Window size and Interface size ────────────────────────────────────────────
+
+/** Applies the saved Interface size, working out Auto for the window's display. */
+function applyUiScale() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const scale = getQuery(db, 'SELECT ui_scale FROM settings WHERE id = 1')?.ui_scale;
+  const display = screen.getDisplayMatching(mainWindow.getBounds());
+  mainWindow.webContents.setZoomFactor(resolveZoom(scale, display.workArea.height));
+}
+
+/** Saves a new Interface size and applies it straight away. */
+function setUiScale(scale: string) {
+  db.run('UPDATE settings SET ui_scale = ? WHERE id = 1', [scale]);
+  saveDatabase(db);
+  applyUiScale();
+  mainWindow?.webContents.send('settings-updated');
+}
+
+function saveWindowBounds() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+  const maximized = mainWindow.isMaximized() || mainWindow.isFullScreen();
+  try {
+    // Normal bounds, so un-maximising next time returns to the user's size.
+    db.run('UPDATE settings SET window_bounds = ?, window_maximized = ? WHERE id = 1', [
+      JSON.stringify(mainWindow.getNormalBounds()),
+      maximized ? 1 : 0,
+    ]);
+    saveDatabase(db);
+  } catch (error: any) {
+    log.warn(`[MAIN] Could not save window bounds: ${error.message}`);
+  }
+}
+
 function createWindow() {
   const preloadPath = getPreloadPath();
 
@@ -1393,12 +1435,22 @@ function createWindow() {
     log.warn('[MAIN] Splash screen not found at:', splashPath);
   }
 
-  // Create main window in parallel
+  // Create main window in parallel. Its size comes from the display, not a
+  // fixed 1200×800 that filled a 1080p screen at 125% scaling top to bottom.
+  const windowSettings = getQuery(
+    db,
+    'SELECT window_bounds, window_maximized FROM settings WHERE id = 1',
+  );
+  const bounds =
+    restoreBounds(
+      parseSavedBounds(windowSettings?.window_bounds),
+      screen.getAllDisplays().map((d) => d.workArea),
+    ) ?? defaultWindowBounds(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea);
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    ...bounds,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: 'Internet Download Hub',
     icon: iconPath,
     show: false,
@@ -1413,6 +1465,7 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // Close splash and show main window
     splash.close();
+    if (windowSettings?.window_maximized === 1) mainWindow?.maximize();
     mainWindow?.show();
 
     // Open DevTools in development for debugging
@@ -1462,8 +1515,26 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Zoom resets whenever the page loads, so apply it on every load, and again
+  // when the window moves to another display or the display's scaling changes.
+  mainWindow.webContents.on('did-finish-load', applyUiScale);
+  mainWindow.on('moved', applyUiScale);
+  screen.on('display-metrics-changed', applyUiScale);
+
+  // Remember size and position. Saved a moment after the user stops dragging,
+  // and on close, so a crash loses at most the last second of it.
+  let boundsTimer: NodeJS.Timeout | null = null;
+  const scheduleSaveBounds = () => {
+    if (boundsTimer) clearTimeout(boundsTimer);
+    boundsTimer = setTimeout(saveWindowBounds, 1000);
+  };
+  mainWindow.on('resize', scheduleSaveBounds);
+  mainWindow.on('move', scheduleSaveBounds);
+
   // Minimize to tray instead of closing
   mainWindow.on('close', (event: any) => {
+    if (boundsTimer) clearTimeout(boundsTimer);
+    saveWindowBounds();
     if (tray && !(app as any).isQuitting) {
       const settings = getQuery(db, 'SELECT close_to_tray FROM settings WHERE id = 1');
       const shouldCloseToTray = settings ? settings.close_to_tray !== 0 : true;
@@ -1477,6 +1548,7 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    screen.removeListener('display-metrics-changed', applyUiScale);
     mainWindow = null;
   });
 
@@ -2819,6 +2891,8 @@ function setupIpcHandlers() {
       }
       // A higher download limit should start waiting downloads now, not after the next one ends.
       processQueue();
+      // Interface size previews live as the user picks it.
+      if (entries.some(([k]) => k === 'ui_scale')) applyUiScale();
       return getQuery(db, 'SELECT * FROM settings WHERE id = 1');
     } catch (error: any) {
       log.error(`[IPC Error] save-settings failed: ${error.message}`);
@@ -2865,12 +2939,14 @@ function setupIpcHandlers() {
         create_playlist_folder = 1,
         eula_age_acknowledged = 0,
         cookies_file_path = '',
-        close_to_tray = 1
+        close_to_tray = 1,
+        ui_scale = 'auto'
       WHERE id = 1
     `,
       [defaultPath],
     );
     saveDatabase(db);
+    applyUiScale();
     return getQuery(db, 'SELECT * FROM settings WHERE id = 1');
   });
 
