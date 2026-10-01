@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-01
+
+Everything in 1.4.0 below, which was tagged but never published: its release
+build stopped at the download-engine check. Install this one instead.
+
+### Fixed
+
+- **Settings opens straight away.** Opening Settings asked each download engine for its version one after another, and the whole app waited, so the page showed a spinner for several seconds and the window could not be moved or clicked in the meantime. The engines are now asked in the background, all at once, and the page appears immediately. The engine versions fill in when they arrive, and on later visits they appear instantly.
+- **Fewer update checks.** Settings now checks for new engine versions at most once every 15 minutes, instead of on every visit. This keeps the app well inside GitHub's limit of 60 checks an hour.
+- The release check that runs the download engines end to end works with the new window sizing. Test builds of work branches now run the same check, so this kind of failure shows up before a version is tagged.
+
 ## [1.4.0] - 2026-10-01
 
 The app now fits screens that use Windows display scaling. At 1920×1080 with
