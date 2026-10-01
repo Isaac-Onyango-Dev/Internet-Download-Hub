@@ -99,3 +99,20 @@ test('only lines that state a failure are collected', () => {
   );
   expect(isEngineErrorLine('[download]  12.5% of 10.00MiB at 1.00MiB/s ETA 00:09')).toBe(false);
 });
+
+test('lines the engine recovers from do not count as failures', () => {
+  // yt-dlp keeps downloading after these; counting them showed "Trying another
+  // engine…" on a download that was still running.
+  expect(
+    isEngineErrorLine(
+      "[download] Got error: HTTPSConnectionPool(host='rr1.googlevideo.com', port=443): Read timed out. Retrying (1/10)...",
+    ),
+  ).toBe(false);
+  expect(
+    isEngineErrorLine('[download] Got error: HTTP Error 503: Service Unavailable. Retrying fragment 12 (2/10)...'),
+  ).toBe(false);
+  expect(isEngineErrorLine('WARNING: [youtube] abc: nsig extraction failed: error: some detail')).toBe(false);
+  // Real failures still count.
+  expect(isEngineErrorLine('ERROR: [youtube] abc: Private video')).toBe(true);
+  expect(isEngineErrorLine('ERROR: unable to download video data: HTTP Error 403: Forbidden')).toBe(true);
+});

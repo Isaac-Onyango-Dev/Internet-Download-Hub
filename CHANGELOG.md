@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Updating an engine no longer freezes the app.** Settings → Update unpacked, copied and deleted engine files in a way that stopped the whole app until it finished. Updating streamlink, whose download is the largest, could leave the window unresponsive for most of a minute. The update now runs in the background, and downloads, the queue and the window keep working while it does.
+- **A brief network hiccup no longer looks like a failed download.** When a connection dropped or stalled for a moment, yt-dlp reported it and retried on its own, but the app took that report as a failure. The download showed "Trying another engine…" with its bar back at 0%, and in some cases was marked failed while it kept downloading. Only a download that actually stops now moves to the next engine or shows an error.
+- **Downloads ask less of the app while they run.** Every progress update rewrote the whole download history file, many times a second with several downloads going. Progress is now saved every two seconds; finishing, failing, pausing and every other change are still saved immediately.
 
 ### Changed
 

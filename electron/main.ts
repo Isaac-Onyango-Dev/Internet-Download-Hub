@@ -549,7 +549,26 @@ function getDefaultSavePath(): string {
   return app.getPath('downloads');
 }
 
+// Progress ticks arrive many times a second per download, and each full save
+// exports and rewrites the whole database on the main process. They are
+// batched into one write every couple of seconds; every other change still
+// saves at once, and a pending write is flushed on quit.
+const PROGRESS_SAVE_INTERVAL_MS = 2000;
+let pendingSave: NodeJS.Timeout | null = null;
+
+function scheduleSaveDatabase() {
+  if (pendingSave) return;
+  pendingSave = setTimeout(() => {
+    pendingSave = null;
+    saveDatabase(db);
+  }, PROGRESS_SAVE_INTERVAL_MS);
+}
+
 function saveDatabase(database: any) {
+  if (pendingSave) {
+    clearTimeout(pendingSave);
+    pendingSave = null;
+  }
   if (!database || !DB_PATH) return;
   const data = database.export();
   const buffer = Buffer.from(data);
@@ -859,7 +878,9 @@ function updateDownloadInDb(id: number, updates: any) {
   }
   if (fields.length > 0) {
     db.run(`UPDATE downloads SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
-    saveDatabase(db);
+    const progressOnly = Object.keys(updates).every((k) => k === 'receivedBytes' || k === 'totalBytes');
+    if (progressOnly) scheduleSaveDatabase();
+    else saveDatabase(db);
   }
 }
 
@@ -3664,39 +3685,10 @@ function spawnDownload(
       }
 
       if (isEngineErrorLine(trimmed)) {
+        // Only recorded here. The engine may still finish, so failing the download,
+        // or announcing a fallback, waits for the exit code in the close handler.
         log.error(`[PROGRESS] Error for job ${jobId}:`, trimmed);
         errorLines.push(trimmed);
-        // Same wording the close handler settles on: the first engine's error is the most specific.
-        const userFriendlyError = translateDownloadError(primaryError || errorLines.join('\n'), null, url);
-        const deferFailForAgeRetry =
-          current.engine === 'yt-dlp' &&
-          isYouTubeUrl(url) &&
-          youtubePlayerClient !== 'tv_embedded' &&
-          isLikelyYoutubeAgeRestrictionError(trimmed);
-        if (deferFailForAgeRetry || hasNextEngine) {
-          log.info(`[PROGRESS] Holding failed state for job ${jobId} pending retry`);
-          if (mainWindow) {
-            mainWindow.webContents.send('download-progress', {
-              jobId: String(jobId),
-              id: jobId,
-              percent: 0,
-              phase: deferFailForAgeRetry ? 'Retrying with alternate player…' : 'Trying another engine…',
-              status: 'downloading',
-            });
-          }
-        } else {
-          if (mainWindow) {
-            mainWindow.webContents.send('download-progress', {
-              jobId: String(jobId),
-              id: jobId,
-              percent: 0,
-              phase: userFriendlyError,
-              status: 'failed',
-              error: userFriendlyError,
-            });
-          }
-          updateDownloadInDb(jobId, { state: 'failed', error: userFriendlyError });
-        }
         continue;
       }
     }
@@ -3806,6 +3798,7 @@ function spawnDownload(
         log.info(
           `[PROGRESS] Retrying download ${downloadId} with youtube:player_client=tv_embedded`,
         );
+        sendProgress({ percent: 0, phase: 'Retrying with alternate player…' });
         spawnDownload(downloadId, url, outputPath, formatId, isResume, 'tv_embedded', engineIndex, primaryError);
         processQueue();
         return;
@@ -3814,6 +3807,7 @@ function spawnDownload(
       const failureText = primaryError || errorLines.join('\n') || lastStderrOutput;
       if (hasNextEngine) {
         log.warn(`[PROGRESS] Job ${downloadId}: ${current.engine} exited ${code}, falling back to ${engines[engineIndex + 1].engine}`);
+        sendProgress({ percent: 0, phase: 'Trying another engine…' });
         spawnDownload(downloadId, url, outputPath, formatId, isResume, undefined, engineIndex + 1, failureText);
         return;
       }
@@ -3894,6 +3888,8 @@ if (app) {
 
   app.on('before-quit', () => {
     (app as any).isQuitting = true;
+    // Write any batched progress so a restart resumes from the latest byte count.
+    if (pendingSave) saveDatabase(db);
   });
 
   app

@@ -170,7 +170,12 @@ export function translateDownloadError(
  * The lines of engine output that state a failure: yt-dlp's "ERROR:", streamlink's
  * "error:" (on stdout), gallery-dl's "[error]". Matching only these keeps progress
  * lines and URLs from tripping the checks in translateDownloadError.
+ *
+ * Lines the engine recovers from are not failures. yt-dlp reports a dropped or
+ * stalled connection as "[download] Got error: … Retrying (1/10)..." and carries
+ * on; counting that line made a download that was still running look failed.
  */
 export function isEngineErrorLine(line: string): boolean {
+  if (/^\s*warning:|\bretrying\b|\(\d+\/\d+\)\.{3}/i.test(line)) return false;
   return /\berror\b\s*[:\]]/i.test(line) || /unable to download|this video is unavailable/i.test(line);
 }
