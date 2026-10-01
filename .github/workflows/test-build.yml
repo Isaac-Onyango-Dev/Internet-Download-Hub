@@ -31,7 +31,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -66,12 +66,14 @@ jobs:
       # A pre-release version above the current release: the in-app updater
       # will not offer to "update" the tester back to the last release, the
       # About section shows exactly which build is installed, and the next
-      # real release still installs over it as a normal upgrade.
+      # real release still installs over it as a normal upgrade. It is the next
+      # patch after package.json's version, so nobody edits this after a release.
       - name: Build Windows installer
         shell: bash
-        run: >
-          npx electron-builder build --win --publish never
-          -c.extraMetadata.version=1.3.3-test.${{ github.run_number }}
+        run: |
+          VERSION="$(node -p "const [a, b, c] = require('./package.json').version.split('-')[0].split('.').map(Number); \`\${a}.\${b}.\${c + 1}-test.${{ github.run_number }}\`")"
+          echo "Test build version: $VERSION"
+          npx electron-builder build --win --publish never -c.extraMetadata.version="$VERSION"
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
