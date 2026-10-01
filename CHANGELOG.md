@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.1] - 2026-10-01
 
-Everything in 1.4.0 below, which was tagged but never published: its release
-build stopped at the download-engine check. Install this one instead.
+1.4.0 was tagged but never published: its release build stopped at the
+download-engine check. This release delivers everything from 1.4.0 as well
+as the fixes below, so both are listed here.
 
 ### Fixed
 
@@ -29,20 +30,20 @@ build stopped at the download-engine check. Install this one instead.
 - **Fewer update checks.** Settings now checks for new engine versions at most once every 15 minutes, instead of on every visit. This keeps the app well inside GitHub's limit of 60 checks an hour.
 - The release check that runs the download engines end to end works with the new window sizing. Test builds of work branches now run the same check, so this kind of failure shows up before a version is tagged.
 
-## [1.4.0] - 2026-10-01
+### From 1.4.0: the app fits scaled displays
 
 The app now fits screens that use Windows display scaling. At 1920×1080 with
 125% scaling, Windows gives apps a 1536×864 screen, and the old fixed
 1200×800 window with large headings and controls filled almost all of it.
-This release was checked on a real 1920×1080 PC at 125% before shipping.
+These changes were checked on a real 1920×1080 PC at 125% scaling.
 
-### Added
+### Added in 1.4.0
 
 - **Settings → Interface size**: Auto, 90%, 100%, 110% or 125%. Auto shrinks the app slightly on short screens, such as 1080p at 125% scaling, and leaves larger screens at 100%. Ctrl + and Ctrl − change the same setting, and it is now kept between launches.
 - **The window remembers its size and position.** If it would open off-screen, for example after a monitor was unplugged, it opens centred instead.
 - A test-build workflow builds a Windows installer from each work branch and attaches it to the run, without publishing a release, so a change can be tried on a real PC before it ships.
 
-### Changed
+### Changed in 1.4.0
 
 - **The first window is sized to the screen** rather than a fixed 1200×800, and the smallest allowed size is now 820×560, so it fits a 1366×768 laptop at 125%.
 - **Tighter layout throughout.** Page titles, the link box, the Get Video Info and Download buttons, cards and spacing are all a step smaller, so a scanned video's Download button sits well above the bottom of the window.
@@ -50,6 +51,10 @@ This release was checked on a real 1920×1080 PC at 125% before shipping.
 - **Layouts follow the space next to the sidebar, not the window width.** The video card no longer switches to its side-by-side layout when there is too little room for it.
 - **The Queue list fills the window** instead of a fixed 600px, which was taller than the window on short screens and gave the page two scrollbars.
 - **The playlist dialog uses the app's colours**, and its Cancel and Add buttons stay visible while the video list scrolls.
+
+## [1.4.0] - 2026-10-01
+
+Tagged but never published. Its changes shipped in 1.4.1 and are listed there.
 
 ## [1.3.2] - 2026-09-17
 
