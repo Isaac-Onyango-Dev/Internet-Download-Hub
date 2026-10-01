@@ -7,14 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-01
+
 The app now fits screens that use Windows display scaling. At 1920×1080 with
 125% scaling, Windows gives apps a 1536×864 screen, and the old fixed
 1200×800 window with large headings and controls filled almost all of it.
+This release was checked on a real 1920×1080 PC at 125% before shipping.
 
 ### Added
 
 - **Settings → Interface size**: Auto, 90%, 100%, 110% or 125%. Auto shrinks the app slightly on short screens, such as 1080p at 125% scaling, and leaves larger screens at 100%. Ctrl + and Ctrl − change the same setting, and it is now kept between launches.
 - **The window remembers its size and position.** If it would open off-screen, for example after a monitor was unplugged, it opens centred instead.
+- A test-build workflow builds a Windows installer from each work branch and attaches it to the run, without publishing a release, so a change can be tried on a real PC before it ships.
 
 ### Changed
 
