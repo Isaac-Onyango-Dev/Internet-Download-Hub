@@ -3044,6 +3044,11 @@ function setupIpcHandlers() {
   });
 
   // ── get-binary-version ───────────────────────────────────────────────────────
+  // Opening Settings asks every engine for its version. yt-dlp and gallery-dl are
+  // one-file builds that unpack themselves on each run, so this takes seconds.
+  // Keyed by path and modification time: an engine that is updated or replaced
+  // is asked again, one that is not is answered from memory.
+  const installedVersionCache = new Map<string, string>();
   async function getBinaryVersion(binary: (typeof BINARIES)[0]): Promise<string> {
     try {
       // Check userData first (updated binaries go here), then packaged resources
@@ -3053,21 +3058,32 @@ function setupIpcHandlers() {
       if (!fs.existsSync(binaryPath)) {
         return 'Not installed';
       }
+      const key = `${binaryPath}|${fs.statSync(binaryPath).mtimeMs}`;
+      const cached = installedVersionCache.get(key);
+      if (cached) return cached;
 
-      // execFileSync, not execSync: no shell parses this, so a path containing
-      // a quote cannot terminate the command and start another one.
-      const output = execFileSync(binaryPath, [binary.versionFlag], { encoding: 'utf8' });
-      const version = output.split('\n')[0].trim();
-      return version;
+      // Asynchronous: a synchronous call froze the whole main process, and with it
+      // the Settings page's own settings request, until every engine had answered.
+      // No shell parses this, so a path containing a quote cannot start another command.
+      const { stdout, stderr } = await execa(binaryPath, [binary.versionFlag], { timeout: 20000 });
+      const version = (stdout || stderr).split('\n')[0].trim();
+      if (version) installedVersionCache.set(key, version);
+      return version || 'Unknown';
     } catch (error: any) {
       log.error(`Failed to get version for ${binary.name}: ${error.message}`);
       return 'Unknown';
     }
   }
 
+  // Each visit to Settings would otherwise spend four of the 60 GitHub API calls an hour allows.
+  const LATEST_VERSION_TTL_MS = 15 * 60 * 1000;
+  const latestVersionCache = new Map<string, { version: string; at: number }>();
   async function getLatestBinaryVersion(binary: (typeof BINARIES)[0]): Promise<string> {
+    const cached = latestVersionCache.get(binary.name);
+    if (cached && Date.now() - cached.at < LATEST_VERSION_TTL_MS) return cached.version;
     try {
       const release = await fetchJson(binary.releaseApi);
+      latestVersionCache.set(binary.name, { version: release.tag_name, at: Date.now() });
       return release.tag_name;
     } catch (error: any) {
       log.error(`Failed to fetch latest version for ${binary.name}: ${error.message}`);

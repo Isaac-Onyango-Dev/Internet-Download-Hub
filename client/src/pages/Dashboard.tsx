@@ -1683,13 +1683,10 @@ function SettingsPanel() {
         setSettings(DEFAULT_SETTINGS);
         return;
       }
-      const s = await window.electronAPI.getSettings();
-      let defaultPath = '';
-      try {
-        defaultPath = await window.electronAPI.getDefaultDownloadPath();
-      } catch (e) {
-        // Silently handle
-      }
+      const [s, defaultPath] = await Promise.all([
+        window.electronAPI.getSettings(),
+        window.electronAPI.getDefaultDownloadPath().catch(() => ''),
+      ]);
 
       if (!s) {
         setSettings({ ...DEFAULT_SETTINGS, downloadPath: defaultPath });
