@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Supported Sites has a "Report it" link** for a site that no longer works. Sites change without notice, so reports from people using them are how broken ones get found and fixed.
+- The app, the web version and the download page no longer name particular sites as failing. Those messages now say "some sites", since which sites refuse downloads changes over time.
 - Builds and the web server image now use Node.js 22, which Electron's build tools require.
 - Test builds of work branches are numbered from the current release (for example 1.4.2-test.N after 1.4.1), so they stay newer than the release without anyone editing the workflow after each version.
 
