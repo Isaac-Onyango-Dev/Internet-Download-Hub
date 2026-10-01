@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Updating an engine no longer freezes the app.** Settings → Update unpacked, copied and deleted engine files in a way that stopped the whole app until it finished. Updating streamlink, whose download is the largest, could leave the window unresponsive for most of a minute. The update now runs in the background, and downloads, the queue and the window keep working while it does.
+
+### Changed
+
+- Builds and the web server image now use Node.js 22, which Electron's build tools require.
+- Test builds of work branches are numbered from the current release (for example 1.4.2-test.N after 1.4.1), so they stay newer than the release without anyone editing the workflow after each version.
+
 ## [1.4.1] - 2026-10-01
 
 Everything in 1.4.0 below, which was tagged but never published: its release
