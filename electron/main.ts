@@ -33,7 +33,7 @@ import {
 import path from 'path'; // File path utilities
 import crypto from 'crypto'; // Checksum verification for downloaded files
 import semver from 'semver'; // Version comparison that understands pre-releases
-import { spawn, execSync, execFile, execFileSync, ChildProcess } from 'child_process'; // Process spawning for downloads
+import { spawn, execSync, execFile, ChildProcess } from 'child_process'; // Process spawning for downloads
 import execa from 'execa'; // Better process execution
 import { extractVideoInfo, streamPlaylistInfo } from './extractor'; // Video metadata extraction
 import { analyseUrl, type Engine } from './url-analyser'; // Engine order shared by extraction and download
@@ -3133,13 +3133,16 @@ function setupIpcHandlers() {
         throw new Error(`Failed to download ${binary.name}: ${response.statusText}`);
       }
 
+      // Everything from here is asynchronous. The update runs in the main process, and a
+      // synchronous step there freezes the whole app: unpacking streamlink alone takes
+      // most of a minute, and copying or deleting its folder touches thousands of files.
       const buffer = await response.arrayBuffer();
-      fs.writeFileSync(tempPath, Buffer.from(buffer));
+      await fs.promises.writeFile(tempPath, Buffer.from(buffer));
 
       try {
         await verifyFileDigest(tempPath, assetMeta?.digest);
       } catch (err) {
-        fs.unlinkSync(tempPath);
+        await fs.promises.rm(tempPath, { force: true });
         throw err;
       }
 
@@ -3147,14 +3150,14 @@ function setupIpcHandlers() {
       if (binary.isZip) {
         const tempDir = path.join(app.getPath('temp'), `${binary.name}_extract`);
         // Start empty: a leftover from an interrupted update would be picked up below.
-        fs.rmSync(tempDir, { recursive: true, force: true });
-        fs.mkdirSync(tempDir, { recursive: true });
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+        await fs.promises.mkdir(tempDir, { recursive: true });
 
         // Extract using PowerShell (built-in). Paths travel in the environment
-        // rather than inside the command text: execFileSync skips the shell,
+        // rather than inside the command text: execFile skips the shell,
         // and $env: lookups are values to PowerShell, not source it re-parses,
         // so nothing in a path can close a quote and append a second command.
-        execFileSync('powershell', [...PS_FLAGS, '-Command', PS_EXPAND_ARCHIVE], {
+        await promisify(execFile)('powershell', [...PS_FLAGS, '-Command', PS_EXPAND_ARCHIVE], {
           cwd: app.getPath('temp'),
           env: { ...process.env, IDH_ARCHIVE: tempPath, IDH_DEST: tempDir },
         });
@@ -3163,11 +3166,14 @@ function setupIpcHandlers() {
           const [root] = fs.readdirSync(tempDir);
           const finalDir = path.join(userDataBinariesPath, binary.keepDir);
           // Its bundled ffmpeg is 164 MB; downloads pass --ffmpeg-ffmpeg instead.
-          fs.rmSync(path.join(tempDir, root, 'ffmpeg'), { recursive: true, force: true });
-          fs.rmSync(finalDir, { recursive: true, force: true });
-          // cpSync, not rename: temp and userData can sit on different drives.
-          fs.cpSync(path.join(tempDir, root), finalDir, { recursive: true });
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          await fs.promises.rm(path.join(tempDir, root, 'ffmpeg'), {
+            recursive: true,
+            force: true,
+          });
+          await fs.promises.rm(finalDir, { recursive: true, force: true });
+          // A copy, not rename: temp and userData can sit on different drives.
+          await fs.promises.cp(path.join(tempDir, root), finalDir, { recursive: true });
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
         } else {
           // Find the specific .exe file in extracted files
           const findSpecificExe = (dir: string, fileName: string): string | null => {
@@ -3195,18 +3201,18 @@ function setupIpcHandlers() {
             throw new Error(`Could not find ${binary.fileName} in extracted archive`);
           }
 
-          fs.copyFileSync(exePath, destPath);
+          await fs.promises.copyFile(exePath, destPath);
 
           // Clean up
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          await fs.promises.rm(tempDir, { recursive: true, force: true });
         }
       } else {
         // Direct copy for .exe files
-        fs.copyFileSync(tempPath, destPath);
+        await fs.promises.copyFile(tempPath, destPath);
       }
 
       // Clean up temp file
-      fs.unlinkSync(tempPath);
+      await fs.promises.rm(tempPath, { force: true });
       // Point the engine paths at the new userData copy now, not on the next launch.
       setupPaths();
 
