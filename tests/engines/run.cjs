@@ -222,6 +222,10 @@ server.listen(0, '127.0.0.1', async () => {
 
   try {
     await until(() => st.handlers['start-download']);
+    // A startup crash leaves no window to send progress to; every scenario would
+    // then fail later on a missing event instead of on the cause.
+    const startupError = st.logs.find((l) => l.includes('Startup error'));
+    if (startupError) throw new Error(`main process failed to start: ${startupError}`);
 
     // The 240p video format, as the Downloader page offers it (yt-dlp names it by bitrate).
     const info = await h('fetch-video-info', `${base}/hls/master.m3u8`);

@@ -49,6 +49,11 @@ jobs:
             Write-Host "Verified: $engine"
           }
 
+      # The same check the release runs. Without it a branch build can pass and the
+      # tag that follows fail before it builds anything.
+      - name: Run the download engines end to end
+        run: npm run test:engines
+
       - name: Generate icons
         run: npm run generate:icons
 

@@ -14,6 +14,15 @@ const any = () =>
   });
 const withFallback = (obj) => new Proxy(obj, { get: (t, p) => (p in t ? t[p] : any()) });
 
+const display = {
+  id: 1,
+  scaleFactor: 1.25,
+  bounds: { x: 0, y: 0, width: 1536, height: 864 },
+  workArea: { x: 0, y: 0, width: 1536, height: 824 },
+  size: { width: 1536, height: 864 },
+  workAreaSize: { width: 1536, height: 824 },
+};
+
 const webContents = withFallback({ send: (ch, data) => state.sent.push([ch, data]) });
 class BrowserWindow {
   constructor() {
@@ -60,4 +69,14 @@ module.exports = withFallback({
   powerSaveBlocker: any(),
   Notification: any(),
   clipboard: any(),
+  // One 1920x1080 display at 125% scaling, so the window sizing gets real numbers.
+  screen: withFallback({
+    getAllDisplays: () => [display],
+    getPrimaryDisplay: () => display,
+    getDisplayMatching: () => display,
+    getDisplayNearestPoint: () => display,
+    getCursorScreenPoint: () => ({ x: 0, y: 0 }),
+    on: () => {},
+    removeListener: () => {},
+  }),
 });
