@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-01
+
 ### Fixed
 
 - **Updating an engine no longer freezes the app.** Settings → Update unpacked, copied and deleted engine files in a way that stopped the whole app until it finished. Updating streamlink, whose download is the largest, could leave the window unresponsive for most of a minute. The update now runs in the background, and downloads, the queue and the window keep working while it does.
