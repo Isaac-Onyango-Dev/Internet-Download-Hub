@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 import tailwindcssAnimate from 'tailwindcss-animate';
 import tailwindcssTypography from '@tailwindcss/typography';
+import tailwindcssContainerQueries from '@tailwindcss/container-queries';
 
 export default {
   darkMode: ['class'],
@@ -133,5 +134,7 @@ export default {
       },
     },
   },
-  plugins: [tailwindcssAnimate, tailwindcssTypography],
+  // Container queries let page layouts react to the space beside the
+  // sidebar instead of the whole window (`@2xl:flex-row`, not `md:`).
+  plugins: [tailwindcssAnimate, tailwindcssTypography, tailwindcssContainerQueries],
 } satisfies Config;

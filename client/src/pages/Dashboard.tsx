@@ -35,6 +35,7 @@ import {
   X,
   ShieldCheck,
   CheckCircle2,
+  Monitor,
 } from 'lucide-react';
 import Support from '@/pages/Support';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -191,7 +192,7 @@ export default function Dashboard() {
         streaming={isPlaylistStreaming}
       />
 
-      <div className="space-y-8 animate-in fade-in duration-300">
+      <div className="space-y-6 animate-in fade-in duration-300">
         {globalError && (
           <Alert
             variant="destructive"
@@ -732,7 +733,7 @@ function VideoCapturePanel({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* yt-dlp update banner */}
       {showUpdateBanner && (
         <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-warning/30 bg-warning/10 text-warning dark:text-warning text-sm">
@@ -761,15 +762,15 @@ function VideoCapturePanel({
       )}
 
       <Card className="border-border bg-card shadow-sm">
-        <CardContent className="p-6 md:p-8">
-          <div className="mb-6">
-            <h2 className="text-3xl font-bold tracking-tight mb-2">Download a Video</h2>
-            <p className="text-muted-foreground text-base">
+        <CardContent className="p-5 @2xl:p-6">
+          <div className="mb-4">
+            <h2 className="page-title mb-1">Download a Video</h2>
+            <p className="text-sm text-muted-foreground">
               Paste a video link from YouTube, Twitter, Vimeo, or others to get started.
             </p>
           </div>
 
-          <form onSubmit={handleScan} className="flex flex-col sm:flex-row gap-4">
+          <form onSubmit={handleScan} className="flex flex-col @lg:flex-row gap-3">
             <div className="relative flex-1">
               <Input
                 ref={urlInputRef}
@@ -781,7 +782,7 @@ function VideoCapturePanel({
                   setSuccessMsg(null);
                 }}
                 className={cn(
-                  'h-14 md:text-lg bg-input border-border focus-visible:ring-primary focus-visible:border-primary shadow-sm rounded-lg pr-12',
+                  'h-11 text-sm bg-input border-border focus-visible:ring-primary focus-visible:border-primary shadow-sm rounded-lg pr-12',
                   urlError && 'border-destructive focus-visible:ring-destructive',
                 )}
               />
@@ -802,21 +803,21 @@ function VideoCapturePanel({
               size="lg"
               variant="hero"
               disabled={!scanUrl || loading}
-              className="h-14 px-8 text-base rounded-lg shrink-0 min-w-[220px]"
+              className="h-11 px-6 rounded-lg shrink-0 min-w-[180px]"
             >
               {loading ? (
                 <div className="flex flex-col items-center">
                   <div className="flex items-center">
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Scanning
                   </div>
-                  <span className="text-xs opacity-80 mt-0.5 max-w-[190px] truncate">
+                  <span className="text-[11px] leading-tight opacity-80 max-w-[160px] truncate">
                     {loadingMessage}
                   </span>
                 </div>
               ) : (
                 <>
-                  <Download className="w-5 h-5 mr-3" />
+                  <Download className="w-4 h-4 mr-1" />
                   Get Video Info
                 </>
               )}
@@ -903,10 +904,10 @@ function VideoCapturePanel({
       </Card>
 
       {videoInfo && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {(playlistTitle || isStreaming) && (videoInfo.length > 1 || isStreaming) && (
             <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-3 @lg:flex-row @lg:items-start @lg:justify-between">
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground">{playlistTitle}</h4>
                   <p className="text-sm text-muted-foreground flex items-center gap-2">
@@ -965,9 +966,9 @@ function VideoCapturePanel({
 
           {videoInfo.map((video: DetectedVideo, idx: number) => (
             <Card key={idx} className="overflow-hidden border-border bg-card shadow-md">
-              <div className="flex flex-col md:flex-row">
+              <div className="flex flex-col @2xl:flex-row">
                 {/* Thumbnail */}
-                <div className="md:w-72 bg-muted relative shrink-0">
+                <div className="@2xl:w-60 @4xl:w-72 bg-muted relative shrink-0">
                   <div className="aspect-video w-full h-full relative">
                     {video.thumbnail ? (
                       <img
@@ -991,10 +992,13 @@ function VideoCapturePanel({
                 </div>
 
                 {/* Details */}
-                <div className="flex-1 p-6 flex flex-col">
-                  <div className="mb-6 border-b border-border/50 pb-6">
+                <div className="flex-1 min-w-0 p-5 flex flex-col">
+                  <div className="mb-3 border-b border-border/50 pb-4">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-xl md:text-2xl font-bold leading-snug mb-2 pr-4">
+                      <h3
+                        className="text-lg font-bold leading-snug mb-2 pr-4 line-clamp-2"
+                        title={video.title}
+                      >
                         {video.title || 'Unknown Video'}
                       </h3>
                       {playlistTitle && videoInfo.length > 1 && playlistMode === 'select' && (
@@ -1022,9 +1026,9 @@ function VideoCapturePanel({
                     </div>
                   </div>
 
-                  <div className="mt-auto pt-4 flex flex-col sm:flex-row gap-3 items-end sm:items-center">
-                    <div className="flex-1 w-full space-y-2">
-                      <label className="text-sm font-medium text-muted-foreground block">
+                  <div className="mt-auto pt-2 flex flex-col @xl:flex-row gap-3 items-stretch @xl:items-end">
+                    <div className="flex-1 w-full space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground block">
                         Select Quality
                       </label>
                       <Select
@@ -1033,7 +1037,7 @@ function VideoCapturePanel({
                           setSelectedFormats((prev) => ({ ...prev, [idx]: val }))
                         }
                       >
-                        <SelectTrigger className="w-full bg-muted/50 border-border h-11">
+                        <SelectTrigger className="w-full bg-muted/50 border-border h-10">
                           <SelectValue placeholder="Select quality..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -1051,7 +1055,7 @@ function VideoCapturePanel({
                         size="lg"
                         variant="hero"
                         className={cn(
-                          'w-full sm:w-auto h-11 px-8 shrink-0',
+                          'w-full @xl:w-auto h-10 px-6 shrink-0',
                           submittingDownloads.has(idx) && 'scale-95 opacity-80',
                         )}
                         onClick={() =>
@@ -1066,7 +1070,7 @@ function VideoCapturePanel({
                           </>
                         ) : (
                           <>
-                            <Download className="w-5 h-5 mr-2" />
+                            <Download className="w-4 h-4 mr-1" />
                             Download
                           </>
                         )}
@@ -1094,7 +1098,7 @@ function VideoCapturePanel({
                 }
                 onClick={handlePlaylistDownload}
               >
-                <Download className="w-5 h-5 mr-2" />
+                <Download className="w-4 h-4 mr-1" />
                 {startingPlaylist || isSubmitting
                   ? 'Adding to Queue...'
                   : playlistMode === 'all'
@@ -1195,7 +1199,7 @@ const DownloadCard = ({
     : statusColor[job.status] || statusColor.queued;
 
   return (
-    <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-lg bg-card border border-border shadow-sm mb-3">
+    <div className="flex flex-col @md:flex-row gap-3 p-3 rounded-lg bg-card border border-border shadow-sm mb-2">
       {/* Thumbnail */}
       <div className="flex-shrink-0 w-24 h-16 rounded overflow-hidden bg-black/5 border border-border relative">
         {job.thumbnail ? (
@@ -1542,7 +1546,7 @@ function HistoryPanel() {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-32 bg-card border border-border animate-pulse rounded-lg" />
+          <div key={i} className="h-24 bg-card border border-border animate-pulse rounded-lg" />
         ))}
       </div>
     );
@@ -1550,10 +1554,12 @@ function HistoryPanel() {
 
   return (
     <Card className="border-border shadow-sm">
-      <div className="p-6 border-b border-border flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+      <div className="px-5 py-4 border-b border-border flex flex-col @lg:flex-row gap-3 @lg:items-center justify-between">
         <div>
-          <h3 className="text-2xl font-bold">Download Queue</h3>
-          <p className="text-muted-foreground mt-1">Manage and track your video downloads.</p>
+          <h3 className="page-title">Download Queue</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage and track your video downloads.
+          </p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -1587,8 +1593,10 @@ function HistoryPanel() {
         </DropdownMenu>
       </div>
 
-      <ScrollArea className="h-[600px]">
-        <div className="p-6 space-y-2">
+      {/* Fills the window below the header instead of a fixed 600px, which was
+          taller than the whole window on short screens and scrolled twice. */}
+      <ScrollArea className="h-[max(16rem,calc(100dvh-11rem))]">
+        <div className="p-4 space-y-2">
           {downloads.map((dl) => (
             <DownloadCard
               key={dl.jobId}
@@ -1604,12 +1612,12 @@ function HistoryPanel() {
           ))}
 
           {downloads.length === 0 && (
-            <div className="text-center py-20 flex flex-col items-center">
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Download className="w-8 h-8 text-muted-foreground" />
+            <div className="text-center py-12 flex flex-col items-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                <Download className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-bold mb-2">No downloads yet</h3>
-              <p className="text-muted-foreground max-w-md">
+              <h3 className="text-base font-bold mb-1.5">No downloads yet</h3>
+              <p className="text-sm text-muted-foreground max-w-md">
                 Paste a video link on the Downloader tab to get started. Supports YouTube, TikTok,
                 Instagram, Twitter, and 1000+ other sites.
               </p>
@@ -1647,7 +1655,17 @@ const DEFAULT_SETTINGS = {
   eulaAgeAcknowledged: 0 as 0 | 1,
   cookiesFilePath: '',
   closeToTray: true,
+  uiScale: 'auto',
 };
+
+/** Interface size choices, as zoom factors. Matches UI_SCALE_CHOICES in electron/window-fit.ts. */
+const UI_SCALE_OPTIONS = [
+  { value: 'auto', label: 'Auto (fit to screen)' },
+  { value: '0.9', label: '90%' },
+  { value: '1', label: '100%' },
+  { value: '1.1', label: '110%' },
+  { value: '1.25', label: '125%' },
+];
 
 function SettingsPanel() {
   const [settings, setSettings] = useState<any>(null);
@@ -1691,6 +1709,7 @@ function SettingsPanel() {
           Number(s.eula_age_acknowledged ?? s.eulaAgeAcknowledged ?? 0) === 1 ? 1 : 0,
         cookiesFilePath: String(s.cookies_file_path ?? s.cookiesFilePath ?? ''),
         closeToTray: Boolean(s.close_to_tray ?? 1),
+        uiScale: String(s.ui_scale || 'auto'),
       });
     } catch (error) {
       setSettings(DEFAULT_SETTINGS);
@@ -1857,10 +1876,12 @@ function SettingsPanel() {
   return (
     <div className="max-w-3xl space-y-6">
       <Card className="border-border shadow-sm">
-        <div className="p-6 border-b border-border flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold">Settings</h2>
-            <p className="text-muted-foreground mt-1">Manage how your app downloads video files.</p>
+            <h2 className="page-title">Settings</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage how your app downloads video files.
+            </p>
           </div>
           <div className="text-right">
             <Button
@@ -1880,10 +1901,10 @@ function SettingsPanel() {
           </div>
         </div>
 
-        <CardContent className="p-6 md:p-8 space-y-8">
+        <CardContent className="p-5 @2xl:p-6 space-y-6">
           {/* Save Location */}
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-primary" /> Save downloads to
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -1901,8 +1922,8 @@ function SettingsPanel() {
             </div>
           </div>
 
-          <div className="border-t border-border/50 pt-8 space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+          <div className="border-t border-border/50 pt-6 space-y-3">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-primary" /> Age eligibility &amp; site sign-in
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -1962,7 +1983,7 @@ function SettingsPanel() {
 
           {/* Concurrent Downloads */}
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <Zap className="w-5 h-5 text-primary" /> Concurrent downloads
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -1986,7 +2007,7 @@ function SettingsPanel() {
 
           {/* Default Quality */}
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-primary" /> Default video quality
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -2010,7 +2031,7 @@ function SettingsPanel() {
 
           {/* Default Format */}
           <div className="space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <FileVideo className="w-5 h-5 text-primary" /> Default format
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -2031,8 +2052,8 @@ function SettingsPanel() {
             </Select>
           </div>
 
-          <div className="border-t border-border/50 pt-8 space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+          <div className="border-t border-border/50 pt-6 space-y-3">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <List className="w-5 h-5 text-primary" /> Playlist Downloads
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -2062,8 +2083,8 @@ function SettingsPanel() {
             )}
           </div>
 
-          <div className="border-t border-border/50 pt-8 space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+          <div className="border-t border-border/50 pt-6 space-y-3">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <Settings className="w-5 h-5 text-primary" /> Application Behavior
             </h3>
             <p className="text-sm text-muted-foreground">
@@ -2081,8 +2102,43 @@ function SettingsPanel() {
             </div>
           </div>
 
-          <div className="border-t border-border/50 pt-8 space-y-3">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
+          <div className="border-t border-border/50 pt-6 space-y-3">
+            <h3 className="text-base font-semibold flex items-center gap-2">
+              <Monitor className="w-5 h-5 text-primary" /> Interface size
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              How large text and controls appear. Auto shrinks the app slightly on short screens,
+              such as 1080p at 125% display scaling. Ctrl + and Ctrl − change it too.
+            </p>
+            <Select
+              value={
+                UI_SCALE_OPTIONS.some((o) => o.value === settings.uiScale)
+                  ? settings.uiScale
+                  : 'custom'
+              }
+              onValueChange={(val) => saveSetting('uiScale', val)}
+            >
+              <SelectTrigger className="w-56 bg-muted border-border" aria-label="Interface size">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {UI_SCALE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+                {/* Ctrl +/− can land between the presets; show it rather than a blank box. */}
+                {!UI_SCALE_OPTIONS.some((o) => o.value === settings.uiScale) && (
+                  <SelectItem value="custom" disabled>
+                    Custom ({Math.round(Number(settings.uiScale) * 100)}%)
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="border-t border-border/50 pt-6 space-y-3">
+            <h3 className="text-base font-semibold flex items-center gap-2">
               <RefreshCw
                 className={cn(
                   'w-5 h-5 text-primary',

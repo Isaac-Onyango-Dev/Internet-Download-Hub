@@ -1,10 +1,32 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useHashLocation } from 'wouter/use-hash-location';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Download, HardDrive, Settings, Heart, ArrowRightLeft, Globe } from 'lucide-react';
 
 interface LayoutShellProps {
   children: ReactNode;
+}
+
+/*
+ * Below 1000 CSS px (so after zoom) the sidebar folds to an icon rail. A
+ * 256px sidebar in an 820px window left the page about 500px, and layouts
+ * tuned for more than that clipped. It is done in CSS (`max-[999px]:`) rather
+ * than state so the fold lands on the same frame as the resize. The classes
+ * are written out in full because Tailwind only generates what it finds as
+ * literal text.
+ */
+
+/** Labels a rail icon. The tooltip only shows while the rail is folded. */
+function RailTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right" className="min-[1000px]:hidden">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 /**
@@ -15,14 +37,16 @@ interface LayoutShellProps {
  */
 function Wordmark({ version }: { version: string }) {
   return (
-    <div className="flex items-center gap-2.5 px-2 pt-1">
+    <div
+      className={cn('flex items-center gap-2.5 px-2 pt-1', 'max-[999px]:justify-center max-[999px]:px-0')}
+    >
       <img
         src="./mark.svg"
         alt=""
         aria-hidden="true"
-        className="h-9 w-9 shrink-0 drop-shadow-[0_6px_16px_rgba(139,47,224,0.45)]"
+        className="h-8 w-8 shrink-0 drop-shadow-[0_6px_16px_rgba(139,47,224,0.45)]"
       />
-      <div className="min-w-0">
+      <div className={cn('min-w-0', 'max-[999px]:hidden')}>
         <span className="wordmark" aria-hidden="true">
           <span className="wordmark-kicker">Internet</span>
           <span className="wordmark-name">
@@ -51,7 +75,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
 
   useEffect(() => {
     if (!window.electronAPI) return;
-    window.electronAPI.getAppVersion?.()
+    window.electronAPI
+      .getAppVersion?.()
       .then((versionInfo: { version: string }) => {
         setAppVersion(`v${versionInfo.version}`);
       })
@@ -67,73 +92,90 @@ export function LayoutShell({ children }: LayoutShellProps) {
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground font-sans">
+    <div className="flex h-dvh overflow-hidden bg-background font-sans text-foreground">
       {/* Sidebar — fixed, never moves */}
       <aside
-        className="z-50 flex h-screen w-64 min-w-64 shrink-0 flex-col gap-6 overflow-hidden
-                   sticky top-0 border-r border-border bg-sidebar p-4"
+        className={cn(
+          'sticky top-0 z-50 flex h-dvh w-56 shrink-0 flex-col gap-4 overflow-hidden',
+          'border-r border-border bg-sidebar p-3',
+          'max-[999px]:w-16 max-[999px]:px-2',
+        )}
       >
         <Wordmark version={appVersion} />
 
-        <nav className="mt-2 flex-1 space-y-1">
+        <nav className="mt-1 flex-1 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             // Use exact matching for routes with common prefixes
             const isActive =
-              item.href === '/'
-                ? location === '/' || location === ''
-                : location === item.href;
+              item.href === '/' ? location === '/' || location === '' : location === item.href;
 
             return (
-              <button
-                key={item.href}
-                onClick={() => navigate(item.href)}
-                className={cn(
-                  'group relative flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2.5',
-                  'text-left text-sm font-medium',
-                  'transition-[color,background-color,transform] duration-200 ease-bounce',
-                  isActive
-                    ? 'bg-accent/15 text-foreground'
-                    : 'text-muted-foreground hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
-                )}
-              >
-                {/* Active rail carries the prism, the way the site marks its
-                    current release and section headings. */}
-                {isActive && (
-                  <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-prism" />
-                )}
-                <Icon
+              <RailTip key={item.href} label={item.label}>
+                <button
+                  onClick={() => navigate(item.href)}
+                  aria-label={item.label}
+                  aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'h-[18px] w-[18px] transition-transform duration-200 ease-bounce group-hover:scale-110',
-                    isActive && 'text-accent',
+                    'group relative flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2',
+                    'max-[999px]:justify-center max-[999px]:px-0',
+                    'text-left text-sm font-medium',
+                    'transition-[color,background-color,transform] duration-200 ease-bounce',
+                    isActive
+                      ? 'bg-accent/15 text-foreground'
+                      : 'text-muted-foreground hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
                   )}
-                />
-                <span>{item.label}</span>
-              </button>
+                >
+                  {/* Active rail carries the prism, the way the site marks its
+                    current release and section headings. */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-prism" />
+                  )}
+                  <Icon
+                    className={cn(
+                      'h-[18px] w-[18px] transition-transform duration-200 ease-bounce group-hover:scale-110',
+                      isActive && 'text-accent',
+                    )}
+                  />
+                  <span className="max-[999px]:hidden">{item.label}</span>
+                </button>
+              </RailTip>
             );
           })}
         </nav>
 
         {/* Sidebar footer */}
-        <div className="space-y-2 border-t border-border/60 pt-4">
-          <button
-            onClick={() => window.location.href = 'https://internet-download-hub.onrender.com/'}
-            className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm
-                       text-muted-foreground transition-[color,background-color,transform] duration-200
-                       ease-bounce hover:translate-x-0.5 hover:bg-muted hover:text-foreground"
+        <div className="space-y-2 border-t border-border/60 pt-3">
+          <RailTip label="Try Web Version">
+            <button
+              onClick={() => (window.location.href = 'https://internet-download-hub.onrender.com/')}
+              aria-label="Try Web Version"
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm',
+                'text-muted-foreground transition-[color,background-color,transform] duration-200',
+                'ease-bounce hover:translate-x-0.5 hover:bg-muted hover:text-foreground',
+                'max-[999px]:justify-center max-[999px]:px-0',
+              )}
+            >
+              <ArrowRightLeft className="h-4 w-4 shrink-0" />
+              <span className={cn('truncate', 'max-[999px]:hidden')}>Try Web Version</span>
+            </button>
+          </RailTip>
+          <p
+            className={cn(
+              'px-3 text-[10px] leading-tight text-muted-foreground/50',
+              'max-[999px]:hidden',
+            )}
           >
-            <ArrowRightLeft className="h-4 w-4" />
-            <span className="truncate">Try Web Version</span>
-          </button>
-          <p className="px-3 text-[10px] leading-tight text-muted-foreground/50">
             © {new Date().getFullYear()} Isaac Onyango
           </p>
         </div>
       </aside>
 
-      {/* Only this scrolls */}
-      <main className="brand-ambient h-screen flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto h-full w-full max-w-5xl p-4 md:p-8">{children}</div>
+      {/* Only this scrolls. `@container` lets pages lay out by the space
+          beside the sidebar rather than by the window. */}
+      <main className="brand-ambient h-dvh min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="@container mx-auto h-full w-full max-w-6xl px-6 py-5">{children}</div>
       </main>
     </div>
   );

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The app now fits screens that use Windows display scaling. At 1920×1080 with
+125% scaling, Windows gives apps a 1536×864 screen, and the old fixed
+1200×800 window with large headings and controls filled almost all of it.
+
+### Added
+
+- **Settings → Interface size**: Auto, 90%, 100%, 110% or 125%. Auto shrinks the app slightly on short screens, such as 1080p at 125% scaling, and leaves larger screens at 100%. Ctrl + and Ctrl − change the same setting, and it is now kept between launches.
+- **The window remembers its size and position.** If it would open off-screen, for example after a monitor was unplugged, it opens centred instead.
+
+### Changed
+
+- **The first window is sized to the screen** rather than a fixed 1200×800, and the smallest allowed size is now 820×560, so it fits a 1366×768 laptop at 125%.
+- **Tighter layout throughout.** Page titles, the link box, the Get Video Info and Download buttons, cards and spacing are all a step smaller, so a scanned video's Download button sits well above the bottom of the window.
+- **The sidebar is narrower and folds to icons** when the window is under 1000px wide. The icons have tooltips.
+- **Layouts follow the space next to the sidebar, not the window width.** The video card no longer switches to its side-by-side layout when there is too little room for it.
+- **The Queue list fills the window** instead of a fixed 600px, which was taller than the window on short screens and gave the page two scrollbars.
+- **The playlist dialog uses the app's colours**, and its Cancel and Add buttons stay visible while the video list scrolls.
+
 ## [1.3.2] - 2026-09-17
 
 Finished downloads are now where the app says they are. For the default

@@ -37,16 +37,16 @@ export default function SupportedSites() {
 
   return (
     <Shell>
-      <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="space-y-5 animate-in fade-in duration-300">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Supported Sites</h1>
+          <h1 className="page-title">Supported Sites</h1>
           {isDesktop ? (
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Download videos, images, and audio from {totalSites}+ websites using multiple download engines.
             </p>
           ) : (
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               These {totalSites} sites work in the web version. YouTube and other sites that block shared
               servers need the{' '}
               <a
@@ -116,9 +116,9 @@ export default function SupportedSites() {
 
         {/* Categories with Accordions */}
         {filteredCategories.length === 0 ? (
-          <div className="text-center py-12 space-y-3">
-            <Globe className="w-12 h-12 mx-auto text-muted-foreground/50" />
-            <h3 className="text-lg font-medium">No sites found</h3>
+          <div className="text-center py-8 space-y-3">
+            <Globe className="w-10 h-10 mx-auto text-muted-foreground/50" />
+            <h3 className="text-base font-medium">No sites found</h3>
             <p className="text-sm text-muted-foreground">
               Try a different search term or clear the search
             </p>
@@ -139,9 +139,9 @@ export default function SupportedSites() {
                 className="group border border-border rounded-lg overflow-hidden bg-card"
                 open
               >
-                <summary className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 bg-muted/30 transition-colors list-none">
+                <summary className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 bg-muted/30 transition-colors list-none">
                   <div className="flex items-center gap-3">
-                    <span className="text-xl">{category.icon}</span>
+                    <span className="text-lg">{category.icon}</span>
                     <h4 className="font-medium">{category.category}</h4>
                     <span className="text-xs text-muted-foreground bg-background px-2 py-0.5 rounded-full">
                       {category.sites.length}
@@ -165,7 +165,7 @@ export default function SupportedSites() {
                   {category.sites.map((site) => (
                     <div
                       key={site.name}
-                      className="p-4 hover:bg-muted/30 transition-colors"
+                      className="px-4 py-3 hover:bg-muted/30 transition-colors"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">

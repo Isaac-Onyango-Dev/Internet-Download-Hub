@@ -177,20 +177,22 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {/* max-h + overflow: with the video list open the dialog outgrew a 600px window and its
-          buttons ended up off-screen. min-w-0: grid children otherwise grow to fit long titles. */}
+          buttons ended up off-screen; the footer is also sticky so they stay in view while the
+          body scrolls. min-w-0: grid children otherwise grow to fit long titles. Colours come
+          from the brand tokens rather than a stray Tailwind-gray hex. */}
       <DialogContent
-        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto [&>*]:min-w-0 bg-[#111827] border border-white/10 text-white shadow-2xl"
+        className="max-w-2xl w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto [&>*]:min-w-0 bg-popover border border-border text-popover-foreground shadow-2xl"
         onEscapeKeyDown={handleClose}
       >
         {/* ── Header ── */}
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl font-semibold">
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
             <List className="h-5 w-5 text-info shrink-0" />
             Playlist Detected
           </DialogTitle>
           <DialogDescription asChild>
-            <div className="mt-1 space-y-0.5 text-sm text-white/60">
-              <p className="font-medium text-white/80 truncate max-w-lg">{title}</p>
+            <div className="mt-1 space-y-0.5 text-sm text-foreground/60">
+              <p className="font-medium text-foreground/80 truncate max-w-lg">{title}</p>
               <p className="flex items-center gap-2">
                 {streaming ? (
                   <span className="flex items-center gap-1 text-info">
@@ -231,7 +233,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
 
         {/* ── Download mode selector ── */}
         <section className="space-y-3">
-          <p className="text-sm font-medium text-white/70">Download Options</p>
+          <p className="text-sm font-medium text-foreground/70">Download Options</p>
           <RadioGroup
             value={mode}
             onValueChange={(v) => handleModeChange(v as DownloadMode)}
@@ -240,15 +242,18 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
             className="space-y-2 [&>*]:min-w-0"
           >
             {/* All */}
-            <div className={`flex items-center gap-3 rounded-lg border border-white/10 px-4 py-3 ${streaming ? 'opacity-50' : 'hover:bg-white/5 cursor-pointer'}`}>
+            <div
+              className={`flex items-center gap-3 rounded-lg border border-border px-4 py-3 ${streaming ? 'opacity-50' : 'hover:bg-muted cursor-pointer'}`}
+            >
               <RadioGroupItem value="all" id="mode-all" />
               <Label htmlFor="mode-all" className={`text-sm ${streaming ? '' : 'cursor-pointer'}`}>
-                Download entire playlist <span className="text-white/50">({total} videos)</span>
+                Download entire playlist{' '}
+                <span className="text-foreground/50">({total} videos)</span>
               </Label>
             </div>
 
             {/* Range */}
-            <div className="rounded-lg border border-white/10 px-4 py-3 hover:bg-white/5">
+            <div className="rounded-lg border border-border px-4 py-3 hover:bg-muted">
               <div className="flex items-center gap-3">
                 <RadioGroupItem value="range" id="mode-range" />
                 <Label htmlFor="mode-range" className="cursor-pointer text-sm">
@@ -267,10 +272,10 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                       setRangeError(null);
                     }}
                     onBlur={validateRange}
-                    className="w-20 bg-white/5 border-white/20 text-white text-center"
+                    className="w-20 bg-muted border-border-lift text-foreground text-center"
                     aria-label="From video number"
                   />
-                  <span className="text-white/50 text-sm">to</span>
+                  <span className="text-foreground/50 text-sm">to</span>
                   <Input
                     type="number"
                     min={1}
@@ -282,11 +287,11 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                       setRangeError(null);
                     }}
                     onBlur={validateRange}
-                    className="w-20 bg-white/5 border-white/20 text-white text-center"
+                    className="w-20 bg-muted border-border-lift text-foreground text-center"
                     aria-label="To video number"
                   />
                   {resolvedEntries.length > 0 && !rangeError && (
-                    <span className="text-white/40 text-xs">
+                    <span className="text-foreground/40 text-xs">
                       {resolvedEntries.length} video{resolvedEntries.length !== 1 ? 's' : ''}
                     </span>
                   )}
@@ -298,7 +303,7 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
             </div>
 
             {/* Select specific */}
-            <div className="rounded-lg border border-white/10 px-4 py-3 hover:bg-white/5">
+            <div className="rounded-lg border border-border px-4 py-3 hover:bg-muted">
               <div className="flex items-center gap-3">
                 <RadioGroupItem value="select" id="mode-select" />
                 <Label htmlFor="mode-select" className="cursor-pointer text-sm">
@@ -309,17 +314,20 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
               {mode === 'select' && entries.length > 0 && (
                 <div className="mt-3 pl-2 space-y-2">
                   {/* Select all toggle */}
-                  <div className="flex items-center gap-2 pl-2 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-2 pl-2 pb-1 border-b border-border">
                     <Checkbox
                       id="select-all"
                       checked={selected.size === entries.length}
                       onCheckedChange={toggleAll}
                       aria-label="Select all videos"
                     />
-                    <Label htmlFor="select-all" className="cursor-pointer text-xs text-white/60">
+                    <Label
+                      htmlFor="select-all"
+                      className="cursor-pointer text-xs text-foreground/60"
+                    >
                       {selected.size === entries.length ? 'Deselect All' : 'Select All'}
                     </Label>
-                    <span className="ml-auto text-xs text-white/40">
+                    <span className="ml-auto text-xs text-foreground/40">
                       {selected.size} of {entries.length} selected
                     </span>
                   </div>
@@ -327,12 +335,12 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                   {/* Video list */}
                   {/* A plain scroll box: Radix ScrollArea lays its content out as a table,
                       which ignores `truncate` and pushed long titles past the dialog's edge. */}
-                  <div className="max-h-56 overflow-y-auto pr-2">
+                  <div className="max-h-[min(40dvh,22rem)] overflow-y-auto pr-2">
                     <ul className="space-y-1">
                       {entries.map((entry) => (
                         <li
                           key={entry.index}
-                          className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-white/5 cursor-pointer"
+                          className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted cursor-pointer"
                           onClick={() => toggleEntry(entry.index)}
                         >
                           <Checkbox
@@ -344,14 +352,14 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
                             <img
                               src={entry.thumbnail}
                               alt=""
-                              className="w-14 h-9 rounded object-cover shrink-0 bg-white/5"
+                              className="w-14 h-9 rounded object-cover shrink-0 bg-muted"
                               loading="lazy"
                             />
                           )}
-                          <span className="text-xs text-white/40 w-6 shrink-0 text-right">
+                          <span className="text-xs text-foreground/40 w-6 shrink-0 text-right">
                             {entry.index}.
                           </span>
-                          <span className="text-sm text-white/90 truncate flex-1 min-w-0">
+                          <span className="text-sm text-foreground/90 truncate flex-1 min-w-0">
                             {entry.title}
                           </span>
                         </li>
@@ -372,17 +380,16 @@ export function PlaylistDialog({ open, data, onClose, onConfirm, streaming = fal
         </section>
 
         {/* ── Footer ── */}
-        <div className="flex justify-end gap-3 pt-2 border-t border-white/10">
+        <div className="sticky -bottom-6 -mx-6 -mb-6 flex justify-end gap-3 border-t border-border bg-popover px-6 py-4">
           <Button
             variant="outline"
-            className="border-white/20 bg-transparent text-white/70 hover:bg-white/10"
+            className="text-muted-foreground"
             onClick={handleClose}
             disabled={submitting}
           >
             Cancel
           </Button>
           <Button
-            className="bg-info hover:bg-info text-white"
             onClick={handleConfirm}
             disabled={!canConfirm}
             aria-label="Add selected videos to download queue"

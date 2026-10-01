@@ -306,14 +306,14 @@ export default function Support() {
   );
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background p-6 animate-in fade-in duration-300">
+    <div className="flex-1 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20">
-            <Heart className="h-6 w-6 text-primary" />
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+            <Heart className="h-5 w-5 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Support Internet Download Hub</h1>
+          <h1 className="page-title text-foreground">Support Internet Download Hub</h1>
         </div>
         <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl">
           This app is built and maintained by one developer. Your support — whether sharing it with
@@ -336,7 +336,7 @@ export default function Support() {
         </TabsList>
 
         {/* ── SHARE TAB ────────────────────────────────────────── */}
-        <TabsContent value="share" className="space-y-6 mt-6">
+        <TabsContent value="share" className="space-y-5 mt-5">
           {/* What you are sharing */}
           <Card className="border-border/50">
             <CardContent className="pt-5">
@@ -432,7 +432,7 @@ export default function Support() {
         </TabsContent>
 
         {/* ── DONATION TAB ──────────────────────────────────────── */}
-        <TabsContent value="support" className="space-y-6 mt-6">
+        <TabsContent value="support" className="space-y-5 mt-5">
           <Card className="border-warning/30 bg-warning/10">
             <CardContent className="pt-5">
               <div className="flex items-start gap-3">
@@ -507,7 +507,7 @@ export default function Support() {
           }}
         >
           <div
-            className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+            className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl animate-in fade-in zoom-in-95 duration-200"
           >
             <div className="p-3 rounded-xl bg-warning/20 w-fit mx-auto mb-4">
               <AlertTriangle className="h-8 w-8 text-warning" />

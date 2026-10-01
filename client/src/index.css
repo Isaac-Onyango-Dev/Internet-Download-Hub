@@ -97,7 +97,8 @@ body,
     font-family: var(--font-display);
     font-weight: 800;
     letter-spacing: -0.035em;
-    line-height: 1.04;
+    /* 1.04 clipped descenders once headings came down to desktop sizes. */
+    line-height: 1.15;
     @apply text-foreground;
   }
 
@@ -114,6 +115,16 @@ body,
 }
 
 @layer components {
+  /* ── Page heading ─────────────────────────────────────────────────────
+     One size for every page's title. Pages used to pick their own, from
+     text-2xl to text-3xl, which at 125% display scaling took a sixth of
+     the window before any content showed. */
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    line-height: 1.15;
+  }
+
   /* ── Brand lockup ─────────────────────────────────────────────────────
      The wordmark from the site: an all-caps kicker over a gradient-filled
      name whose "o" is a play-button notch. */
